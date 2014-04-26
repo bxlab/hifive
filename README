@@ -1,0 +1,13 @@
+This repository contains code for the hifive package, a set of tools for
+handling HiC and 5C data. This includes managing data from mapped reads, either
+in bam, mat, or raw formats. All stages use hdf5 dictionaries for fast access
+and minimal memory and storage usage.
+
+This package includes methods for normalizing data from either HiC or 5C
+experiments at the fragment-end, or fragment level resolution, respectively.
+Once normalized, data can be used for plotting, binning, or other statistical
+tests within the package very quickly.
+
+This package makes extensive use of the h5py and numpy packages. In addition, if
+mpi4py is installed, several methods are compatible with parallelization,
+including HiC normalization and heatmap generation.
