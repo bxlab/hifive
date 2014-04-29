@@ -36,10 +36,10 @@ API documentation
 import os
 import sys
 import subprocess
+from math import floor, ceil
 
 import numpy
 import h5py
-from math import floor, ceil
 try:
     from mpi4py import MPI
 except:

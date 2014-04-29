@@ -31,11 +31,14 @@ API documentation
 
 import os
 import sys
+from glob import glob
 
 import numpy
 import h5py
-import pysam
-from glob import glob
+try:
+    import pysam
+except:
+    pass
 
 from ..fragment import Fragment
 
@@ -144,6 +147,9 @@ class FiveCData(object):
             A list containing all of the bam file prefices to be included in
             the dataset. All files containing each prefix will be loaded.
         """
+        if 'pysam' not in sys.modules.keys():
+            print >> sys.stderr, ("The pysam module must be installed to use this function.")
+            return None
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
             print >> sys.stderr, ("The fragment file %s was not found. No data was loaded.\n") %\

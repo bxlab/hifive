@@ -30,12 +30,14 @@ API documentation
 
 import os
 import sys
+from math import ceil
 
 import h5py
 import numpy
-from PIL import Image
-from pyx import *
-from math import ceil
+try:
+    import pyx
+except:
+    pass
 try:
     from mpi4py import MPI
 except:
@@ -400,6 +402,9 @@ class BI(object):
             The coordinates corresponding to the right edge of the image. If not specified, the first BI midpoint is
             used.
         """
+        if 'pyx' not in sys.modules.keys():
+            print >> sys.stderr, ("The pyx module must be installed to use this function.")
+            return None
         if 'BI' not in self.__dict__:
             print >> sys.stderr, ("No BI scores present, no plot generated.\n"),
             return None
@@ -412,7 +417,7 @@ class BI(object):
         if stop == None:
             stop = self.BI['mid'][self.chr_indices[chrint + 1] - 1]
         print >> sys.stderr, ("Plotting BIs for %s:%i-%i...") % (chromosome, start, stop),
-        c = canvas.canvas()
+        c = pyx.canvas.canvas()
         start_index = numpy.searchsorted(self.BI['mid'][self.chr_indices[chrint]:self.chr_indices[chrint + 1]], start)
         start_index += self.chr_indices[chrint]
         stop_index = numpy.searchsorted(self.BI['mid'][self.chr_indices[chrint]:self.chr_indices[chrint + 1]], stop)
@@ -421,10 +426,10 @@ class BI(object):
         Y = self.BI['score'][start_index:stop_index]
         Y /= numpy.amax(numpy.abs(Y))
         Y = (Y + 1) * height / 2.0
-        line_path = path.path(path.moveto(0, height / 2.0))
+        line_path = pyx.path.path(pyx.path.moveto(0, height / 2.0))
         for i in range(X.shape[0]):
-            line_path.append(path.lineto(X[i], Y[i]))
-        line_path.append(path.lineto(width, height / 2.0))
+            line_path.append(pyx.path.lineto(X[i], Y[i]))
+        line_path.append(pyx.path.lineto(width, height / 2.0))
         c.fill(line_path)
         print >> sys.stderr, ("Done\n"),
         return c

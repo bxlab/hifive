@@ -31,11 +31,14 @@ API documentation
 
 import os
 import sys
+from glob import glob
 
 import numpy
 import h5py
-import pysam
-from glob import glob
+try:
+    import pysam
+except:
+    pass
 
 from ..fend import Fend
 
@@ -143,6 +146,9 @@ class HiCData(object):
             A cutoff for filtering paired reads whose total distance to their
             respective restriction sites exceeds this value.
         """
+        if 'pysam' not in sys.modules.keys():
+            print >> sys.stderr, ("The pysam module must be installed to use this function.")
+            return None
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") %\

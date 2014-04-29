@@ -43,7 +43,10 @@ try:
     from mpi4py import MPI
 except:
     pass
-import mlpy
+try:
+    import mlpy
+except:
+    pass
 
 from fend import Fend
 from fragment import Fragment
@@ -803,6 +806,9 @@ class HiC(object):
         return None
 
     def learn_fend_3D_model(self, chrom, minobservations=10):
+        if 'mlpy' not in sys.modules.keys():
+            print >> sys.stderr, ("The mlpy module must be installed to use this function.")
+            return None
         print >> sys.stderr, ("Learning fend-resolution 3D model..."),
         unbinned, mapping = unbinned_cis_signal(self, chrom, datatype='fend', arraytype='upper',
                                                 skipfiltered=True, returnmapping=True)

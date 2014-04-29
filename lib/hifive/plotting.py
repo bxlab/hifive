@@ -32,12 +32,18 @@ API documentation
 
 import os
 import sys
+from math import log, exp
 
 import h5py
 import numpy
-from math import log, exp
-from PIL import Image
-from pyx import *
+try:
+    from PIL import Image
+except:
+    pass
+try:
+    import pyx
+except:
+    pass
 
 
 def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
@@ -72,6 +78,9 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
         associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
         create a color gradient for plotting along with min_color and possibly mid_color.
     """
+    if 'PIL' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
     print >> sys.stderr, ("Plotting compact array..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
@@ -155,6 +164,9 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
         associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
         create a color gradient for plotting along with min_color and possibly mid_color.
     """
+    if 'PIL' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
     print >> sys.stderr, ("Plotting full array..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
@@ -234,6 +246,9 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
         associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
         create a color gradient for plotting along with min_color and possibly mid_color.
     """
+    if 'PIL' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
     print >> sys.stderr, ("Plotting upper array..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
@@ -321,6 +336,9 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
         associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
         create a color gradient for plotting along with min_color and possibly mid_color.
     """
+    if 'PIL' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
     print >> sys.stderr, ("Plotting heatmap dict..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
@@ -432,6 +450,9 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
         associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
         create a color gradient for plotting along with min_color and possibly mid_color.
     """
+    if 'PIL' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
     print >> sys.stderr, ("Plotting heatmap dict..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
@@ -553,6 +574,9 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
         associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
         create a color gradient for plotting along with min_color and possibly mid_color.
     """
+    if 'PIL' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
     print >> sys.stderr, ("Plotting heatmap dict..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
@@ -667,6 +691,9 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
         associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
         create a color gradient for plotting along with min_color and possibly mid_color.
     """
+    if 'PIL' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
     print >> sys.stderr, ("Plotting rotated compact array..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
@@ -765,6 +792,9 @@ def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientati
         If True, min_score and max_score are taken to be logged values and so labels are evenly spaced in log space
         but converted to normal space for display.
     """
+    if 'PIL' not in sys.modules.keys() or 'pyx' not in sys.modules.keys():
+        print >> sys.stderr, ("The PIL and pyx modules must be installed to use this function.")
+        return None
     height = float(height)
     width = float(width)
     min_score = float(min_score)

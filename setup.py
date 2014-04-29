@@ -9,11 +9,15 @@ import numpy
 def main():
     setup(name = "hifive",
           version = "1.0.0",
-          package_dir = {'': 'lib'},
+          description = 'Python library for normalizing and analyzing HiC and 5C data',
+          package_dir = {'':'lib'},
+          packages = ['hifive','hifive.hic', 'hifive.fivec'],
           ext_modules = get_extension_modules(),
           cmdclass = {'build_ext': build_ext},
+          requires = ['numpy', 'scipy', 'h5py'],
           author = "Michael Sauria",
-          author_email = "mgehrin@emory.edu")
+          author_email = "mike.sauria@gmail.com",
+          url='https://bitbucket.org/bxlab/hifive')
 
 # ---- Extension Modules ----------------------------------------------------
 
