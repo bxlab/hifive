@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-#(c) 2013 Emory University. All Rights Reserved
-# Code written by: Michael Sauria (mgehrin@emory.edu)
+#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 """
 This is a module contains scripts for generating plots from compact and full

@@ -1,6 +1,5 @@
-#(c) 2013 Emory University. All Rights Reserved
-# Code written by: Michael Sauria (mgehrin@emory.edu)
 # distutils: language = c++
+#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 """These functions provide increased speed in handling the signal-binning
 functions necessary for supporting fivec analysis using HiFive.
