@@ -62,6 +62,7 @@ class FiveCData(object):
             Specifies how to open the h5dict, depending on whether data is to
             be written or read.
         """
+        self.filename = os.path.abspath(filename)
         self.data = h5py.File(filename, mode)
         return None
 
@@ -82,9 +83,10 @@ class FiveCData(object):
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
             print >> sys.stderr, \
-              ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename.split('/')[-1]),
+              ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
             return None
-        self.frags = fragfilename
+        self.frags = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
+                                os.path.dirname(self.filename)), os.path.basename(fragfilename))
         frags = h5py.File(fragfilename, 'r')
         strands = frags['fragments']['strand'][...]
         chr2int = {}
@@ -151,10 +153,10 @@ class FiveCData(object):
             return None
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
-            print >> sys.stderr, ("The fragment file %s was not found. No data was loaded.\n") %\
-                                 (fragfilename.split('/')[-1]),
+            print >> sys.stderr, ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
             return None
-        self.frags = fragfilename
+        self.frags = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
+                                os.path.dirname(self.filename)), os.path.basename(fragfilename))
         frags = h5py.File(fragfilename, 'r')
         strands = frags['fragments']['strand'][...]
         chr2int = {}

@@ -78,7 +78,7 @@ class Fend(object):
             An indicator of restriction enzyme.
         """
         if not os.path.exists(filename):
-            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename.split('/')[-1]),
+            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
             return None
         # if no genome name given, determine from filename
         if genome_name is None:

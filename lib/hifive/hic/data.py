@@ -62,6 +62,7 @@ class HiCData(object):
             Specifies how to open the h5dict, depending on whether data is to
             be written or read.
         """
+        self.filename = os.path.abspath(filename)
         self.data = h5py.File(filename, mode)
         return None
 
@@ -85,9 +86,10 @@ class HiCData(object):
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             print >> sys.stderr, \
-              ("The fend file %s was not found. No data was loaded.\n") % (fendfilename.split('/')[-1]),
+              ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
             return None
-        self.fends = fendfilename
+        self.fends = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                                os.path.dirname(self.filename)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         fends = h5py.File(fendfilename, 'r')
         chr2int = {}
@@ -150,10 +152,10 @@ class HiCData(object):
             return None
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
-            print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") %\
-                                 (fendfilename.split('/')[-1]),
+            print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
             return None
-        self.fends = fendfilename
+        self.fends = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                                os.path.dirname(self.filename)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         fends = h5py.File(fendfilename, 'r')
         chr2int = {}
@@ -264,10 +266,10 @@ class HiCData(object):
         """
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
-            print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") %\
-                                 (fendfilename.split('/')[-1]),
+            print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
             return None
-        self.fends = fendfilename
+        self.fends = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                                os.path.dirname(self.filename)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         fends = h5py.File(fendfilename, 'r')
         # load data from mat file. This assumes that the mat data was mapped

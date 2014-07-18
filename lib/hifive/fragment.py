@@ -77,7 +77,7 @@ class Fragment(object):
             greater than this value.
         """
         if not os.path.exists(filename):
-            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename.split('/')[-1]),
+            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
             return None
         chromosomes = []
         chr2int = {}
