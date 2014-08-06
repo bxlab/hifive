@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-#(c) 2013 Emory University. All Rights Reserved
-# Code written by: Michael Sauria (mgehrin@emory.edu)
+#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 """
 This is a module class for handling restriction fragment data. The base
@@ -79,7 +78,7 @@ class Fend(object):
             An indicator of restriction enzyme.
         """
         if not os.path.exists(filename):
-            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename.split('/')[-1]),
+            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
             return None
         # if no genome name given, determine from filename
         if genome_name is None:

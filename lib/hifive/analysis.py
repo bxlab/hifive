@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-#(c) 2013 Emory University. All Rights Reserved
-# Code written by: Michael Sauria (mgehrin@emory.edu)
+#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 """
 This is a module contains two classes. The first class is for handling HiC analysis using "Fend" and "HiCData" class
@@ -79,7 +78,7 @@ class HiC(object):
             Specifies how to open the h5dict, depending on whether data is to
             be written or read.
         """
-        self.file = filename
+        self.file = os.path.abspath(filename)
         if mode != 'w':
             self.load()
         return None
@@ -105,18 +104,27 @@ class HiC(object):
         filename : string
             This specifies the filename of the HiCData object.
         """
+        filename = os.path.abspath(filename)
         # ensure data h5dict exists
         if not os.path.exists(filename):
-            print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename.split('/')[-1]),
+            print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
             return None
-        self.datafilename = filename
+        self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                                       os.path.dirname(self.file)), os.path.basename(filename))
         self.data = HiCData(filename).data
-        self.fendfilename = self.data['/'].attrs['fendfilename']
+        fendfilename = self.data['/'].attrs['fendfilename']
+        if fendfilename[:2] == './':
+            fendfilename = fendfilename[2:]
+        parent_count = fendfilename.count('../')
+        fendfilename = '/'.join(os.path.abspath(filename).split('/')[:-(1 + parent_count)] +
+                                fendfilename.lstrip('/').split('/')[parent_count:])
+        self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(fendfilename),
+                                       os.path.dirname(self.file)), os.path.basename(fendfilename))
         # ensure fend h5dict exists
-        if not os.path.exists(self.fendfilename):
-            print >> sys.stderr, ("Could not find %s.\n") % (self.fendfilename.split('/')[-1]),
+        if not os.path.exists(fendfilename):
+            print >> sys.stderr, ("Could not find %s.\n") % (fendfilename),
             return None
-        self.fends = Fend(self.fendfilename).fends
+        self.fends = Fend(fendfilename).fends
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.fends['chromosomes']):
@@ -141,10 +149,10 @@ class HiC(object):
         for key in self.__dict__.keys():
             if key in ['data', 'fends', 'file', 'chr2int']:
                 continue
-            elif key in ['datafilename', 'fendfilename']:
-                datafile.attrs[key] = self[key]
-            else:
+            elif isinstance(self[key], numpy.ndarray):
                 datafile.create_dataset(key, data=self[key])
+            elif not isinstance(self[key], dict):
+                datafile.attrs[key] = self[key]
         datafile.close()
         return None
 
@@ -165,16 +173,28 @@ class HiC(object):
             self[key] = datafile['/'].attrs[key]
         # ensure data h5dict exists
         if 'datafilename' in self.__dict__:
-            if not os.path.exists(self.datafilename):
-                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (self.datafilename.split('/')[-1]),
+            datafilename = self.datafilename
+            if datafilename[:2] == './':
+                datafilename = datafilename[2:]
+            parent_count = datafilename.count('../')
+            datafilename = '/'.join(self.file.split('/')[:-(1 + parent_count)] +
+                                datafilename.lstrip('/').split('/')[parent_count:])
+            if not os.path.exists(datafilename):
+                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (datafilename),
             else:
-                self.data = HiCData(self.datafilename).data
+                self.data = HiCData(datafilename).data
         # ensure fend h5dict exists
         if 'fendfilename' in self.__dict__:
-            if not os.path.exists(self.fendfilename):
-                print >> sys.stderr, ("Could not find %s. No fends loaded.\n") % (self.fendfilename.split('/')[-1]),
+            fendfilename = self.fendfilename
+            if fendfilename[:2] == './':
+                fendfilename = fendfilename[2:]
+            parent_count = fendfilename.count('../')
+            fendfilename = '/'.join(self.file.split('/')[:-(1 + parent_count)] +
+                                fendfilename.lstrip('/').split('/')[parent_count:])
+            if not os.path.exists(fendfilename):
+                print >> sys.stderr, ("Could not find %s. No fends loaded.\n") % (fendfilename),
             else:
-                self.fends = Fend(self.fendfilename).fends
+                self.fends = Fend(fendfilename).fends
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.fends['chromosomes']):
@@ -859,7 +879,7 @@ class FiveC(object):
             Specifies how to open the h5dict, depending on whether data is to
             be written or read.
         """
-        self.file = filename
+        self.file = os.path.abspath(filename)
         if mode != 'w':
             self.load()
         return None
@@ -889,14 +909,22 @@ class FiveC(object):
         if not os.path.exists(filename):
             print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename.split('/')[-1]),
             return None
-        self.datafilename = filename
-        self.data = FiveCData(filename).data
-        self.fragfilename = self.data['/'].attrs['fragfilename']
+        self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                                       os.path.dirname(self.file)), os.path.basename(filename))
+        self.data = HiCData(filename).data
+        fragfilename = self.data['/'].attrs['fragfilename']
+        if fragfilename[:2] == './':
+            fragfilename = fragfilename[2:]
+        parent_count = fragfilename.count('../')
+        fragfilename = '/'.join(os.path.abspath(filename).split('/')[:-(1 + parent_count)] +
+                                fragfilename.lstrip('/').split('/')[parent_count:])
+        self.fragfilename = "%s/%s" % (os.path.relpath(os.path.dirname(fragfilename),
+                                       os.path.dirname(self.file)), os.path.basename(fragfilename))
         # ensure fend h5dict exists
-        if not os.path.exists(self.fragfilename):
-            print >> sys.stderr, ("Could not find %s.\n") % (self.fragfilename.split('/')[-1]),
+        if not os.path.exists(fragfilename):
+            print >> sys.stderr, ("Could not find %s.\n") % (fragfilename),
             return None
-        self.frags = Fragment(self.fragfilename).fragments
+        self.frags = Fragment(fragfilename).fragments
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.frags['chromosomes']):
@@ -921,10 +949,10 @@ class FiveC(object):
         for key in self.__dict__.keys():
             if key in ['data', 'frags', 'file', 'chr2int']:
                 continue
-            elif key in ['datafilename', 'fragfilename']:
-                datafile.attrs[key] = self[key]
-            else:
+            elif isinstance(self[key], numpy.ndarray):
                 datafile.create_dataset(key, data=self[key])
+            elif not isinstance(self[key], dict):
+                datafile.attrs[key] = self[key]
         datafile.close()
         return None
 
@@ -945,17 +973,28 @@ class FiveC(object):
             self[key] = datafile['/'].attrs[key]
         # ensure data h5dict exists
         if 'datafilename' in self.__dict__:
-            if not os.path.exists(self.datafilename):
-                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (self.datafilename),
+            datafilename = self.datafilename
+            if datafilename[:2] == './':
+                datafilename = datafilename[2:]
+            parent_count = datafilename.count('../')
+            datafilename = '/'.join(self.file.split('/')[:-(1 + parent_count)] +
+                                datafilename.lstrip('/').split('/')[parent_count:])
+            if not os.path.exists(datafilename):
+                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (datafilename),
             else:
-                self.data = HiCData(self.datafilename).data
+                self.data = FiveCData(datafilename).data
         # ensure fragment h5dict exists
         if 'fragfilename' in self.__dict__:
-            if not os.path.exists(self.fragfilename):
-                print >> sys.stderr, ("Could not find %s. No fragments loaded.\n") %\
-                                     (self.fragfilename),
+            fragfilename = self.fragfilename
+            if fragfilename[:2] == './':
+                fragfilename = fragfilename[2:]
+            parent_count = fragfilename.count('../')
+            fragfilename = '/'.join(self.file.split('/')[:-(1 + parent_count)] +
+                                fragfilename.lstrip('/').split('/')[parent_count:])
+            if not os.path.exists(fragfilename):
+                print >> sys.stderr, ("Could not find %s. No fragments loaded.\n") % (fragfilename),
             else:
-                self.frags = Fragment(self.fragfilename).fragments
+                self.frags = Fragment(fragfilename).fragments
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.frags['chromosomes']):
