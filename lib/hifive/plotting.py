@@ -40,7 +40,7 @@ try:
 except:
     pass
 try:
-    import pyx
+    from pyx import *
 except:
     pass
 
