@@ -655,8 +655,8 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
         expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both
         correction and distance mean values.
     returnmapping : bool, optional
-        If 'True', a list containing the data array and two 2d arrasw of N x 4 containing the first fend and last fend
-        plus one included in each bin and first and last coordinates for 'chrom1' and 'chrom2' is return. Otherwise
+        If 'True', a list containing the data array and two 2d arrays of N x 4 containing the first fend and last fend
+        plus one included in each bin and first and last coordinates for 'chrom1' and 'chrom2' is returned. Otherwise
         only the data array is returned.
     """
     # check that all values are acceptable
