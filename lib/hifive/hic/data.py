@@ -324,7 +324,7 @@ class HiCData(object):
             name = (j, j + 1)
             if name in fend_pairs:
                 del fend_pairs[name]
-        print >> sys.stderr, ("%i valid fend pairs loaded.\n") % (fend_pairs.shape[0]),
+        print >> sys.stderr, ("%i valid fend pairs loaded.\n") % (len(fend_pairs)),
         # write fend pairs to h5dict
         self._write_fend_pairs(fends, fend_pairs)
         return None
