@@ -1,32 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
-
-"""
-This is a module class for handling FiveC paired end data.
-
-Input data
-----------
-
-This class loads data from a set of text files containing pairs of
-chromosomes, coordinates, and strand, pairs of fends and counts, or directly
-from a set of bam files. Data are filtered by fragment insert size at time of
-loading. Using the "Fend" class, reads are assigned to fragment-end (fend)
-pairs.
-
-Concepts
---------
-
-Data are stored in h5dicts to allow easy access, fast retrieval, and reduce
-memory requirements.
-
------------------------------------------------------------------------------
-
-API documentation
------------------
-
-
-
-"""
 
 import os
 import sys
@@ -39,46 +11,49 @@ try:
 except:
     pass
 
-from ..fragment import Fragment
+from fragment import Fragment
 
 
 class FiveCData(object):
-    """Base class for handling count data for FiveC experiments.
+    """
+    This class handles interaction count data for 5C experiments.
 
-    This class stores mapped paired-end reads, indexing them by fragment
-    number, in an h5dict."""
+    This class stores mapped paired-end reads, indexing them by fragment number, in an h5dict.
+
+    .. note::
+      This class is also available as hifive.FiveCData
+
+    When initialized, this class creates an h5dict in which to store all data associated with this object.
+    
+    :param filename: The file name of the h5dict. This should end with the suffix '.hdf5'
+    :type filename: str.
+    :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
+    :type mode: str.
+    """
 
     def __init__(self, filename, mode='r'):
         """
-        __init__ method
-
-        Initialize counts dataset and create an h5dict.
-
-        Parameters
-        ----------
-        filename : string
-            A filename specifying where to store the data dictionary.
-        mode : string, optional
-            Specifies how to open the h5dict, depending on whether data is to
-            be written or read.
+        Create a :class:`FiveCData` object.
         """
         self.filename = os.path.abspath(filename)
         self.data = h5py.File(filename, mode)
         return None
 
+    def save(self):
+        """
+        Save 5C interaction count data to h5dict.
+        """
+        self.data.close()
+        return None
+
     def load_data_from_counts(self, fragfilename, filelist):
         """
-        load_data_from_counts method
+        Read interaction counts from a text file(s) and place in h5dict.
 
-        Read counts from text files and place in h5dict.
-
-        Parameters
-        ----------
-        fragfilename : string
-            This specifies the filename of the fragment object.
-        filelist : list
-            A list containing all of the file names of counts text files to be
-            included in the dataset.
+        :param fragfilename: This specifies the file name of the :class:`Fragment` object to associate with the dataset.
+        :type fragfilename: str.
+        :param filelist: A list containing all of the file names of counts text files to be included in the dataset. If only one file is needed, this may be passed as a string.
+        :type filelist: list
         """
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
@@ -136,17 +111,12 @@ class FiveCData(object):
 
     def load_data_from_bam(self, fragfilename, filelist):
         """
-        load_data_from_bam method
+        Read interaction counts from pairs of BAM files and place in h5dict.
 
-        Read counts from pairs of bam files and place in h5dict.
-
-        Parameters
-        ----------
-        fragfilename : string
-            This specifies the filename of the fragment object.
-        filelist : list
-            A list containing all of the bam file prefices to be included in
-            the dataset. All files containing each prefix will be loaded.
+        :param fragfilename: This specifies the file name of the :class:`Fragment` object to associate with the dataset.
+        :type fragfilename: str.
+        :param filelist: A list containing all of the bam file prefices to be included in the dataset. All files containing each prefix will be loaded. If only one pair of files is needed, the prefix may be passed as a string.
+        :type filelist: list
         """
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, ("The pysam module must be installed to use this function.")

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 import sys
 import os
@@ -24,15 +23,26 @@ def main():
         comm = None
         rank = 0
         num_procs = 1
+    if len(sys.argv) < 6 and rank == 0:
+        print "Usage: python combine_BIs.py BI_FILE_1 BI_FILE_2 OUT_FILE SMOOTHING CHROM_1[,CHROM_2...,CHROM_N]"
+        print "BI_FILE_1           h5dicts created by the hifive.BI class"
+        print "BI_FILE_2           h5dict created by the hifive.BI class"
+        print "OUT_FILE            file name for the new h5dict created by this script"
+        print "SMOOTHING           integer specifying the width of smoothing weights"
+        print "CHROM1[,CHROM2...]  a comma-separated list of chromosome names to include in processing"
+        print "This function is MPI compatible."
+        return None
+    elif len(sys.argv < 6):
+        return None
     bi_fname1, bi_fname2, out_fname, smoothing, chroms = sys.argv[1:6]
     chroms = chroms.split(',')
     smoothing = int(smoothing)
     if rank == 0:
-        bi1 = hifive.bi.BI()
+        bi1 = hifive.BI()
         bi1.load(bi_fname1)
-        bi2 = hifive.bi.BI()
+        bi2 = hifive.BI()
         bi2.load(bi_fname2)
-        BI = hifive.bi.BI(bi1.width, bi1.window, bi1.height, bi1.mincount)
+        BI = hifive.BI(bi1.width, bi1.window, bi1.height, bi1.mincount)
         BI.chromosomes = numpy.array(chroms)
         BI.chr2int = {}
         for i, chrom in enumerate(BI.chromosomes):

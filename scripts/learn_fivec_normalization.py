@@ -1,23 +1,30 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 import sys
 
 import hifive
 
+def main():
+    if len(sys.argv) < 8:
+        print "Usage python learn_fivec_normalization.py FIVEC_FILE RATE BURNIN ANNEALING MAX_DIST RECALC DISPLAY"
+        print "FIVEC_FILE  File name of FiveC h5dict to analyze."
+        print "RATE        Percent of gradient to use for updating parameter values."
+        print "BURNIN      Number of iterations to run burn-in phase for."
+        print "ANNEALING   Number of iterations to run annealing phase for."
+        print "MAX_DIST    Maximum interaction distance to include in learning."
+        print "RECALC      Number of iterations to wait between recalculating distance function parameters."
+        print "DISPLAY     Number of iterations to wait before explicitly calculating cost and updating display."
+        return None
+    fivec_fname, leraningrate, burnin_iterations, annealing_iterations, maxdistance, recalculatedistance, display = (
+        sys.argv[1:8])
+    fivec = hifive.FiveC(fivec_fname, 'r')
+    fivec.find_fragment_corrections(display=int(display), maxdistance=int(maxdistance),
+                                    burnin_iterations=int(burnin_iterations),
+                                    annealing_iterations=int(annealing_iterations),
+                                    recalculatedistance=int(recalculatedistance),
+                                    learningrate=float(learningrate))
+    fivec.save()
 
-fivec_fname = sys.argv[1]
-fivec = hifive.analysis.FiveC(fivec_fname, 'r')
-if len(sys.argv) >= 7:
-    burnin_iterations = int(sys.argv[2])
-    annealing_iterations = int(sys.argv[3])
-    maxdistance = int(sys.argv[4])
-    recalculatedistance = int(sys.argv[5])
-    display = int(sys.argv[6])
-    fivec.find_fragment_corrections(display=display, maxdistance=maxdistance,
-                                    burnin_iterations=burnin_iterations,
-                                    annealing_iterations=annealing_iterations,
-                                    recalculatedistance=recalculatedistance)
-else:
-    fivec.find_fragment_corrections()
-fivec.save()
+
+if __name__ == "__main__":
+    main()

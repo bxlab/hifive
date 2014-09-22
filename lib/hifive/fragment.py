@@ -1,28 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
-
-"""
-This is a module class for handling restriction fragment data. The base class "Fragment" can load and save restriction
-fragment data for use with "hifive" data storage class "FiveCData" and analysis class "FiveC".
-
-Input data
-----------
-
-This class loads data from a bed file containing restriction fragments for which probes are designed.
-
-Concepts
---------
-
-Data are stored in h5dicts to allow easy access, fast retrieval, and reduce memory requirements.
-
------------------------------------------------------------------------------
-
-API documentation
------------------
-
-
-
-"""
 
 import os
 import sys
@@ -32,49 +8,50 @@ import h5py
 
 
 class Fragment(object):
-    """Base class for handling restriction fragment dataset.
+    """
+    This class handles restriction enzyme digest-generated fragment data for 5C experiments.
 
-    This class stores a list of chromosomes, a dictionary for converting from
-    chromosome label to integer and back, fragment starts, stops, and
-    chromosome number in an h5dict."""
+    This class stores a list of chromosomes, a dictionary for converting from chromosome label to integer and back, fragment starts, stops, and chromosome number in an h5dict.
+
+    .. note::
+      This class is also available as hifive.Fragment
+
+    When initialized, this class creates an h5dict in which to store all data associated with this object.
+
+    :param filename: The file name of the h5dict. This should end with the suffix '.hdf5'
+    :type filename: str.
+    :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
+    :type mode: str.
+    """
 
     def __init__(self, filename, mode='r'):
         """
-        __init__ method
-
-        Initialize fragment dataset and create an h5dict.
-
-        Parameters
-        ----------
-        filename : string
-            A filename to store h5dict in.
-        mode : string, optional
-            Specifies how to open the h5dict, depending on whether data is to
-            be written or read.
+        Create a Fragment object.
         """
         self.fragments = h5py.File(filename, mode)
         return None
 
+    def save(self):
+        """
+        Save fragment data to h5dict.
+        """
+        self.fragments.close()
+        return None
+
     def load_fragments(self, filename, genome_name=None, re_name=None, regions=[], minregionspacing=1000000):
         """
-        load_fragments method
+        Parse and store fragment data from a bed for a 5C assay file into an h5dict.
 
-        Parse and store fragment data from a bed file in h5dict.
-
-        Parameters
-        ----------
-        filename : string
-            A filename to read restriction fragment data from.
-        genome_name : string, optional
-            An indicator of genome species and build.
-        re_name : string, optional
-            An indicator of restriction enzyme.
-        regions : list, optional
-            User-defined partitioning of fragments into different regions. This argument should be a list of lists
-            containing the chromosome, start, and stop coordinates for each region.
-        minregionspacing : int, optional
-            If "regions" is not defined, this is used to parse regions by inserting breaks where fragments are spaced
-            greater than this value.
+        :param filename: A file name to read restriction fragment data from. This should be a BED file containing fragment boundaries for all probed fragments and primer names that match those used for read mapping.
+        :type filename: str.
+        :param genome_name: The name of the species and build. Optional.
+        :type genome_name: str.
+        :param re_name: The name of the restriction enzyme used to produce the fragment set. Optional.
+        :type re_name: str.
+        :param regions: User-defined partitioning of fragments into different regions. This argument should be a list of lists containing the chromosome, start, and stop coordinates for each region.
+        :type regions: list
+        :param minregionspacing: If 'regions' is not defined, this is used to parse regions by inserting breaks where fragments are spaced apart greater than this value.
+        :type minregionspacing: int.
         """
         if not os.path.exists(filename):
             print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),

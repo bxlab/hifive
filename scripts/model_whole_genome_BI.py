@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 import sys
 
@@ -25,15 +24,25 @@ def main():
         comm = None
         rank = 0
         num_procs = 1
-    hic_fname, bi_fname, out_prefix, cutoff, minobservations, cis_scaling = sys.argv[1:7]
+    if len(sys.argv) < 8 and rank == 0:
+        print "Usage python model_whole_genome_BI.py HIC_FILE BI_FILE OUT_PREFIX CUTOFF MIN_OBS CIS_SCALING CHROMS"
+        print "HIC_FILE     File name of HiC h5dict to pull data from."
+        print "BI_FILE      File name of BI h5dict to find boundaries for partitioning from."
+        print "OUT_PREFIX   File prefix for all output files of script."
+        print "CUTOFF       Criteria for calling BI peaks."
+        print "MIN_OBS      Minimum number of observations for valid dynamic bins."
+        print "CIS_SCALING  Scaling factor to adjust cis interactions by prior to modeling."
+        print "CHROMS       Comma-separated list of names of chromosomes to model."
+        print "This script is MPI compatible."
+        return None
+    elif len(sys.argv) < 8:
+        return None
+    hic_fname, bi_fname, out_prefix, cutoff, minobservations, cis_scaling, chroms = sys.argv[1:8]
     cutoff, minobservations, cis_scaling = float(cutoff), int(minobservations), float(cis_scaling)
-    BI = hifive.bi.BI()
+    BI = hifive.BI()
     BI.load(bi_fname)
-    hic = hifive.analysis.HiC(hic_fname, 'r')
-    if len(sys.argv) > 7:
-        chroms = sys.argv[7].strip(' ,').split(',')
-    else:
-        chroms = list(BI.chromosomes)
+    hic = hifive.HiC(hic_fname, 'r')
+    chroms = chroms.split(',')
     if rank == 0:
         bounds, bound_indices = find_bounds(BI, hic, chroms, cutoff)
         for i in range(1, num_procs):
@@ -153,21 +162,21 @@ def find_dynamic_signal(hic, chroms, pair, bounds, bound_indices, minobservation
     chrom = chroms[pair[0]]
     mids = numpy.mean(bounds[start:stop, 1:], axis=1).astype(numpy.int32)
     if len(pair) == 1:
-        binned = hifive.hic.binning.bin_cis_signal(hic, chrom, datatype='fend', arraytype='upper',
+        binned = hifive.hic_binning.bin_cis_signal(hic, chrom, datatype='fend', arraytype='upper',
                                                    binbounds=bounds[start:stop, 1:])
         dynamic = numpy.copy(binned)
-        hifive.hic.binning.dynamically_bin_cis_array(binned, mids, dynamic, minobservations=minobservations,
+        hifive.hic_binning.dynamically_bin_cis_array(binned, mids, dynamic, minobservations=minobservations,
                                                      binbounds=bounds[start:stop, 1:])
     else:
         start2 = bound_indices[pair[1]]
         stop2 = bound_indices[pair[1] + 1]
         chrom2 = chroms[pair[1]]
         mids2 = numpy.mean(bounds[start2:stop2, 1:], axis=1).astype(numpy.int32)
-        binned = hifive.hic.binning.bin_trans_signal(hic, chrom, chrom2, datatype='fend',
+        binned = hifive.hic_binning.bin_trans_signal(hic, chrom, chrom2, datatype='fend',
                                                      binbounds1=bounds[start:stop, 1:],
                                                      binbounds2=bounds[start2:stop2, 1:])
         dynamic = numpy.copy(binned)
-        hifive.hic.binning.dynamically_bin_trans_array(binned, mids, mids2, dynamic, 
+        hifive.hic_binning.dynamically_bin_trans_array(binned, mids, mids2, dynamic, 
                                                        minobservations=minobservations,
                                                        binbounds1=bounds[start:stop, 1:],
                                                        binbounds2=bounds[start2:stop2, 1:])

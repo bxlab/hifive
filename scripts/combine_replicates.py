@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# Code written by: Michael Sauria (mgehrin@emory.edu)
 
 import sys
 import os
@@ -9,6 +8,11 @@ import h5py
 
 
 def main():
+    if len(sys.argv) < 3:
+        print "Usage python combine_replicates.py REP_FILE_1,REP_FILE_2[,...,REP_FILE_N] OUT_FILE"
+        print "REP_FILE_1,REP_FILE_2  A comma-separated list of HiCData h5dict files."
+        print "OUT_FILE               File name to write new HiCData h5dict to."
+        return None
     in_fnames, out_fname = sys.argv[1:3]
     data = []
     in_fnames = in_fnames.split(',')

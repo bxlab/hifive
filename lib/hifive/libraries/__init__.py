@@ -1,15 +1,15 @@
 import sys
 
-import binning
-import data
-import _binning
-import _distance
+import _bi
+import _fivec_binning
+import _hic_binning
+import _fivec_distance
+import _hic_distance
+import _fivec_binning
+import _hic_binning
 
 
-"""
-Shamelessly ripped off of py.std
-"""
-__version__ = '0.0.0'
+__version__ = '2.0.0'
 __author__ = 'Michael Sauria'
 
 #------------------------------------------------

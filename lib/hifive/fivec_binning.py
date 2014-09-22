@@ -1,35 +1,15 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 """
-This is a module contains scripts for generating compact and full matrices of
-interaction data.
-
-Input data
-----------
-
-These functions rely on the "FiveC" class in conjunction with the "Fragment"
-and "FiveCData" classes.
+This is a module contains scripts for generating compact, upper-triangle and full matrices of 5C interaction data.
 
 Concepts
 --------
 
-Data can either be arranged in compact, complete, or flattened (row-major)
-upper-triangle arrays. Compact arrays are N x M, where N is the number of
-forward probe fragments and M is the number of reverse probe fragments. Data
-can be raw, fragment-corrected, distance-dependence removed, or enrichment
-values. Arrays are 3-dimensional with observed values in the first layer of
-d3, expected values in the second layer of d3. The exception to this is
-upper-triangle arrays, which are 2d, divinding observed and expected along
-the second axis.
-
------------------------------------------------------------------------------
+Data can either be arranged in compact, complete, or flattened (row-major) upper-triangle arrays. Compact arrays are N x M, where N is the number of forward probe fragments and M is the number of reverse probe fragments. Data can be raw, fragment-corrected, distance-dependence removed, or enrichment values. Arrays are 3-dimensional with observed values in the first layer of d3, expected values in the second layer of d3. The exception to this is upper-triangle arrays, which are 2d, divinding observed and expected along the second axis.
 
 API documentation
 -----------------
-
-
-
 """
 
 import os
@@ -40,59 +20,34 @@ from math import floor, ceil
 import numpy
 import h5py
 
-import _distance
-import _binning
+import libraries._fivec_binning as _fivec_binning
 
 
 def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfrag=None, datatype='enrichment',
                         arraytype='compact', skipfiltered=False, returnmapping=False):
     """
-    unbinned_cis_signal method
-
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.
 
-    Parameters
-    ----------
-    fivec : FiveC class object
-        A FiveC class object containing fragment and count data.
-    region : int
-        The index of the region to return.
-    start : int, optional
-        The smallest coordinate to include in the array, measured from fragment midpoints. If both 'start' and
-        'startfrag' are given, 'start' will override 'startfrag'. If unspecified, this will be set to the midpoint of
-        the first fragment for 'region'.
-    stop : int, optional
-        The largest coordinate to include in the array, measured from fragment midpoints. If both 'stop' and 'stopfrag'
-        are given, 'stop' will override 'stopfrag'. If unspecified, this will be set to the midpoint of the last
-        fragment plus one for 'region'.
-    startfrag : int, optional
-        The first fragment to include in the array. If unspecified and 'start' is not given, this is set to the first
-        fragment in 'region'. In cases where 'start' is specified and conflicts with 'startfrag', 'start' is given
-        preference.
-    stopfrag : int, optional
-        The first fragment not to include in the array. If unspecified and 'stop' is not given, this is set to the last
-        fragment in 'region' plus one. In cases where 'stop' is specified and conflicts with 'stopfrag', 'stop' is
-        given preference.
-    datatype : str, optional
-        This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment',
-        'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when
-        'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-
-        filtered fragments return value of one. Expected values are returned for 'distance', 'fragment', 'enrichment',
-        and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating
-        the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use
-        both correction and distance mean values. 'enrichment' also scales both observed and expected by the standard
-        deviation, giving a completely normalized set of values.
-    arraytype : str, optional
-        This determines what shape of array data are returned in. Acceptable values are 'compact', 'full', and 'upper'.
-        'compact' means data are arranged in a N x M x 2 array where N and M are the number of forward and reverse
-        probe fragments, respectively. 'full' returns a square, symmetric array of size N x N x 2 where N is the total
-        number of fragments. 'upper' returns only the flattened upper triangle of a full array, excluding the diagonal
-        of size (N * (N - 1) / 2) x 2, where N is the total number of fragments.
-    skipfiltered : bool, optional
-        If 'True', all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
-    returnmapping : bool, optional
-        If 'True', a list containing the data array and a 1d array containing fragment numbers included in the data
-        array is return. Otherwise only the data array is returned.
+    :param fivec:  A :class:`FiveC` class object containing fragment and count data.
+    :type fivec: :class:`FiveC`
+    :param region: The index of the region to pull data from.
+    :type region: int.
+    :param start: The smallest coordinate to include in the array, measured from fragment midpoints. If both 'start' and 'startfrag' are given, 'start' will override 'startfrag'. If unspecified, this will be set to the midpoint of the first fragment for 'region'. Optional.
+    :type start: int.
+    :param stop: The largest coordinate to include in the array, measured from fragment midpoints. If both 'stop' and 'stopfrag' are given, 'stop' will override 'stopfrag'. If unspecified, this will be set to the midpoint of the last fragment plus one for 'region'. Optional.
+    :type stop: int.
+    :param startfrag: The first fragment to include in the array. If unspecified and 'start' is not given, this is set to the first fragment in 'region'. In cases where 'start' is specified and conflicts with 'startfrag', 'start' is given preference. Optional.
+    :type startfrag: int.
+    :param stopfrag: The first fragment not to include in the array. If unspecified and 'stop' is not given, this is set to the last fragment in 'region' plus one. In cases where 'stop' is specified and conflicts with 'stopfrag', 'stop' is given preference. Optional.
+    :type stopfrag: int.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fragments return value of one. Expected values are returned for 'distance', 'fragment', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance mean values. 'enrichment' also scales both observed and expected by the standard deviation, giving a completely normalized set of values.
+    :type datatype: str.
+    :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact', 'full', and 'upper'. 'compact' means data are arranged in a N x M x 2 array where N and M are the number of forward and reverse probe fragments, respectively. 'full' returns a square, symmetric array of size N x N x 2 where N is the total number of fragments. 'upper' returns only the flattened upper triangle of a full array, excluding the diagonal of size (N * (N - 1) / 2) x 2, where N is the total number of fragments.
+    :type arraytype: str.
+    :param skipfiltered: If 'True', all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
+    :type skipfiltered: bool.
+    :param returnmapping: If 'True', a list containing the data array and a 1d array containing fragment numbers included in the data array is return. Otherwise only the data array is returned.
+    :type returnmapping: bool.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -180,11 +135,11 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
         mu = fivec.mu
     # Fill in data values
     if arraytype == 'compact':
-        _binning.unbinned_signal_compact(data, fivec.filter[startfrag:stopfrag], mapping,
+        _fivec_binning.unbinned_signal_compact(data, fivec.filter[startfrag:stopfrag], mapping,
                                          fivec.corrections[startfrag:stopfrag], mids, data_array, mu,
                                          fivec.gamma, fivec.sigma, datatype_int)
     else:
-        _binning.unbinned_signal_upper(data, data_indices, fivec.filter[startfrag:stopfrag], strands, mapping,
+        _fivec_binning.unbinned_signal_upper(data, data_indices, fivec.filter[startfrag:stopfrag], strands, mapping,
                                        fivec.corrections[startfrag:stopfrag], mids, data_array, mu, fivec.gamma,
                                        fivec.sigma, num_bins, datatype_int)
     # If requesting 'full' array, convert 'upper' array type to 'full'
@@ -218,50 +173,28 @@ def _find_frag_from_coord(fivec, chrint, coord):
 def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfrag=None, binsize=10000,
                    datatype='enrichment', arraytype='full', returnmapping=False):
     """
-    bin_cis_signal method
-
     Create an array of format 'arraytype' and fill 'binsize' bins with data requested in 'datatype'.
 
-    Parameters
-    ----------
-    fivec : FiveC class object
-        A FiveC class object containing fragment and count data.
-    region : int
-        The index of the region to return.
-    start : int, optional
-        The coordinate at the beginning of the smallest bin. If unspecified, 'start' will be the first multiple of
-        'binsize' below the 'startfend' mid. If there is a conflict between 'start' and 'startfrag', 'start' is given
-        preference.
-    stop : int, optional
-        The largest coordinate to include in the array, measured from fend midpoints. If both 'stop' and 'stopfrag'
-        are given, 'stop' will override 'stopfrag'.
-    startfrag : int, optional
-        The first fragment to include in the array. If unspecified and 'start' is not given, this is set to the first
-        valid fragment in 'region'. In cases where 'start' is specified and conflicts with 'startfrag', 'start' is
-        given preference.
-    stopfrag : int, optional
-        The first fragment not to include in the array. If unspecified and 'stop' is not given, this is set to the last
-        valid fragment in 'region' + 1. In cases where 'stop' is specified and conflicts with 'stopfrad', 'stop' is
-        given preference.
-    binsize : int, optional
-        This is the coordinate width of each bin.
-    datatype : str, optional
-        This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment',
-        'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when
-        'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-
-        filtered expected bins return value of 1. Expected values are returned for 'distance', 'fragment',
-        'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for
-        calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and
-        'expected' use both correction and distance values.
-    arraytype : str, optional
-        This determines what shape of array data are returned in. Acceptable values are 'full' and 'upper'. 'full'
-        returns a square, symmetric array of size N x N x 2 where N is the total number of fragments. 'upper' returns
-        only the flattened upper triangle of a full array, excluding the diagonal of size (N * (N - 1) / 2) x 2, where
-        N is the total number of fragments.
-    returnmapping : bool, optional
-        If 'True', a list containing the data array and a 2d array of N x 4 containing the first fend and last fend
-        plus one included in each bin and first and last coordinates is return. Otherwise only the data array is
-        returned.
+    :param fivec: A :class:`FiveC` class object containing fragment and count data.
+    :type fivec: :class:`FiveC`
+    :param region: The index of the region to pull data from.
+    :type region: int.
+    :param start: The coordinate at the beginning of the smallest bin. If unspecified, 'start' will be the first multiple of 'binsize' below the 'startfend' mid. If there is a conflict between 'start' and 'startfrag', 'start' is given preference. Optional.
+    :type start: int.
+    :param stop: The largest coordinate to include in the array, measured from fend midpoints. If both 'stop' and 'stopfrag' are given, 'stop' will override 'stopfrag'. Optional.
+    :type stop: int.
+    :param startfrag: The first fragment to include in the array. If unspecified and 'start' is not given, this is set to the first valid fragment in 'region'. In cases where 'start' is specified and conflicts with 'startfrag', 'start' is given preference. Optional.
+    :type startfrag: int.
+    :param stopfrag: The first fragment not to include in the array. If unspecified and 'stop' is not given, this is set to the last valid fragment in 'region' + 1. In cases where 'stop' is specified and conflicts with 'stopfrad', 'stop' is given preference. Optional.
+    :type stopfrag: int.
+    :param binsize: This is the coordinate width of each bin.
+    :type binsize: int.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-filtered expected bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance values.
+    :type datatype: str.
+    :param arraytype:  This determines what shape of array data are returned in. Acceptable values are 'full' and 'upper'. 'full' returns a square, symmetric array of size N x N x 2 where N is the total number of fragments. 'upper' returns only the flattened upper triangle of a full array, excluding the diagonal of size (N * (N - 1) / 2) x 2, where N is the total number of fragments.
+    :type arraytype: str.
+    :param returnmapping: If 'True', a list containing the data array and a 2d array of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates is return. Otherwise only the data array is returned.
+    :type returnmapping: bool.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -323,7 +256,7 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     # Create requested array
     data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
     # Fill in data values
-    _binning.binned_signal_upper(data, data_indices, fivec.filter[startfrag:stopfrag], mapping,
+    _fivec_binning.binned_signal_upper(data, data_indices, fivec.filter[startfrag:stopfrag], mapping,
                                  fivec.corrections[startfrag:stopfrag], mids, strands, data_array,
                                  fivec.mu, fivec.gamma, fivec.sigma, datatype_int, num_bins)
     # If requesting 'full' array, convert 'upper' array type to 'full'
@@ -351,36 +284,25 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
 def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=10000, binbounds=None, arraytype='full',
                   returnmapping=False):
     """
-    bin_cis_array method
-
     Create an array of format 'arraytype' and fill 'binsize' bins or bins defined by 'binbounds' with data provided in
     'unbinned'.
 
-    Parameters
-    ----------
-    fivec : FiveC class object
-        A FiveC class object containing fragment and count data.
-    unbinned : numpy array of 'upper' or 'full' format
-        A 2d or 3d array containing data to be binned. Array format will be determined from the number of dimensions.
-    fragments : 1d numpy array
-        An integer array indicating which position corresponds to which fragment in the 'unbinned' array.
-    start : int, optional
-        The coordinate at the beginning of the smallest bin. If unspecified, 'start' will be the first multiple of
-        'binsize' below the first mid from 'fragments'. If 'binbounds' is given, 'start' is ignored.
-    stop : int, optional
-        The coordinate at the end of the last bin. If unspecified, 'stop' will be the first multiple of 'binsize'
-        above the last mid from 'fragments'. If needed, 'stop' is adjusted upward to create a complete last bin. If
-        'binbounds' is given, 'stop' is ignored.
-    binsize : int, optional
-        This is the coordinate width of each bin. This is ignored if 'binbounds' is given.
-    arraytype : str, optional
-        This determines what shape of array data are returned in. Acceptable values are 'full' and 'upper'. 'full'
-        returns a square, symmetric array of size N x N x 2. 'upper' returns only the flattened upper triangle of a
-        full array, excluding the diagonal of size (N * (N - 1) / 2) x 2.
-    returnmapping : bool, optional
-        If 'True', a list containing the data array and a 2d array of N x 4 containing the first fragment and last
-        fragment plus one included in each bin and first and last coordinates is return. Otherwise only the data array
-        is returned.
+    :param fivec: A :class:`FiveC` class object containing fragment and count data.
+    :type fivec: :class:`FiveC`
+    :param unbinned: A full or upper array containing data to be binned. Array format will be determined from the number of dimensions.
+    :type unbinned: numpy array
+    :param fragments: A 1d integer array indicating which position corresponds to which fragment in the 'unbinned' array.
+    :type fragments: numpy array
+    :param start: The coordinate at the beginning of the smallest bin. If unspecified, 'start' will be the first multiple of 'binsize' below the first mid from 'fragments'. If 'binbounds' is given, 'start' is ignored. Optional.
+    :type start: int.
+    :param stop: The coordinate at the end of the last bin. If unspecified, 'stop' will be the first multiple of 'binsize' above the last mid from 'fragments'. If needed, 'stop' is adjusted upward to create a complete last bin. If 'binbounds' is given, 'stop' is ignored. Optional.
+    :type stop: int.
+    :param binsize: This is the coordinate width of each bin. This is ignored if 'binbounds' is given.
+    :type binsize: int.
+    :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'full' and 'upper'. 'full' returns a square, symmetric array of size N x N x 2. 'upper' returns only the flattened upper triangle of a full array, excluding the diagonal of size (N * (N - 1) / 2) x 2.
+    :type arraytype: str.
+    :param returnmapping: If 'True', a list containing the data array and a 2d array of N x 4 containing the first fragment and last fragment plus one included in each bin and first and last coordinates is return. Otherwise only the data array is returned.
+    :type returnmapping: bool.
     """
     # check that arraytype value is acceptable
     if arraytype not in ['full', 'upper']:
@@ -427,7 +349,7 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
     # Create requested array
     binned_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
     # Fill in binned data values
-    _binning.bin_upper_to_upper(binned_array, ub_signal, mapping, num_bins)
+    _fivec_binning.bin_upper_to_upper(binned_array, ub_signal, mapping, num_bins)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -453,27 +375,21 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
 def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, minobservations=50,
                               searchdistance=0):
     """
-    dynamically_bin_cis_array method
-
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
     or 'searchdistance' criteria.
 
-    Parameters
-    ----------
-    unbinned : numpy array of either 'full' or 'upper' format
-        A 2d or 3d array containing data to be binned. Array format will be determined from the number of dimensions.
-    unbinnedpositions : 1d numpy array
-        An integer array indicating the mid-point of each bin in 'unbinned' array.
-    binned : numpy array of either 'full' or 'upper' format
-        A 2d or 3d array containing binned data to be dynamically binned. Array format will be determined from the
-        number of dimensions. Data in this array will be altered by this function.
-    binbounds : 2d numpy array
-        An integer array indicating the start and end position of each bin in 'binned' array.
-    minobservations : int, optional
-        The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
-    searchdistance : int, optional
-        The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on
-        expansion distance.
+    :param unbinned: A full or upper array containing data to be binned. Array format will be determined from the number of dimensions.
+    :type unbinned: numpy array
+    :param unbinnedpositions: A 1d integer array indicating the mid-point of each bin in 'unbinned' array.
+    :type unbinnedpositions: numpy array
+    :param binned: A full or upper array containing binned data to be dynamically binned. Array format will be determined from the number of dimensions. Data in this array will be altered by this function.
+    :type binned: numpy array
+    :param binbounds: A N x 2 integer array indicating the start and end position of each of N bins in 'binned' array.
+    :type binbounds: numpy array
+    :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+    :type minobservations: int.
+    :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+    :type searchdistance: int.
     """
     # Determine unbinned array type
     if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) / 2 ==
@@ -510,7 +426,7 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     # Determine bin midpoints
     mids = (binbounds[:, 0] + binbounds[:, 1]) / 2
     # Dynamically bin using appropriate array type combination
-    _binning.dynamically_bin_upper_from_upper(ub_signal, unbinnedpositions, b_signal, binedges,
+    _fivec_binning.dynamically_bin_upper_from_upper(ub_signal, unbinnedpositions, b_signal, binedges,
                                               mids, minobservations, searchdistance)
     if binned_type == 'full':
         binned[indices[0], indices[1], 0] = b_signal[:, 0]
@@ -525,70 +441,38 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
                           start2=None, stop2=None, startfrag2=None, stopfrag2=None, datatype='enrichment',
                           arraytype='full', skipfiltered=False, returnmapping=False):
     """
-    unbinned_cis_signal method
-
     Create an array of format 'arraytype' and fill 'binsize' bins with data requested in 'datatype'.
 
-    Parameters
-    ----------
-    fivec : FiveC class object
-        A FiveC class object containing fragment and count data.
-    region1 : int
-        The index of the first region to pull data from.
-    region2 : int
-        The index of the second region to pull data from.
-    start1 : int, optional
-        The coordinate at the beginning of the smallest bin from 'region1'. If unspecified, 'start1' will be the first
-        multiple of 'binsize' below the 'startfrag1' mid. If there is a conflict between 'start1' and 'startfrag1',
-        'start1' is given preference.
-    stop1 : int, optional
-        The largest coordinate to include in the array from 'region1', measured from fragment midpoints. If both
-        'stop1' and 'stopfrag1' are given, 'stop1' will override 'stopfrag1'. 'stop1' will be shifted higher as needed
-        to make the last bin of size 'binsize'.
-    startfrag1 : int, optional
-        The first fragment from 'region1' to include in the array. If unspecified and 'start1' is not given, this is
-        set to the first valid fend in 'region1'. In cases where 'start1' is specified and conflicts with
-        'startfrag1', 'start1' is given preference.
-    stopfrag1 : int, optional
-        The first fragment not to include in the array from 'region1'. If unspecified and 'stop1' is not given, this
-        is set to the last valid fragment in 'region1' + 1. In cases where 'stop1' is specified and conflicts with
-        'stopfrag1', 'stop1' is given preference.
-    start2 : int, optional
-        The coordinate at the beginning of the smallest bin from 'region2'. If unspecified, 'start2' will be the first
-        multiple of 'binsize' below the 'startfrag2' mid. If there is a conflict between 'start2' and 'startfrag2',
-        'start2' is given preference.
-    stop2 : int, optional
-        The largest coordinate to include in the array from 'region2', measured from fragment midpoints. If both
-        'stop2' and 'stopfrag2' are given, 'stop2' will override 'stopfrag2'. 'stop2' will be shifted higher as needed
-        to make the last bin of size 'binsize'.
-    startfrag2 : int, optional
-        The first fragment from 'region2' to include in the array. If unspecified and 'start2' is not given, this is
-        set to the first valid fragment in 'region2'. In cases where 'start2' is specified and conflicts with
-        'startfrag2', 'start2' is given preference.
-    stopfrag2 : int, optional
-        The first fragment not to include in the array from 'region2'. If unspecified and 'stop2' is not given, this
-        is set to the last valid fragment in 'region2' + 1. In cases where 'stop2' is specified and conflicts with
-        'stopfrag2', 'stop2' is given preference.
-    datatype : str, optional
-        This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment',
-        'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when
-        'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-
-        filtered bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and
-        'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the
-        expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both
-        correction and distance mean values.
-    arraytype : str, optional
-        This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'.
-        'compact' means data are arranged in a N x M x 2 array where N and M are the number of forward and reverse
-        probe fragments, respectively. Two arrays will be returned for this format, the first with forward probe
-        fragments from region1 and reverse probe fragments from region2. The second is the compliment of the first.
-        'full' returns a square, symmetric array of size N x N x 2 where N is the total number of fragments.
-    skipfiltered : bool, optional
-        If 'True', all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
-    returnmapping : bool, optional
-        If 'True', a list containing the data array and two 2d arrasw of N x 4 containing the first fragment and last
-        fragment plus one included in each bin and first and last coordinates for 'region1' and 'region2' is return.
-        Otherwise only the data array is returned.
+    :param fivec: A :class:`FiveC` class object containing fragment and count data.
+    :type fivec: :class:`FiveC`
+    :param region1: The index of the first region to pull data from.
+    :type region1: int.
+    :param region2: The index of the second region to pull data from.
+    :type region2: int.
+    :param start1: The coordinate at the beginning of the smallest bin from 'region1'. If unspecified, 'start1' will be the first multiple of 'binsize' below the 'startfrag1' mid. If there is a conflict between 'start1' and 'startfrag1', 'start1' is given preference. Optional.
+    :type start1: int.
+    :param stop1: The largest coordinate to include in the array from 'region1', measured from fragment midpoints. If both 'stop1' and 'stopfrag1' are given, 'stop1' will override 'stopfrag1'. 'stop1' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+    :type stop1: int.
+    :param startfrag1: The first fragment from 'region1' to include in the array. If unspecified and 'start1' is not given, this is set to the first valid fend in 'region1'. In cases where 'start1' is specified and conflicts with 'startfrag1', 'start1' is given preference. Optional.
+    :type startfrag1: int.
+    :param stopfrag1: The first fragment not to include in the array from 'region1'. If unspecified and 'stop1' is not given, this is set to the last valid fragment in 'region1' + 1. In cases where 'stop1' is specified and conflicts with 'stopfrag1', 'stop1' is given preference. Optional.
+    :type stopfrag1: int.
+    :param start1: The coordinate at the beginning of the smallest bin from 'region1'. If unspecified, 'start1' will be the first multiple of 'binsize' below the 'startfrag1' mid. If there is a conflict between 'start1' and 'startfrag1', 'start1' is given preference. Optional.
+    :type start2: int.
+    :param stop2: The largest coordinate to include in the array from 'region2', measured from fragment midpoints. If both 'stop2' and 'stopfrag2' are given, 'stop2' will override 'stopfrag2'. 'stop2' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+    :type stop2: int.
+    :param startfrag2: The first fragment from 'region2' to include in the array. If unspecified and 'start2' is not given, this is set to the first valid fend in 'region2'. In cases where 'start2' is specified and conflicts with 'startfrag2', 'start2' is given preference. Optional.
+    :type startfrag2: int.
+    :param stopfrag2: The first fragment not to include in the array from 'region2'. If unspecified and 'stop2' is not given, this is set to the last valid fragment in 'region2' + 2. In cases where 'stop2' is specified and conflicts with 'stopfrag2', 'stop2' is given preference. Optional.
+    :type stopfrag2: int.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-filtered bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+    :type datatype: str.
+    :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'. 'compact' means data are arranged in a N x M x 2 array where N and M are the number of forward and reverse probe fragments, respectively. Two arrays will be returned for this format, the first with forward probe fragments from region1 and reverse probe fragments from region2. The second is the compliment of the first. 'full' returns a square, symmetric array of size N x N x 2 where N is the total number of fragments.
+    :type arraytype: str.
+    :param skipfiltered: If 'True', all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
+    :type skipfiltered: bool.
+    :param returnmapping: If 'True', a list containing the data array and two 2d arrasw of N x 4 containing the first fragment and last fragment plus one included in each bin and first and last coordinates for 'region1' and 'region2' is return. Otherwise only the data array is returned.
+    :type returnmapping: bool.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -720,21 +604,21 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
     # Fill in data values
     if arraytype == 'full':
         if startfrag1 < startfrag2:
-            _binning.unbinned_signal_trans_full(data, fivec.filter, fivec.corrections, strands, mapping1, mapping2,
+            _fivec_binning.unbinned_signal_trans_full(data, fivec.filter, fivec.corrections, strands, mapping1, mapping2,
                                                 data_array, trans_mean, fivec.sigma, startfrag1, startfrag2,
                                                 datatype_int)
         else:
-            _binning.unbinned_signal_trans_full(data, fivec.filter, fivec.corrections, strands, mapping2, mapping1,
+            _fivec_binning.unbinned_signal_trans_full(data, fivec.filter, fivec.corrections, strands, mapping2, mapping1,
                                                 data_array, trans_mean, fivec.sigma, startfrag2, startfrag1,
                                                 datatype_int)
             data_array = numpy.transpose(data_array, axes=[1, 0, 2])
     else:
         if startfrag1 < startfrag2:
-            _binning.unbinned_signal_trans_compact(data, fivec.filter, fivec.corrections, strands, mapping1, mapping2,
+            _fivec_binning.unbinned_signal_trans_compact(data, fivec.filter, fivec.corrections, strands, mapping1, mapping2,
                                                    data_array1, data_array2, trans_mean, fivec.sigma, startfrag1,
                                                    startfrag2, datatype_int)
         else:
-            _binning.unbinned_signal_trans_compact(data, fivec.filter, fivec.corrections, strands, mapping2, mapping1,
+            _fivec_binning.unbinned_signal_trans_compact(data, fivec.filter, fivec.corrections, strands, mapping2, mapping1,
                                                    data_array2, data_array1, trans_mean, fivec.sigma, startfrag2,
                                                    startfrag1, datatype_int)
     # If mapping requested, calculate bin bounds
@@ -769,64 +653,36 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
                      stop2=None, startfrag2=None, stopfrag2=None, binsize=1000000, datatype='enrichment',
                      returnmapping=False):
     """
-    bin_cis_signal method
+    Create an array and fill 'binsize' bins with trans (inter-region) data requested in 'datatype'.
 
-    Create an array and fill 'binsize' bins with data requested in 'datatype'.
-
-    Parameters
-    ----------
-    fivec : FiveC class object
-        A FiveC class object containing fragment and count data.
-    region1 : int
-        The index of the first region to pull data from.
-    region2 : int
-        The index of the second region to pull data from.
-    start1 : int, optional
-        The coordinate at the beginning of the smallest bin from 'region1'. If unspecified, 'start1' will be the first
-        multiple of 'binsize' below the 'startfrag1' mid. If there is a conflict between 'start1' and 'startfrag1',
-        'start1' is given preference.
-    stop1 : int, optional
-        The largest coordinate to include in the array from 'region1', measured from fragment midpoints. If both
-        'stop1' and 'stopfrag1' are given, 'stop1' will override 'stopfrag1'. 'stop1' will be shifted higher as needed
-        to make the last bin of size 'binsize'.
-    startfrag1 : int, optional
-        The first fragment from 'region1' to include in the array. If unspecified and 'start1' is not given, this is
-        set to the first valid fend in 'region1'. In cases where 'start1' is specified and conflicts with
-        'startfrag1', 'start1' is given preference.
-    stopfrag1 : int, optional
-        The first fragment not to include in the array from 'region1'. If unspecified and 'stop1' is not given, this
-        is set to the last valid fragment in 'region1' + 1. In cases where 'stop1' is specified and conflicts with
-        'stopfrag1', 'stop1' is given preference.
-    start2 : int, optional
-        The coordinate at the beginning of the smallest bin from 'region2'. If unspecified, 'start2' will be the first
-        multiple of 'binsize' below the 'startfrag2' mid. If there is a conflict between 'start2' and 'startfrag2',
-        'start2' is given preference.
-    stop2 : int, optional
-        The largest coordinate to include in the array from 'region2', measured from fragment midpoints. If both
-        'stop2' and 'stopfrag2' are given, 'stop2' will override 'stopfrag2'. 'stop2' will be shifted higher as needed
-        to make the last bin of size 'binsize'.
-    startfrag2 : int, optional
-        The first fragment from 'region2' to include in the array. If unspecified and 'start2' is not given, this is
-        set to the first valid fragment in 'region2'. In cases where 'start2' is specified and conflicts with
-        'startfrag2', 'start2' is given preference.
-    stopfrag2 : int, optional
-        The first fragment not to include in the array from 'region2'. If unspecified and 'stop2' is not given, this
-        is set to the last valid fragment in 'region2' + 1. In cases where 'stop2' is specified and conflicts with
-        'stopfrag2', 'stop2' is given preference.
-    binsize : int, optional
-        This is the coordinate width of each bin.
-    datatype : str, optional
-        This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment',
-        'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when
-        'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-
-        filtered bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and
-        'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the
-        expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both
-        correction and distance mean values.
-    returnmapping : bool, optional
-        If 'True', a list containing the data array and two 2d arrasw of N x 4 containing the first fragment and last
-        fragment plus one included in each bin and first and last coordinates for 'region1' and 'region2' is return.
-        Otherwise only the data array is returned.
+    :param fivec: A :class:`FiveC` class object containing fragment and count data.
+    :type fivec: :class:`FiveC`
+    :param region1: The index of the first region to pull data from.
+    :type region1: int.
+    :param region2: The index of the second region to pull data from.
+    :type region2: int.
+    :param start1: The coordinate at the beginning of the smallest bin from 'region1'. If unspecified, 'start1' will be the first multiple of 'binsize' below the 'startfrag1' mid. If there is a conflict between 'start1' and 'startfrag1', 'start1' is given preference. Optional.
+    :type start1: int.
+    :param stop1: The largest coordinate to include in the array from 'region1', measured from fragment midpoints. If both 'stop1' and 'stopfrag1' are given, 'stop1' will override 'stopfrag1'. 'stop1' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+    :type stop1: int.
+    :param startfrag1: The first fragment from 'region1' to include in the array. If unspecified and 'start1' is not given, this is set to the first valid fend in 'region1'. In cases where 'start1' is specified and conflicts with 'startfrag1', 'start1' is given preference. Optional.
+    :type startfrag1: int.
+    :param stopfrag1: The first fragment not to include in the array from 'region1'. If unspecified and 'stop1' is not given, this is set to the last valid fragment in 'region1' + 1. In cases where 'stop1' is specified and conflicts with 'stopfrag1', 'stop1' is given preference. Optional.
+    :type stopfrag1: int.
+    :param start2: The coordinate at the beginning of the smallest bin from 'region2'. If unspecified, 'start2' will be the first multiple of 'binsize' below the 'startfrag2' mid. If there is a conflict between 'start2' and 'startfrag2', 'start2' is given preference. Optional.
+    :type start2: int.
+    :param stop2: The largest coordinate to include in the array from 'region2', measured from fragment midpoints. If both 'stop2' and 'stopfrag2' are given, 'stop2' will override 'stopfrag2'. 'stop2' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+    :type stop2: int.
+    :param startfrag2: The first fragment from 'region2' to include in the array. If unspecified and 'start2' is not given, this is set to the first valid fend in 'region2'. In cases where 'start2' is specified and conflicts with 'startfrag2', 'start2' is given preference. Optional.
+    :type startfrag2: int.
+    :param stopfrag2: The first fragment not to include in the array from 'region2'. If unspecified and 'stop2' is not given, this is set to the last valid fragment in 'region2' + 2. In cases where 'stop2' is specified and conflicts with 'stopfrag2', 'stop2' is given preference. Optional.
+    :type stopfrag2: int.
+    :param binsize: This is the coordinate width of each bin.
+    :type binsize: int.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-filtered bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+    :type datatype: str.
+    :param returnmapping: If 'True', a list containing the data array and two 2d arrays of N x 4 containing the first fragment and last fragment plus one included in each bin and first and last coordinates for 'region1' and 'region2' is return. Otherwise only the data array is returned.
+    :type returnmapping: bool.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -919,10 +775,10 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
         data_array = numpy.zeros((num_bins2, num_bins1, 2), dtype=numpy.float32)
     # Fill in data values
     if startfrag1 < startfrag2:
-        _binning.binned_signal_trans(data, fivec.filter, fivec.corrections, strands, mapping1, mapping2, data_array,
+        _fivec_binning.binned_signal_trans(data, fivec.filter, fivec.corrections, strands, mapping1, mapping2, data_array,
                                      trans_mean, fivec.sigma, startfrag1, startfrag2, datatype_int)
     else:
-        _binning.binned_signal_trans(data, fivec.filter, fivec.corrections, strands, mapping2, mapping1, data_array,
+        _fivec_binning.binned_signal_trans(data, fivec.filter, fivec.corrections, strands, mapping2, mapping1, data_array,
                                      trans_mean, fivec.sigma, startfrag2, startfrag1, datatype_int)
         data_array = numpy.transpose(data_array, axes=[1, 0, 2])
     # If mapping requested, calculate bin bounds
@@ -947,31 +803,22 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
 def write_heatmap_dict(fivec, filename, binsize, includetrans=True, removedistance=False, arraytype='full',
                        regions=[]):
     """
-    write_heatmap_dict method
+    Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
-    Create an h5dict file containing binned interaction arrays.
-
-    Parameters
-    ----------
-    fivec : FiveC class object
-        A FiveC class object containing fragment and count data.
-    filename : string
-        Location to write h5dict object to.
-    binsize : int
-        Size of bins for interaction arrays. If "binsize" is zero, fragment interactions are returned without
-        binning.
-    includetrans : bool, optional
-        Indicates whether trans interaction arrays should be calculated and saved.
-    removedistance : bool, optional
-        If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fragment
-        corrections are used.
-    arraytype : str, optional
-        This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'.
-        'compact' means data are arranged in a N x M x 2 array where N is the number of bins, M is the maximum number
-        of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values
-        between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2.
-    regions : list, optional
-        If given, indicates which regions should be included. If left empty, all regions are included.
+    :param fivec: A :class:`FiveC` class object containing fragment and count data.
+    :type fivec: :class:`FiveC`
+    :param filename: Location to write h5dict object to.
+    :type filename: str.
+    :param binsize: Size of bins for interaction arrays. If "binsize" is zero, fragment interactions are returned without binning.
+    :type binsize: int.
+    :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
+    :type includetrans: bool.
+    :param removedistance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fragment corrections are used.
+    :type removedistance: bool.
+    :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'. 'compact' means data are arranged in a N x M x 2 array where N is the number of bins, M is the maximum number of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2.
+    :type arraytype: str.
+    :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
+    :type regions: list.
     """
     # Check if trans mean is needed and calculate if not already done
     if includetrans and removedistance and 'trans_mean' not in fivec.__dict__.keys():

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 import sys
 import os
@@ -7,8 +6,15 @@ import os
 import hifive
 
 
-def create_fivec_dataset(frag_fname, data_fnames, out_fname):
-    data = hifive.fivec.data.FiveCData(out_fname, 'w')
+def main():
+    if len(sys.argv) < 4:
+        print "Usage: python create_fivec_dataset.py FRAG_FILE DATA_FILE_1[,...,DATA_FILE_N] OUT_FILE"
+        print "FRAG_FILE                     File name of Fragment h5dict to link with data."
+        print "DATA_FILE_1[,...DATA_FILE_N]  A comma-separated list of either count file names or BAM file prefices."
+        print "OUT_FILE                      File name to write FiveCData h5dict to."
+        return None
+    frag_fname, data_fnames, out_fname = sys.argv[1:4]
+    data = hifive.FiveCData(out_fname, 'w')
     if data_fnames.lower().endswith('counts'):
         data_fnames = data_fnames.split(',')
         data.load_data_from_counts(frag_fname, data_fnames)
@@ -18,5 +24,4 @@ def create_fivec_dataset(frag_fname, data_fnames, out_fname):
 
 
 if __name__ == "__main__":
-    frag_fname, data_fnames, out_fname = sys.argv[1:4]
-    create_fivec_dataset(frag_fname, data_fnames, out_fname)
+    main()

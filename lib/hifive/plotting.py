@@ -1,32 +1,18 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 """
 This is a module contains scripts for generating plots from compact and full
 matrices of interaction data.
 
-Input data
+Concepts
 ----------
 
-These functions take either compact or full 3d data matrices.
+These functions take either compact, upper-triangle, or full 3d data matrices.
 
-Concepts
---------
+Data can either be arranged in compact, upper-triangle, or complete (rectangular) arrays. With HiC data, compact arrays are N x M x 2, where N is the number of fends or bins, and M is the maximum distance between fends or bins. This is useful for working with sets of short interactions. When using 5C data, the compact format is an N x M x 2 array where N is the number of forward primers and M is the number of reverse primers. Data can be raw, fend-corrected, distance-dependence removed, or enrichment values. Arrays are 3-dimensional with observed values in the first layer of d3, expected values in the second layer of d3.
 
-Data can either be arranged in compact or complete arrays. Compact arrays
-are N x M, where N is the number of fends or bins, and M is the maximum
-distance between fends or bins. This is useful for working with sets of short
-interactions. Data can be raw, fend-corrected, distance-dependence removed,
-or enrichment values. Arrays are 3-dimensional with observed values in the
-first layer of d3, expected values in the second layer of d3.
-
------------------------------------------------------------------------------
-
-API documentation
------------------
-
-
-
+API Documentation
+------------------
 """
 
 import os
@@ -48,34 +34,24 @@ except:
 def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                        min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
     """
-    plot_compact_array method
+    Fill in and rescale bitmap from a HiC compact array.
 
-    Rescale and fill in bitmap from a HiC compact array.
-
-    Parameters
-    ----------
-    data : 3d numpy array
-        A compact array of interaction data.
-    maxscore : float, optional
-        A ceiling value for plotting.
-    minscore : float, optional
-        A floot value for plotting.
-    symmetricscaling : bool, optional
-        Indicates whether to recenter data for scaling or maintain scores about zero.
-    logged : bool, optional
-        Indicates whether to use log values of scores.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle plot value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
+    :param data: A three-dimensional compact array of HiC interaction data.
+    :type data: numpy array
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log values of scores for color values.
+    :type logged: bool.
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -134,34 +110,24 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
 def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                     min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
     """
-    plot_full_array method
+    Fill in and rescale bitmap from a 5C or HiC full array.
 
-    Rescale and fill in bitmap from a full array.
-
-    Parameters
-    ----------
-    data : 3d numpy array
-        A full array of interaction data.
-    maxscore : float, optional
-        A ceiling value for plotting.
-    minscore : float, optional
-        A floot value for plotting.
-    symmetricscaling : bool, optional
-        Indicates whether to recenter data for scaling or maintain scores about zero.
-    logged : bool, optional
-        Indicates whether to use log values of scores.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle plot value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
+    :param data: A three-dimensional compact array of interaction data.
+    :type data: numpy array
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log values of scores for color values.
+    :type logged: bool.
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -216,34 +182,24 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
 def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                      min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
     """
-    plot_upper_array method
+    Fill in and rescale bitmap from a 5C or HiC upper array.
 
-    Rescale and fill in bitmap from a full array.
-
-    Parameters
-    ----------
-    data : 2d numpy array
-        A flattened upper-triangle array of interaction data.
-    maxscore : float, optional
-        A ceiling value for plotting.
-    minscore : float, optional
-        A floot value for plotting.
-    symmetricscaling : bool, optional
-        Indicates whether to recenter data for scaling or maintain scores about zero.
-    logged : bool, optional
-        Indicates whether to use log values of scores.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle plot value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
+    :param data: A two-dimensional compact array of interaction data.
+    :type data: numpy array
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log values of scores for color values.
+    :type logged: bool.
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -303,37 +259,26 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
 def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True, chroms=[],
                           min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
     """
-    plot_hic_heatmap_dict method
+    Fill in and rescale bitmap from a HiC heatmap h5dict file.
 
-    Rescale and fill in bitmap from a binned array h5dict.
-
-    Parameters
-    ----------
-    filename : str
-        Location of h5dict containing binned data arrays.
-    maxscore : float, optional
-        A ceiling value for plotting.
-    minscore : float, optional
-        A floot value for plotting.
-    symmetricscaling : bool, optional
-        Indicates whether to recenter data for scaling or maintain scores about zero.
-    logged : bool, optional
-        Indicates whether to use log values of scores.
-    chroms : list, optional
-        If specified, only the indicated chromosomes are plotted. Otherwise all chromosomes present in the h5dict are
-        plotted.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle plot value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
+    :param filename: File name of heatmap h5dict containing binned data arrays.
+    :type filename: str.
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log values of scores for color values.
+    :type logged: bool.
+    :param chroms: A list of chromosome names to include in the plot. If left empty, all chromosomes present in the heatmap file will be plotted.
+    :type chroms: list
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -417,37 +362,28 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
                                  regions=[], min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0),
                                  max_color=(1.0, 0.0, 0.0)):
     """
-    plot_fivec_full_heatmap_dict method
+    Fill in and rescale bitmap in a full format from a 5C heatmap h5dict file.
 
-    Rescale and fill in bitmap from a binned array h5dict.
+    This plots the data in a full format such that the rows and columns contain both orientations of primers.
 
-    Parameters
-    ----------
-    filename : str
-        Location of h5dict containing binned data arrays.
-    maxscore : float, optional
-        A ceiling value for plotting.
-    minscore : float, optional
-        A floot value for plotting.
-    symmetricscaling : bool, optional
-        Indicates whether to recenter data for scaling or maintain scores about zero.
-    logged : bool, optional
-        Indicates whether to use log values of scores.
-    regions : list, optional
-        If specified, only the indicated regions are plotted. Otherwise all regions present in the h5dict are
-        plotted.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle plot value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
+    :param filename: Location of a heatmap h5dict containing 5C data arrays.
+    :type data: str.
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log values of scores for color values.
+    :type logged: bool.
+    :param regions: If specified, only the indicated regions are plotted. Otherwise all regions present in the h5dict are plotted.
+    :type regions: list
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -541,37 +477,28 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
                                     regions=[], min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0),
                                     max_color=(1.0, 0.0, 0.0)):
     """
-    plot_fivec_compact_heatmap_dict method
+    Fill in and rescale bitmap in a compact from a 5C heatmap h5dict file.
 
-    Rescale and fill in bitmap from a binned array h5dict.
+    This plots the data in a 5C compact format such that the rows correspond to positive-strand primers and columns correspond to negative-strand primers.
 
-    Parameters
-    ----------
-    filename : str
-        Location of h5dict containing binned data arrays.
-    maxscore : float, optional
-        A ceiling value for plotting.
-    minscore : float, optional
-        A floot value for plotting.
-    symmetricscaling : bool, optional
-        Indicates whether to recenter data for scaling or maintain scores about zero.
-    logged : bool, optional
-        Indicates whether to use log values of scores.
-    regions : list, optional
-        If specified, only the indicated regions are plotted. Otherwise all regions present in the h5dict are
-        plotted.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle plot value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
+    :param filename: Location of a heatmap h5dict containing 5C data arrays.
+    :type data: str.
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log values of scores for color values.
+    :type logged: bool.
+    :param regions: If specified, only the indicated regions are plotted. Otherwise all regions present in the h5dict are plotted.
+    :type regions: list
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -661,34 +588,24 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
 def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                                      min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
     """
-    plot_diagonal_from_compact_array method
+    Fill in and rescale bitmap from a HiC compact array, plotting only the upper triangle rotated 45 degrees counter-clockwise.
 
-    Rotate 45 degrees, rescale, and fill in bitmap from a HiC compact array.
-
-    Parameters
-    ----------
-    data : 3d numpy array
-        A compact array of interaction data.
-    maxscore : float, optional
-        A ceiling value for plotting.
-    minscore : float, optional
-        A floot value for plotting.
-    symmetricscaling : bool, optional
-        Indicates whether to recenter data for scaling or maintain scores about zero.
-    logged : bool, optional
-        Indicates whether to use log values of scores.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle plot value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum plot value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
+    :param data: A three-dimensional compact array of HiC interaction data.
+    :type data: numpy array
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log values of scores for color values.
+    :type logged: bool.
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -750,46 +667,32 @@ def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientati
              min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0), labelattr=None,
              log_display=True):
     """
-    plot_key method
+    Create a key including color gradient and labels indicating associated values, returning a :mod:`pyx` canvas.
 
-    Create a key including color gradient and labels indicating asscociated values, returning a pyx canvas.
-
-    Parameters
-    ----------
-    min_score : float
-        The minimum value of the key scale.
-    max_score : float
-        The maximum value of the key scale.
-    height : float
-        The height of the gradient bar.
-    width : float
-        The width of the gradient bar.
-    labelformat : string
-        A string denoting the format for displaying number labels using the string formatting style from Python <= 2.6.
-    orientation : string
-        Indicates where labels are placed relative to gradient bar. This parameter will accept 'left', 'right', 'top',
-        and 'bottom'.
-    num_ticks : int
-        Indicates how many evenly-spaced tick marks and associated labels to insert. This can be zero for no labels or
-        greater than one. Labels are inserted at the minimum and maximum values first with remaining ticks occuring
-        evenly distributed between the extremes.
-    min_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the minimum key value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with max_color and possibly mid_color.
-    mid_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the middle key value, respectively. Numbers range from 0 to 1. This can be set to None to
-        create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    max_color : tuple
-        This is a tuple containing three numbers representing the red, green, and blue component of the color
-        associated with the maximum key value, respectively. Numbers range from 0 to 1. This variable is used to
-        create a color gradient for plotting along with min_color and possibly mid_color.
-    labelattr : list
-        A list of pyx attributes to be passed to the text function.
-    log_display : bool
-        If True, min_score and max_score are taken to be logged values and so labels are evenly spaced in log space
-        but converted to normal space for display.
+    :param min_score: The minimum value of the key scale.
+    :type min_score: float
+    :param max_score: The maximum value of the key scale.
+    :type max_score: float
+    :param height: The height of the gradient bar in whatever units :mod:`pyx` is using.
+    :type height: float
+    :param width: The width of the gradient bar in whatever units :mod:`pyx` is using.
+    :type width: float
+    :param labelformat: A string denoting the format for displaying number labels using the string formatting style from Python <= 2.6.
+    :type labelformat: str.
+    :param orientation: Indicates where labels are placed relative to gradient bar. This parameter will accept 'left', 'right', 'top', and 'bottom'.
+    :type type: str.
+    :param num_ticks: Indicates how many evenly-spaced tick marks and associated labels to insert. This can be zero for no labels or greater than one. Labels are inserted at the minimum and maximum values first with remaining ticks occuring evenly distributed between the extremes.
+    :type num_ticks: int.
+    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
+    :type min_color: tuple
+    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
+    :type mid_color: tuple
+    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
+    :type max_color: tuple
+    :param labelattr: A list of pyx attributes to be passed to the text function.
+    :type labelattr: str.
+    :param log_display: If True, min_score and max_score are taken to be logged values and so labels are evenly spaced in log space but converted to normal space for display.
+    :type log_display: bool.
     """
     if 'PIL' not in sys.modules.keys() or 'pyx' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL and pyx modules must be installed to use this function.")

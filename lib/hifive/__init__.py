@@ -1,19 +1,26 @@
 import sys
 
-import hic
-import fivec
+import bi
 import fend
 import fragment
-import analysis
+import fivec_data
+import hic_data
+import fivec
+import hic
+import fivec_binning
+import hic_binning
 import plotting
-import bi
-import _bi
+
+from hic import HiC
+from fivec import FiveC
+from bi import BI
+from fend import Fend
+from fragment import Fragment
+from hic_data import HiCData
+from fivec_data import FiveCData
 
 
-"""
-Shamelessly ripped off of py.std
-"""
-__version__ = '0.0.0'
+__version__ = '2.0.0'
 __author__ = 'Michael Sauria'
 
 #------------------------------------------------

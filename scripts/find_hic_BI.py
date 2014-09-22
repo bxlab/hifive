@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 import sys
 
@@ -12,7 +11,7 @@ except:
 import hifive
 
 
-def find_BI(hic_fname, BI_fname, width=10000, window=2500000, height=0, mincount=10, smoothing=10000, chroms=[]):
+def main():
     if 'mpi4py' in sys.modules.keys():
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
@@ -21,8 +20,27 @@ def find_BI(hic_fname, BI_fname, width=10000, window=2500000, height=0, mincount
         comm = None
         rank = 0
         num_procs = 1
-    hic = hifive.analysis.HiC(hic_fname, 'r')
-    BI = hifive.bi.BI(width=width, window=window, height=height, mincount=10)
+    if len(sys.argv) < 8 and rank == 0:
+        print "Usage: python find_hic_BI.py HIC_FILE OUT_FILE WIDTH WINDOW HEIGHT MINCOUNT SMOOTHING [CHROM_1,CHROM_2...,CHROM_N]"
+        print "HIC_FILE            h5dict created by the hifive.HiC class"
+        print "OUT_FILE            file name for the new h5dict created by this script"
+        print "WIDTH               integer specifying the width about each boundary point"
+        print "HEIGHT              integer specifying the height of bins extending across each window"
+        print "WINDOW              integer specifying the window around each boundary point"
+        print "SMOOTHING           integer specifying the width of smoothing weights"
+        print "[CHROM1,CHROM2...]  a comma-separated list of chromosome names to include in processing"
+        print "This function is MPI compatible."
+        return None
+    elif len(sys.argv) < 8:
+        return None
+    hic_fname, BI_fname, width, window, height, mincount, smoothing = sys.argv[1:8]
+    width, window, height, mincount, smoothing = int(width), int(window), int(height), int(mincount), int(smoothing)
+    if len(sys.argv) > 8:
+        chroms = sys.argv[8].split(',')
+    else:
+        chroms = []
+    hic = hifive.HiC(hic_fname, 'r')
+    BI = hifive.BI(width=width, window=window, height=height, mincount=10)
     BI.find_bi_from_hic(hic,  datatype='enrichment', chroms=chroms)
     if smoothing > 0:
         BI.smooth_bi(smoothing)
@@ -32,10 +50,4 @@ def find_BI(hic_fname, BI_fname, width=10000, window=2500000, height=0, mincount
 
 
 if __name__ == '__main__':
-    hic_fname, BI_fname, width, window, height, mincount, smoothing = sys.argv[1:8]
-    width, window, height, mincount, smoothing = int(width), int(window), int(height), int(mincount), int(smoothing)
-    if len(sys.argv) > 8:
-        chroms = sys.argv[8].split(',')
-    else:
-        chroms = []
-    find_BI(hic_fname, BI_fname, width, window, height, mincount, smoothing, chroms)
+    main()

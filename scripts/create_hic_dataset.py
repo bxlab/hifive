@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 import sys
 import os
@@ -7,8 +6,16 @@ import os
 import hifive
 
 
-def create_dataset(fend_fname, data_fnames, out_fname, maxinsert):
-    data = hifive.hic.data.HiCData(out_fname, 'w')
+def main():
+    if len(sys.argv) < 5:
+        print "Usage: python create_hic_dataset.py FEND_FILE DATA_FILE_1[,...,DATA_FILE_N] OUT_FILE MAX_INSERT"
+        print "FEND_FILE                     File name of Fend h5dict to link with data."
+        print "DATA_FILE_1[,...DATA_FILE_N]  A comma-separated list of either BAM file prefices, raw coordinate read pairs or HiCPipe-compatible MAT files."
+        print "OUT_FILE                      File name to write HiCData h5dict to."
+        print "MAX_INSERT                    Integer specifying the maximum distance sum from each mapped end to restriction site."
+        return None
+    fend_fname, data_fnames, out_fname, maxinsert = sys.argv[1:5]
+    data = hifive.HiCData(out_fname, 'w')
     if data_fnames.endswith('mat'):
         data.load_data_from_mat(fend_fname, data_fnames, maxinsert)
     elif data_fnames.endswith('raw'):
@@ -20,5 +27,4 @@ def create_dataset(fend_fname, data_fnames, out_fname, maxinsert):
 
 
 if __name__ == "__main__":
-    fend_fname, data_fnames, out_fname, maxinsert = sys.argv[1:5]
-    create_dataset(fend_fname, data_fnames, out_fname, int(maxinsert))
+    main()

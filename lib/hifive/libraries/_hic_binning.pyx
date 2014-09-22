@@ -1,5 +1,4 @@
 # distutils: language = c++
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 """These functions provide increased speed in handling the signal-binning
 functions necessary for supporting hic analysis using HiFive.

@@ -1,31 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
-
-"""
-This is a module contains a class for generating boundary index (BI) scores from
-FiveC data and downstream analyses, including piling bed or wig scores for occupancy
-profiles.
-
-Input data
-----------
-
-This class takes a HiC object.
-
-Concepts
---------
-
-BI is a statistic describing the correlation of neighboring sets of interactions.
-This can either be used to create BI profiles centered around genomic features
-such as occupancy sites or for peak calling  to determine structural boundaries.
-
------------------------------------------------------------------------------
-
-API documentation
------------------
-
-
-
-"""
 
 import os
 import sys
@@ -42,36 +15,33 @@ try:
 except:
     pass
 
-import hic.binning as h_binning
-import fivec.binning as f_binning
-import _bi
+import hic_binning as h_binning
+import fivec_binning as f_binning
+import libraries._bi as _bi
 
 
 class BI(object):
-    """Base class for handling boundary index (BI) scores.
+    """
+    This class uses a HiC or FiveC object to generate BI scores. These scores can be saved to an h5dict. Once generated or loaded, BI scores can be used to find structural boundaries, create feature-centered BI profiles, or bound-centered feature profiles.
 
-    This class uses a HiC or FiveC object to generate BI scores. These scores can
-    be saved to an h5dict. Once generated or loaded, BI scores can be used to find
-    structural boundaries, create feature-centered BI profiles, or bound-centered
-    feature profiles."""
+    .. note::
+      This class is also available as hifive.BI
+
+    The BI score is calculated by finding the absolute difference between a set of matched bins; the first set contains interactions between sequences falling within a range given by 'window' up- and downstream of the boundary point and binned into 'height'-sized bins and the group of sequences falling between zero and 'width' base pairs upstream of the boundary point; the second set contains interactions between sequences falling within a range given by 'window' up- and downstream of the boundary point and binned into 'height'-sized bins and the group of sequences falling between zero and 'width' base pairs downstream of the boundary point.
+
+    :param width: A range, in base-pairs, specifying how large a neighborhood around a boundary point is used for binning in calculating the BI.
+    :type width: int.
+    :param height: The size to bin fragments or fends into that fall within the range specified by 'window' of the boundary point and interacting with the fragments or fends follwing within the 'width' range around the boundary point. If set to zero, fragments or fends are left unbinned in this dimension for BI calculations.
+    :type height: int.
+    :param window: A range, in base-pairs, specifying how far away from a boundary point interactions are included in calculating the BI.
+    :type window: int.
+    :param mincount: The minimum number of valid pairs of bins needed to calculate the boundary index for a given location.
+    :type mincount: int.
+    """
 
     def __init__(self, width=10000, window=1000000, height=0, mincount=10):
         """
-        __init__ method
-
-        Initialize BI object.
-
-        Parameters
-        ----------
-        width : int, optional
-            A range, in base-pairs, specifying how large a neighborhood around a
-            boundary point is used for binning in calculating the BI.
-        window : int, optional
-            A range, in base-pairs, specifying how far away from a boundary point
-            interactions are included in calculating the BI.
-        mincount : int, optional
-            The minimum number of valid pairs of points needed to calculate the
-            boundary index for a given location.
+        Initialize :class:`BI` object.
         """
         self.width = int(width)
         self.window = int(window)
@@ -91,14 +61,10 @@ class BI(object):
 
     def load(self, filename):
         """
-        load method
-
         Load BI data and parameters from an h5dict.
 
-        Parameters
-        ----------
-        filename : string
-            This specifies the filename of the BI object.
+        :param filename: This specifies the file name of the :class:`BI` object to load from.
+        :type filename: str.
         """
         # ensure data h5dict exists
         if not os.path.exists(filename):
@@ -120,14 +86,10 @@ class BI(object):
 
     def save(self, filename):
         """
-        save method
-
         Save BI data and parameters to an h5dict.
 
-        Parameters
-        ----------
-        filename : string
-            This specifies the filename of the BI object.
+        :param filename: This specifies the file name to which to save the :class:`BI` object.
+        :type filename: str.
         """
         # see if h5dict exists
         if os.path.exists(filename):
@@ -145,16 +107,12 @@ class BI(object):
 
     def find_bi_from_hic(self, hic, datatype='fend', chroms=[]):
         """
-        find_bi_from_hic method
+        Calculate the boundary index for HiC data. This function is MPI compatible.
 
-        Calculate the boundary index for "hic" on chromosomes in "chrom".
-
-        Parameters
-        ----------
-        hic : HiC class object
-            A HiC class object containing fend and count data.
-        chroms : list, optional
-            A list of chromosome names to limit BI calculations to. If empty, all chromosomes in 'hic' are used.
+        :param hic: A :class:`HiC` class object containing fend and count data.
+        :type hic: :class:`HiC`
+        :param chroms: A list of chromosome names to limit BI calculations to. If empty, all chromosomes in 'hic' are used.
+        :type chroms: list
         """
         if 'mpi4py' in sys.modules.keys():
             comm = MPI.COMM_WORLD
@@ -243,16 +201,12 @@ class BI(object):
 
     def find_bi_from_fivec(self, fivec, datatype='fragment', regions=[]):
         """
-        find_bi_from_fivec method
+        Calculate the boundary index for 5C data.
 
-        Calculate the boundary index for "fivec" in regions in "regions".
-
-        Parameters
-        ----------
-        fivec : FiveC class object
-            A FiveC class object containing fend and count data.
-        regions : list, optional
-            A list of region numbers to limit BI calculations to. If empty, all regions in 'fivec' are used.
+        :param fivec: A :class:`FiveC` class object containing fend and count data.
+        :type fivec: :class:`FiveC`
+        :param regions: A list of region numbers to limit BI calculations to. If empty, all regions in 'fivec' are used.
+        :type regions: list
         """
         print >> sys.stderr, ("Calculating BI..."),
         # save relevant parameters from hic object
@@ -323,6 +277,12 @@ class BI(object):
         return None
 
     def smooth_bi(self, width):
+        """
+        Using a Gaussian weighting approach, smooth BI values. Weights extend out to 2.5 standard deviatons. This function is MPI compatible.
+
+        :param width: The distance, in base pairs, equivalent to one standard deviation for the Gaussian weights.
+        :type width: int.
+        """
         if 'mpi4py' in sys.modules.keys():
             comm = MPI.COMM_WORLD
             rank = comm.Get_rank()
@@ -382,24 +342,18 @@ class BI(object):
 
     def plot_bi(self, width, height, chromosome, start=None, stop=None):
         """
-        plot_bi method
-
         Plot a line representation of the BI score for a specified region.
 
-        Parameters
-        ----------
-        width : int
-            The width of the image to return.
-        height : int
-            The height of the image to return.
-        chromosome : str
-            The name of the chromosome to pull BI information from.
-        start : int, optional
-            The coordinates corresponding to the left edge of the image. If not specified, the first BI midpoint is
-            used.
-        stop : int, optional
-            The coordinates corresponding to the right edge of the image. If not specified, the first BI midpoint is
-            used.
+        :param width: The width of the image to return in whatever units :class:`Pyx` is using.
+        :type width: float
+        :param height: The height of the image to return in whatever units :class:`Pyx` is using.
+        :type height: float
+        :param chromosome: The name of the chromosome to pull BI information from.
+        :type chromosome: str.
+        :param start: The coordinates corresponding to the left edge of the image. If not specified, the first BI midpoint is used.
+        :type start: int.
+        :param stop: The coordinates corresponding to the right edge of the image. If not specified, the first BI midpoint is used.
+        :type stop: int.
         """
         if 'pyx' not in sys.modules.keys():
             print >> sys.stderr, ("The pyx module must be installed to use this function.")
@@ -435,18 +389,14 @@ class BI(object):
 
     def find_bi_profile(self, coordinates, binsize=2000, numbins=51):
         """
-        find_bi_profile method
+        Find the mean BI signal in a number of bins centered around a set of user-specified positions.
 
-        Find the mean BI signal in a number of bins centered around user-specified positions.
-
-        Parameters
-        ----------
-        coordinates : dict
-            A dictionary keyed with chromosome names and containing 1D arrays of coordinates for each chromosome.
-        binsize : int
-            Width, in bp, of each bin to aggregate signal in.
-        numbins : int
-            The number of bins, centered around each coordinate, to aggregate signal in.
+        :param coordinates: A dictionary keyed with chromosome names and containing 1d arrays of coordinates for each chromosome.
+        :type coordinates: dict.
+        :param binsize: Width, in base pairs, of each bin to aggregate signal in.
+        :type binsize: int.
+        :param numbins: The number of bins, centered around each coordinate, to aggregate signal in.
+        :type numbins: int.
         """
         print >> sys.stderr, ("Finding BI profile..."),
         signal = numpy.zeros((numbins, 2), dtype=numpy.float32)
@@ -465,17 +415,12 @@ class BI(object):
 
     def find_bi_bounds(self, cutoff=2.0, chroms=[]):
         """
-        find_bi_bounds method
+        Find BI scores that are higher than adjacent scores and are more than the cutoff * standard deviation above the minimum adjacent trough score.
 
-        Find bi scores that are higher than adjacent scores and are move than the cutoff * stdev above the minimum
-        adjacent trough score.
-        
-        Parameters
-        ----------
-        cutoff : float
-            Minimum height ratio between peak and lower adjacent trough.
-        chroms : list
-            If specified, find bounds for only those chromosomes. Otherwise use all chromosomes present in BI object.
+        :param cutoff: Minimum height ratio between peak and lower adjacent trough.
+        :type cutoff: float
+        :param chroms: If specified, find bounds for only chromosomes in this list. Otherwise use all chromosomes present in the :class:`BI` object.
+        :type chroms: list
         """
         print >> sys.stderr, ("Finding BI bounds..."),
         # if needed, get list of chromosomes

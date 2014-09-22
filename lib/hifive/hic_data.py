@@ -1,32 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
-
-"""
-This is a module class for handling Hi-C paired end data.
-
-Input data
-----------
-
-This class loads data from a set of text files containing pairs of
-chromosomes, coordinates, and strand, pairs of fends and counts, or directly
-from a set of bam files. Data are filtered by fragment insert size at time of
-loading. Using the "Fend" class, reads are assigned to fragment-end (fend)
-pairs.
-
-Concepts
---------
-
-Data are stored in h5dicts to allow easy access, fast retrieval, and reduce
-memory requirements.
-
------------------------------------------------------------------------------
-
-API documentation
------------------
-
-
-
-"""
 
 import os
 import sys
@@ -39,28 +11,28 @@ try:
 except:
     pass
 
-from ..fend import Fend
+from fend import Fend
 
 
 class HiCData(object):
-    """Base class for handling count data for HiC experiments.
+    """This class handles interaction count data for HiC experiments.
 
-    This class stores mapped paired-end reads, indexing them by fend
-    number, in an h5dict."""
+    This class stores mapped paired-end reads, indexing them by fragment-end (fend) number, in an h5dict.
+
+    .. note::
+      This class is also available as hifive.HiCData
+
+    When initialized, this class creates an h5dict in which to store all data associated with this object.
+    
+    :param filename: The file name of the h5dict. This should end with the suffix '.hdf5'
+    :type filename: str.
+    :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
+    :type mode: str.
+    """
 
     def __init__(self, filename, mode='r'):
         """
-        __init__ method
-
-        Initialize counts dataset and create an h5dict.
-
-        Parameters
-        ----------
-        filename : string
-            A filename specifying where to store the data dictionary.
-        mode : string, optional
-            Specifies how to open the h5dict, depending on whether data is to
-            be written or read.
+        Create a :class:`HiCData` object.
         """
         self.filename = os.path.abspath(filename)
         self.data = h5py.File(filename, mode)
@@ -68,20 +40,20 @@ class HiCData(object):
 
     def load_data_from_raw(self, fendfilename, filelist, maxinsert):
         """
-        load_data_from_raw method
+        Read interaction counts from a text file(s) and place in h5dict.
 
-        Read counts from raw text files and place in h5dict.
+        Files should contain both mapped ends of a read, one read per line, separated by tabs. Each line should be in the following format::
 
-        Parameters
-        ----------
-        fendfilename : string
-            This specifies the filename of the fend object.
-        filelist : list
-            A list containing all of the file names of raw text files to be
-            included in the dataset.
-        maxinsert : int
-            A cutoff for filtering paired reads whose total distance to their
-            respective restriction sites exceeds this value.
+          chromosome1    coordinate1  strand1   chromosome2    coordinate2  strand2
+
+        where strands are given by the characters '+' and '-'.
+
+        :param fendfilename: This specifies the file name of the :class:`Fend` object to associate with the dataset.
+        :type fendfilename: str.
+        :param filelist: A list containing all of the file names of mapped read text files to be included in the dataset. If only one file is needed, this may be passed as a string.
+        :type filelist: list
+        :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
+        :type maxinsert: int.
         """
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
@@ -132,20 +104,14 @@ class HiCData(object):
 
     def load_data_from_bam(self, fendfilename, filelist, maxinsert):
         """
-        load_data_from_bam method
+        Read interaction counts from pairs of BAM-formatted alignment file(s) and place in h5dict.
 
-        Read counts from pairs of bam files and place in h5dict.
-
-        Parameters
-        ----------
-        fendfilename : string
-            This specifies the filename of the fend object.
-        filelist : list
-            A list containing all of the bam file prefices to be included in
-            the dataset. All files containing each prefix will be loaded.
-        maxinsert : int
-            A cutoff for filtering paired reads whose total distance to their
-            respective restriction sites exceeds this value.
+        :param fendfilename: This specifies the file name of the :class:`Fend` object to associate with the dataset.
+        :type fendfilename: str.
+        :param filelist: A list containing all of the bam file prefices to be included in the dataset. All files containing each prefix will be loaded. If only one pair of files is needed, the prefix may be passed as a string.
+        :type filelist: list
+        :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
+        :type maxinsert: int.
         """
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, ("The pysam module must be installed to use this function.")
@@ -251,18 +217,14 @@ class HiCData(object):
 
     def load_data_from_mat(self, fendfilename, filename, maxinsert=0):
         """
-        load_data_from_mat method
+        Read interaction counts from a :mod:`HiCPipe`-compatible 'mat' text file and place in h5dict.
 
-        Read counts from mat file and place in h5dict.
-
-        Parameters
-        ----------
-        fendfilename : string
-            This specifies the filename of the fend object.
-        filename : string
-            Filename of mat file containing fend pair and count data.
-        maxinsert : int, optional
-            Cutoff value used in filtering total read lengths in mat file.
+        :param fendfilename: This specifies the file name of the :class:`Fend` object to associate with the dataset.
+        :type fendfilename: str.
+        :param filename: File name of a 'mat' file containing fend pair and interaction count data.
+        :type filename: str.
+        :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
+        :type maxinsert: int.
         """
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
@@ -455,14 +417,10 @@ class HiCData(object):
 
     def export_to_mat(self, outfilename):
         """
-        export_to_mat method
+        Write reads loaded in data object to text file in :mod:`HiCPipe`-compatible 'mat' format.
 
-        Write reads loaded in data object to text file in mat format.
-
-        Parameters
-        ----------
-        outfilename : string
-            This specifies the file to save data to.
+        :param outfilename: Specifies the file to save data in.
+        :type outfilename: str.
         """
         print >> sys.stderr, ("Writing data to mat file..."),
         output = open(outfilename, 'w')

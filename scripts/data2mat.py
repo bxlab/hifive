@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#(c) 2014 Michael Sauria (mike.sauria@gmail.com)
 
 import sys
 
@@ -8,11 +7,16 @@ import numpy
 import hifive
 
 
-def export_data_to_mat(data_fname, mat_fname):
-    data = hifive.hic.data.HiCData(data_fname)
+def main():
+    if len(sys.argv) < 3:
+        print "Usage python data2mat.py DATA_FILE OUT_FILE"
+        print "DATA_FILE  File name of HiCData h5dict."
+        print "OUT_FILE   File name to write HiCPipe-compatible MAT-formatted data to."
+        return None
+    data_fname, mat_fname = sys.argv[1:3]
+    data = hifive.HiCData(data_fname)
     data.export_to_mat(mat_fname)
 
 
 if __name__ == "__main__":
-    data_fname, mat_fname = sys.argv[1:3]
-    export_data_to_mat(data_fname, mat_fname)
+    main()
