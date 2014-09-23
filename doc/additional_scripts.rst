@@ -269,6 +269,7 @@ This scripts takes a :class:`HiC` file and calculates a set of BI scores. This s
 * **WIDTH** (*int.*) - Integer specifying the width about each boundary point.
 * **HEIGHT** (*int.*) - Integer specifying the height of bins extending across each window.
 * **WINDOW** (*int.*) - Integer specifying the window around each boundary point.
+* **MINCOUNT** (*int.*) - Minimum number of valid bin pairs needed to find BI value.
 * **SMOOTHING** (*int.*) - Integer specifying the width of smoothing weights.
 * **CHROM_1,...CHROM_N** (*str.*) - A comma-separated list of chromosome names to include in the analysis. Optional.
 
@@ -324,7 +325,7 @@ model_single_chr_binned.py
 
 This script bins data from a :class:`HiC` h5dict, dynamically bins the data, and creates a 3D model using a PCA dimensionality reduction. The script can be called as follows::
 
-  > python model_single_chr_BI.py HIC_FILE BI_FILE OUT_PREFIX CHROM CUTOFF MIN_OBS
+  > python model_single_chr_BI.py HIC_FILE OUT_PREFIX BINSIZE CHROM
 
 **Arguments:**
 
@@ -366,12 +367,11 @@ model_whole_genome_binned.py
 
 This script bins data from a :class:`HiC` h5dict, dynamically bins the data, and creates a 3D model using a PCA dimensionality reduction. The script can be called as follows::
 
-  > python model_whole_genome_binned.py HIC_FILE BI_FILE OUT_PREFIX BIN_SIZE MIN_OBS CIS_SCALING CHROMS
+  > python model_whole_genome_binned.py HIC_FILE OUT_PREFIX BIN_SIZE MIN_OBS CIS_SCALING CHROMS
 
 **Arguments:**
 
 * **HIC_FILE** (*str.*) - File name of :class:`HiC` h5dict to pull data from.
-* **BI_FILE** (*str.*) - File name of :class:`BI` h5dict to find boundaries for partitioning from.
 * **OUT_PREFIX** (*str.*) - File prefix for all output files of script.
 * **BIN_SIZE** (*str.*) - Size of bins, in base pairs, to group data into.
 * **MIN_OBS** (*int.*) - Minimum number of observations for valid dynamic bins.

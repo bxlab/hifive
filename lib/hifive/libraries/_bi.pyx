@@ -36,46 +36,57 @@ def find_bi(
         np.ndarray[DTYPE_t, ndim=1] BI not None,
         np.ndarray[DTYPE_t, ndim=2] temp not None,
         int width,
+        int window,
         int mincount):
-    cdef int i, j, k, count, sum1, sum2, upbound, downbound
+    cdef int i, j, k, count, upbound_i, downbound_i, upbound_o, downbound_o, index
     cdef double diff
     cdef int num_bins = data.shape[0]
     cdef int max_bin = data.shape[1]
     with nogil:
         for i in range(1, num_bins):
             # find width around boundary point
-            upbound = i - 1
-            while upbound > 0 and BI_mids[i - 1] - mids[upbound - 1] < width:
-                upbound -= 1
-            downbound = i + 1
-            while downbound < num_bins and mids[downbound] - BI_mids[i - 1] < width:
-                downbound += 1
+            upbound_i = i
+            while upbound_i > 0 and BI_mids[i - 1] - mids[upbound_i] < width:
+                upbound_i -= 1
+            upbound_o = upbound_i
+            while upbound_o > 0 and BI_mids[i - 1] - mids[upbound_o] < window:
+                upbound_o -= 1
+            downbound_i = i + 1
+            while downbound_i < num_bins and mids[downbound_i + 1] - BI_mids[i - 1] < width:
+                downbound_i += 1
+            downbound_o = downbound_i
+            while downbound_o < num_bins and mids[downbound_o + 1] - BI_mids[i - 1] < window:
+                downbound_o += 1
             # zero out temp array
-            for j in range(2 * max_bin):
+            for j in range(temp_bins):
                 temp[j, 0] = 0
                 temp[j, 1] = 0
                 temp[j, 2] = 0
                 temp[j, 3] = 0
             # fill temp array with current interaction set
             # find upstream interactions
-            for j in range(1, min(max_bin, i)):
-                for k in range(max(upbound, i - j), i):
-                    temp[max_bin - j, 0] += data[i - j - 1, k - i + j, 0]
-                    temp[max_bin - j, 1] += data[i - j - 1, k - i + j, 1]
-                for k in range(i, min(downbound, max_bin + i - j)):
-                    temp[max_bin - j, 2] += data[i - j - 1, k - i + j, 0]
-                    temp[max_bin - j, 3] += data[i - j - 1, k - i + j, 1]
+            for j in range(upbound_o, i - 1):
+                for k in range(max(j, upbound_i), i):
+                    index = k - j - 1 + max_bin
+                    temp[index, 0] = data[j, k - j - 1, 0]
+                    temp[index, 1] = data[j, k - j - 1, 1]
+                for k in range(i, downbound_i):
+                    index = k - j - 1 + max_bin
+                    temp[index, 2] = data[j, k - j - 1, 0]
+                    temp[index, 3] = data[j, k - j - 1, 1]
             # find downstream interactions
-            for j in range(1, min(max_bin, num_bins - i - 1)):
-                for k in range(max(upbound, i + j - max_bin), i):
-                    temp[max_bin + j - 1, 0] += data[k, i + j - k - 1, 0]
-                    temp[max_bin + j - 1, 1] += data[k, i + j - k - 1, 1]
-                for k in range(i, min(downbound, i + j)):
-                    temp[max_bin + j - 1, 2] += data[k, i + j - k - 1, 0]
-                    temp[max_bin + j - 1, 3] += data[k, i + j - k - 1, 1]
+            for j in range(i + 1, downbound_o):
+                for k in range(upbound_i, i):
+                    index = j - k - 1
+                    temp[index, 0] = data[k, j - k - 1, 0]
+                    temp[index, 1] = data[k, j - k - 1, 1]
+                for k in range(i, min(j, downbound_i)):
+                    index = j - k - 1
+                    temp[index, 2] = data[k, j - k - 1, 0]
+                    temp[index, 3] = data[k, j - k - 1, 1]
             # find set counts
             count = 0
-            for j in range(max_bin * 2):
+            for j in range(temp_bins):
                 if temp[j, 0] > 0 and temp[j, 2] > 0:
                     count += 1
                     temp[j, 0] = log(temp[j, 0] / temp[j, 1])
@@ -87,13 +98,13 @@ def find_bi(
                 BI[i - 1] = Inf
                 continue
             # find difference
-            for j in range(max_bin * 2):
+            for j in range(temp_bins):
                 if temp[j, 1] == 1:
                     diff = temp[j, 0] - temp[j, 2]
                     if diff < 0:
-                        BI[i - 1] += diff
-                    else:
                         BI[i - 1] -= diff
+                    else:
+                        BI[i - 1] += diff
             BI[i - 1] /= count
     return None
 
@@ -111,7 +122,7 @@ def find_bi_height(
         int window,
         int height,
         int mincount):
-    cdef int i, j, k, count, sum1, sum2, upbound, downbound, index
+    cdef int i, j, k, count, upbound_i, downbound_i, upbound_o, downbound_o, index
     cdef double diff
     cdef int num_bins = data.shape[0]
     cdef int max_bin = data.shape[1]
@@ -120,12 +131,18 @@ def find_bi_height(
     with nogil:
         for i in range(1, num_bins):
             # find width around boundary point
-            upbound = i - 1
-            while upbound > 0 and BI_mids[i - 1] - mids[upbound - 1] < width:
-                upbound -= 1
-            downbound = i + 1
-            while downbound < num_bins and mids[downbound] - BI_mids[i - 1] < width:
-                downbound += 1
+            upbound_i = i
+            while upbound_i > 0 and BI_mids[i - 1] - mids[upbound_i] < width:
+                upbound_i -= 1
+            upbound_o = upbound_i
+            while upbound_o > 0 and BI_mids[i - 1] - mids[upbound_o] < window:
+                upbound_o -= 1
+            downbound_i = i + 1
+            while downbound_i < num_bins and mids[downbound_i + 1] - BI_mids[i - 1] < width:
+                downbound_i += 1
+            downbound_o = downbound_i
+            while downbound_o < num_bins and mids[downbound_o + 1] - BI_mids[i - 1] < window:
+                downbound_o += 1
             # zero out temp array
             for j in range(temp_bins):
                 temp[j, 0] = 0
@@ -134,27 +151,23 @@ def find_bi_height(
                 temp[j, 3] = 0
             # fill temp array with current interaction set
             # find upstream interactions
-            for j in range(1, min(max_bin, i)):
-                if BI_mids[i - 1] - mids[i - j - 1] > window:
-                    continue
-                index = (BI_mids[i - 1] - mids[i - j - 1]) / height
-                for k in range(max(upbound, i - j), i):
-                    temp[half_temp - index - 1, 0] += data[i - j - 1, k - i + j, 0]
-                    temp[half_temp - index - 1, 1] += data[i - j - 1, k - i + j, 1]
-                for k in range(i, min(downbound, max_bin + i - j)):
-                    temp[half_temp - index - 1, 2] += data[i - j - 1, k - i + j, 0]
-                    temp[half_temp - index - 1, 3] += data[i - j - 1, k - i + j, 1]
+            for j in range(upbound_o, i - 1):
+                index = (BI_mids[i - 1] - mids[j]) / height
+                for k in range(max(j, upbound_i), i):
+                    temp[half_temp - index - 1, 0] += data[j, k - j - 1, 0]
+                    temp[half_temp - index - 1, 1] += data[j, k - j - 1, 1]
+                for k in range(i, downbound_i):
+                    temp[half_temp - index - 1, 2] += data[j, k - j - 1, 0]
+                    temp[half_temp - index - 1, 3] += data[j, k - j - 1, 1]
             # find downstream interactions
-            for j in range(1, min(max_bin, num_bins - i - 1)):
-                if mids[i + j] - BI_mids[i - 1] > window:
-                    continue
-                index = (mids[i + j] - BI_mids[i - 1]) / height
-                for k in range(max(upbound, i + j - max_bin), i):
-                    temp[half_temp + index, 0] += data[k, i + j - k - 1, 0]
-                    temp[half_temp + index, 1] += data[k, i + j - k - 1, 1]
-                for k in range(i, min(downbound, i + j)):
-                    temp[half_temp + index, 2] += data[k, i + j - k - 1, 0]
-                    temp[half_temp + index, 3] += data[k, i + j - k - 1, 1]
+            for j in range(i + 1, downbound_o):
+                index = (mids[j] - BI_mids[i - 1]) / height
+                for k in range(upbound_i, i):
+                    temp[half_temp + index, 0] += data[k, j - k - 1, 0]
+                    temp[half_temp + index, 1] += data[k, j - k - 1, 1]
+                for k in range(i, min(j, downbound_i)):
+                    temp[half_temp + index, 2] += data[k, j - k - 1, 0]
+                    temp[half_temp + index, 3] += data[k, j - k - 1, 1]
             # find set counts
             count = 0
             for j in range(temp_bins):
@@ -173,9 +186,9 @@ def find_bi_height(
                 if temp[j, 1] == 1:
                     diff = temp[j, 0] - temp[j, 2]
                     if diff < 0:
-                        BI[i - 1] += diff
-                    else:
                         BI[i - 1] -= diff
+                    else:
+                        BI[i - 1] += diff
             BI[i - 1] /= count
     return None
 

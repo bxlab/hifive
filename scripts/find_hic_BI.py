@@ -27,13 +27,14 @@ def main():
         print "WIDTH               integer specifying the width about each boundary point"
         print "HEIGHT              integer specifying the height of bins extending across each window"
         print "WINDOW              integer specifying the window around each boundary point"
+        print "MINCOUNT            minimum number of valid bin pairs needed to find BI value"
         print "SMOOTHING           integer specifying the width of smoothing weights"
         print "[CHROM1,CHROM2...]  a comma-separated list of chromosome names to include in processing"
         print "This function is MPI compatible."
         return None
     elif len(sys.argv) < 8:
         return None
-    hic_fname, BI_fname, width, window, height, mincount, smoothing = sys.argv[1:8]
+    hic_fname, BI_fname, width, height, window, mincount, smoothing = sys.argv[1:8]
     width, window, height, mincount, smoothing = int(width), int(window), int(height), int(mincount), int(smoothing)
     if len(sys.argv) > 8:
         chroms = sys.argv[8].split(',')

@@ -316,14 +316,15 @@ class FiveC(object):
         log_counts = numpy.log(data[:, 2]).astype(numpy.float32)
         corrections = numpy.copy(self.corrections)
         if remove_distance:
-            distances = None
-            distance_signal = None
-        else:
+
             distances = numpy.log(self.frags['fragments']['mid'][data[:, 1]] -
                                   self.frags['fragments']['mid'][data[:, 0]]).astype(numpy.float32)
             corrected_counts = log_counts - corrections[data[:, 0]] - corrections[data[:, 1]]
             self.gamma = -linregress(distances, corrected_counts)[0]
             distance_signal = -self.gamma * distances
+        else:
+            distances = None
+            distance_signal = None
         # create empty arrays
         fragment_means = numpy.zeros(self.filter.shape[0], dtype=numpy.float64)
         interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)

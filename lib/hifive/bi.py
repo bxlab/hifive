@@ -151,7 +151,8 @@ class BI(object):
         for chrom in worker_chroms:
             # pull relevant data from hic object
             temp = h_binning.unbinned_cis_signal(hic, chrom, datatype=datatype, arraytype='compact',
-                                                   maxdistance=self.window, skipfiltered=True, returnmapping=True)
+                                                   maxdistance=(self.window + self.width), skipfiltered=True,
+                                                   returnmapping=True)
             if temp is None or temp[1].shape[0] < 3:
                 continue
             data, mapping = temp
@@ -170,11 +171,11 @@ class BI(object):
             scores = numpy.zeros(mapping.shape[0] - 1, dtype=numpy.float32)
             if self.height == 0:
                 _bi.find_bi(data, hic.fends['fends']['mid'][mapping], temp_BI[chrom]['mid'], scores, temp, self.width,
-                            self.mincount)
+                            self.window, self.mincount)
             else:
                 _bi.find_bi_height(data, hic.fends['fends']['mid'][mapping], temp_BI[chrom]['mid'], scores, temp,
                                    self.width, self.window, self.height, self.mincount)
-            temp_BI[chrom]['score'][:] = -scores
+            temp_BI[chrom]['score'][:] = scores
             valid = numpy.where(scores != numpy.inf)[0]
             temp_BI[chrom] = temp_BI[chrom][valid]
         if rank == 0:
