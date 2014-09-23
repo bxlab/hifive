@@ -58,7 +58,7 @@ def find_bi(
             while downbound_o < num_bins and mids[downbound_o + 1] - BI_mids[i - 1] < window:
                 downbound_o += 1
             # zero out temp array
-            for j in range(temp_bins):
+            for j in range(max_bin * 2):
                 temp[j, 0] = 0
                 temp[j, 1] = 0
                 temp[j, 2] = 0
@@ -86,7 +86,7 @@ def find_bi(
                     temp[index, 3] = data[k, j - k - 1, 1]
             # find set counts
             count = 0
-            for j in range(temp_bins):
+            for j in range(max_bin * 2):
                 if temp[j, 0] > 0 and temp[j, 2] > 0:
                     count += 1
                     temp[j, 0] = log(temp[j, 0] / temp[j, 1])
@@ -98,7 +98,7 @@ def find_bi(
                 BI[i - 1] = Inf
                 continue
             # find difference
-            for j in range(temp_bins):
+            for j in range(max_bin * 2):
                 if temp[j, 1] == 1:
                     diff = temp[j, 0] - temp[j, 2]
                     if diff < 0:
