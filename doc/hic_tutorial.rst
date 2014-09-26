@@ -197,3 +197,34 @@ Although this function is much more computationally efficient, the recalculation
                                     recalculate_distance=200)
   if rank == 0:
     hic.save()
+
+.. _generating_a_hic_heatmap:
+
+Generating a heatmap
+====================
+
+In order to immediately make use of data, HiFive allows you to pull data from a region and create a heatmap. The data can be returned unbinned, binned using a fixed-width bin size, or binned using boundaries passed by the user. There are  several options for the format the data can be passed back in. Please refer to the :meth:`hifive.hic_binning.bin_cis_signal` function for more details. There are also several options for transformations to the data. These are used to remove the distance-dependence signal, fend bias, both, or to return only the predicted signal. In this example, we'll get a portion of chromosome 1 binned into 10 Kb bins as follows::
+
+  heatmap = hifive.hic_binning(hic,
+                              chrom='1',
+                              start=1000000
+                              stop=3000000
+                              binsize=10000,
+                              arraytype='upper',
+                              datatype='enrichment')
+
+In the above call, All valid possible interactions were queried from chromosome 1 between 1000000 and 3000000. For valid interactions that had no observation, an expected value was still added to the bin. 'enrichment' specifies to find the observed counts and expected counts, which includes the distance-dependence and fend bias values. The observed counts are in the first index of the last dimension of the returned array, the expected counts are in the second index of the last dimension. 'Upper' specifies a row-major upper triangle array (all values above the matrix diagonal flattened).
+
+.. _plotting_a_hic_heatmap:
+
+Plotting a heatmap
+==================
+
+In order to visualize the heatmap we just produced, HiFive has several plotting functions that take different shaped arrays. The function called needs to match the array produced. In this case, we produced an upper array which is compatible with the :meth:`hifive.plotting.plot_upper_array` function, so we'll use that as follows::
+
+  img = hifive.plotting.plot_upper_array(heatmap, symmetric_scaling=True)
+  img.save(out_fname)
+
+In calling the function, we pass the heatmap and that would be sufficient. There are, however, additional options. For example, 'symmetric_scaling' specifies whether the color scale should be expanded to run from the minimum value to the maximum (False) or so that the maximum absolute value determine both upper and lower color bounds. The image returnd is a PIL image of type 'png'.
+
+.. note:: The next thing on the todo list is write wrappers within the :class:`FiveC` and :class:`HiC` classes for running binning and plotting through the analysis objects themselves.

@@ -141,3 +141,36 @@ To learn 5C corrections using the approximation approach, you can use the follow
                                   remove_distance=True)
 
 In the above call, the 'remove_distance' argument specifies whether to remove the distance-dependent portion of the signal prior to approximating correction values. For best results, this should set to true (its default value).
+
+.. _generating_a_fivec_heatmap:
+
+Generating a heatmap
+====================
+
+In order to immediately make use of data, HiFive allows you to pull data from a regions and create a heatmap. The data can be returned unbinned, binned using a fixed-width bin size, or binned using boundaries passed by the user. There are  several options for the format the data can be passed back in. Please refer to the :meth:`hifive.fivec_binning.bin_cis_signal` function for more details. There are also several options for transformations to the data. These are used to remove the distance-dependence signal, fragment bias, both, or to return only the predicted signal. In this example, we'll get a set of data from an entire region binned into 10 Kb bins as follows::
+
+  heatmap = hifive.fivec_binning(fivec,
+                                 region=1,
+                                 binsize=10000,
+                                 arraytype='compact',
+                                 datatype='enrichment')
+
+In the above call, 'enrichment' specifies to find the observed counts and expected counts, which includes the distance-dependence and fragment bias values. The observed counts are in the first index of the last dimension of the returned array, the expected counts are in the second index of the last dimension. 'compact' specifies a rectangular array where the first axis is the forward primers and the second axis is the reverse primers. 'region' refers to the region index given by HiFive. To find out more details about that region, we could do the following::
+
+  fivec.frags['regions'][1]
+
+This returns the region's chromosome, starting fragment, stopping fragment (first fragment outside the region), starting coordinate and stopping coordinate.
+
+.. _plotting_a_fivec_heatmap:
+
+Plotting a heatmap
+==================
+
+In order to visualize the heatmap we just produced, HiFive has several plotting functions that take different shaped arrays. The function called needs to match the array produced. However, in this case, the 5C compact array is compatible with the :meth:`hifive.plotting.plot_full_array` function, so we'll use that as follows::
+
+  img = hifive.plotting.plot_full_array(heatmap, symmetric_scaling=True)
+  img.save(out_fname)
+
+In calling the function, we pass the heatmap and that would be sufficient. There are, however, additional options. For example, 'symmetric_scaling' specifies whether the color scale should be expanded to run from the minimum value to the maximum (False) or so that the maximum absolute value determine both upper and lower color bounds. The image returnd is a PIL image of type 'png'.
+
+.. note:: The next thing on the todo list is write wrappers within the :class:`FiveC` and :class:`HiC` classes for running binning and plotting through the analysis objects themselves.
