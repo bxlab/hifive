@@ -540,7 +540,7 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
     :type binsize: int.
     :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
     :type datatype: str.
-    :param returnmapping: If 'True', a list containing the data array and a 2d array of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates is return. Otherwise only the data array is returned.
+    :param returnmapping: If 'True', a list containing the data array and two 2d arrays of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates for the first and second chromosomes is returned. Otherwise only the data array is returned.
     :type returnmapping: bool.
     """
     # check that all values are acceptable

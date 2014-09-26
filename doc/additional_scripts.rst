@@ -260,7 +260,7 @@ find_hic_BI.py
 
 This scripts takes a :class:`HiC` file and calculates a set of BI scores. This script can be called as follows::
 
-  > python find_hic_BI.py HIC_FILE OUT_FILE WIDTH WINDOW HEIGHT MINCOUNT SMOOTHING [CHROM_1,...,CHROM_N]
+  > python find_hic_BI.py HIC_FILE OUT_FILE WIDTH HEIGHT WINDOW MINCOUNT SMOOTHING [CHROM_1,...,CHROM_N]
 
 **Arguments:**
 
@@ -305,16 +305,17 @@ model_single_chr_BI.py
 
 This script bins data from a :class:`HiC` h5dict using peaks calls from a :class:`BI` object to partition signal, dynamically bins the data, and creates a 3D model using a PCA dimensionality reduction. The script can be called as follows::
 
-  > python model_single_chr_BI.py HIC_FILE BI_FILE OUT_PREFIX CHROM CUTOFF MIN_OBS
+  > python model_single_chr_BI.py HIC_FILE BI_FILE OUT_PREFIX CUTOFF MIN_OBS EXP_BINSIZE CHROM
 
 **Arguments:**
 
 * **HIC_FILE** (*str.*) - File name of :class:`HiC` h5dict to pull data from.
 * **BI_FILE** (*str.*) - File name of :class:`BI` h5dict to find boundaries for partitioning from.
 * **OUT_PREFIX** (*str.*) - File prefix for all output files of script.
-* **CHROM** (*str.*) - Name of chromosome to model.
 * **CUTOFF** (*float*) - Criteria for calling BI peaks.
 * **MIN_OBS** (*int.*) - Minimum number of observations for valid dynamic bins.
+* **EXP_BINSIZE** (*int.*) - Size of bins for additional data used for dynamic bin expansion. This may be set to zero for unbinned data.
+* **CHROM** (*str.*) - Name of chromosome to model.
 
 **Returns:**  None
 
@@ -325,7 +326,7 @@ model_single_chr_binned.py
 
 This script bins data from a :class:`HiC` h5dict, dynamically bins the data, and creates a 3D model using a PCA dimensionality reduction. The script can be called as follows::
 
-  > python model_single_chr_BI.py HIC_FILE OUT_PREFIX BINSIZE CHROM
+  > python model_single_chr_BI.py HIC_FILE OUT_PREFIX BINSIZE EXP_BINSIZE CHROM
 
 **Arguments:**
 
@@ -333,6 +334,7 @@ This script bins data from a :class:`HiC` h5dict, dynamically bins the data, and
 * **OUT_PREFIX** (*str.*) - File prefix for all output files of script.
 * **BIN_SIZE** (*str.*) - Size of bins, in base pairs, to group data into.
 * **MIN_OBS** (*int.*) - Minimum number of observations for valid dynamic bins.
+* **EXP_BINSIZE** (*int.*) - Size of bins for additional data used for dynamic bin expansion. This may be set to zero for unbinned data.
 * **CHROM** (*str.*) - Name of chromosome to model.
 
 **Returns:**  None
@@ -344,7 +346,7 @@ model_whole_genome_BI.py
 
 This script bins data from a :class:`HiC` h5dict using peaks calls from a :class:`BI` object to partition signal, dynamically bins the data, and creates a 3D model using a PCA dimensionality reduction. The script can be called as follows::
 
-  > python model_whole_genome_BI.py HIC_FILE BI_FILE OUT_PREFIX CUTOFF MIN_OBS CIS_SCALING CHROMS
+  > python model_whole_genome_BI.py HIC_FILE BI_FILE OUT_PREFIX CUTOFF MIN_OBS CIS_SCALING EXP_BINSIZE CHROMS
 
 **Arguments:**
 
@@ -354,6 +356,7 @@ This script bins data from a :class:`HiC` h5dict using peaks calls from a :class
 * **CUTOFF** (*float*) - Criteria for calling BI peaks.
 * **MIN_OBS** (*int.*) - Minimum number of observations for valid dynamic bins.
 * **CIS_SCALING** (*float*) - Scaling factor to adjust cis interactions by prior to modeling.
+* **EXP_BINSIZE** (*int.*) - Size of bins for additional data used for dynamic bin expansion. This may be set to zero for unbinned data.
 * **CHROMS** (*str.*) - Comma-separated list of names of chromosomes to model.
 
 **Returns:**  None
@@ -367,7 +370,7 @@ model_whole_genome_binned.py
 
 This script bins data from a :class:`HiC` h5dict, dynamically bins the data, and creates a 3D model using a PCA dimensionality reduction. The script can be called as follows::
 
-  > python model_whole_genome_binned.py HIC_FILE OUT_PREFIX BIN_SIZE MIN_OBS CIS_SCALING CHROMS
+  > python model_whole_genome_binned.py HIC_FILE OUT_PREFIX BIN_SIZE MIN_OBS CIS_SCALING EXP_BINSIZE CHROMS
 
 **Arguments:**
 
@@ -376,6 +379,7 @@ This script bins data from a :class:`HiC` h5dict, dynamically bins the data, and
 * **BIN_SIZE** (*str.*) - Size of bins, in base pairs, to group data into.
 * **MIN_OBS** (*int.*) - Minimum number of observations for valid dynamic bins.
 * **CIS_SCALING** (*float*) - Scaling factor to adjust cis interactions by prior to modeling.
+* **EXP_BINSIZE** (*int.*) - Size of bins for additional data used for dynamic bin expansion. This may be set to zero for unbinned data.
 * **CHROMS** (*str.*) - Comma-separated list of names of chromosomes to model.
 
 **Returns:**  None

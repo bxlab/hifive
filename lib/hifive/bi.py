@@ -167,7 +167,7 @@ class BI(object):
             if self.height == 0:
                 temp = numpy.zeros((data.shape[1] * 2, 4), dtype=numpy.float32)
             else:
-                temp = numpy.zeros((self.window / self.height * 2 + 2, 4), dtype=numpy.float32)
+                temp = numpy.zeros(((self.window / self.height) * 2 + 4, 4), dtype=numpy.float32)
             scores = numpy.zeros(mapping.shape[0] - 1, dtype=numpy.float32)
             if self.height == 0:
                 _bi.find_bi(data, hic.fends['fends']['mid'][mapping], temp_BI[chrom]['mid'], scores, temp, self.width,

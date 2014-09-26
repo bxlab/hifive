@@ -132,12 +132,12 @@ def find_bi_height(
         for i in range(1, num_bins):
             # find width around boundary point
             upbound_i = i
-            while upbound_i > 0 and BI_mids[i - 1] - mids[upbound_i] < width:
+            while upbound_i > 0 and BI_mids[i - 1] - mids[upbound_i - 1] < width:
                 upbound_i -= 1
             upbound_o = upbound_i
-            while upbound_o > 0 and BI_mids[i - 1] - mids[upbound_o] < window:
+            while upbound_o > 0 and BI_mids[i - 1] - mids[upbound_o - 1] < window:
                 upbound_o -= 1
-            downbound_i = i + 1
+            downbound_i = i
             while downbound_i < num_bins and mids[downbound_i + 1] - BI_mids[i - 1] < width:
                 downbound_i += 1
             downbound_o = downbound_i
@@ -154,20 +154,20 @@ def find_bi_height(
             for j in range(upbound_o, i - 1):
                 index = (BI_mids[i - 1] - mids[j]) / height
                 for k in range(max(j, upbound_i), i):
-                    temp[half_temp - index - 1, 0] += data[j, k - j - 1, 0]
-                    temp[half_temp - index - 1, 1] += data[j, k - j - 1, 1]
+                    temp[index, 0] += data[j, k - j - 1, 0]
+                    temp[index, 1] += data[j, k - j - 1, 1]
                 for k in range(i, downbound_i):
-                    temp[half_temp - index - 1, 2] += data[j, k - j - 1, 0]
-                    temp[half_temp - index - 1, 3] += data[j, k - j - 1, 1]
+                    temp[index, 2] += data[j, k - j - 1, 0]
+                    temp[index, 3] += data[j, k - j - 1, 1]
             # find downstream interactions
             for j in range(i + 1, downbound_o):
                 index = (mids[j] - BI_mids[i - 1]) / height
                 for k in range(upbound_i, i):
-                    temp[half_temp + index, 0] += data[k, j - k - 1, 0]
-                    temp[half_temp + index, 1] += data[k, j - k - 1, 1]
+                    temp[temp_bins - index - 1, 0] += data[k, j - k - 1, 0]
+                    temp[temp_bins - index - 1, 1] += data[k, j - k - 1, 1]
                 for k in range(i, min(j, downbound_i)):
-                    temp[half_temp + index, 2] += data[k, j - k - 1, 0]
-                    temp[half_temp + index, 3] += data[k, j - k - 1, 1]
+                    temp[temp_bins - index - 1, 2] += data[k, j - k - 1, 0]
+                    temp[temp_bins - index - 1, 3] += data[k, j - k - 1, 1]
             # find set counts
             count = 0
             for j in range(temp_bins):

@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-#(c) 2013 Emory University. All Rights Reserved
-# Code written by: Michael Sauria (mgehrin@emory.edu)
 
 import sys
 
@@ -28,20 +26,21 @@ def main():
         rank = 0
         num_procs = 1
     if len(sys.argv) < 7 and rank == 0:
-        print "Usage python model_whole_genome_binned.py HIC_FILE BI_FILE OUT_PREFIX BIN_SIZE MIN_OBS CIS_SCALING CHROMS"
+        print "Usage python model_whole_genome_binned.py HIC_FILE OUT_PREFIX BIN_SIZE MIN_OBS CIS_SCALING EXP_BINSIZE CHROMS"
         print "HIC_FILE     File name of HiC h5dict to pull data from."
         print "OUT_PREFIX   File prefix for all output files of script."
         print "BIN_SIZE    Size of bins, in base pairs, to group data into."
         print "MIN_OBS      Minimum number of observations for valid dynamic bins."
         print "CIS_SCALING  Scaling factor to adjust cis interactions by prior to modeling."
+        print "EXP_BINSIZE  Size of bins for additional data used for dynamic bin expansion. This may be set to zero for unbinned data."
         print "CHROMS       Comma-separated list of names of chromosomes to model."
         print "This script is MPI compatible."
         return None
     elif len(sys.argv) < 7:
         return None
-    hic_fname, out_prefix, binsize, minobservations, cis_scaling, chroms = sys.argv[1:7]
-    binsize, minobservations, cis_scaling = int(binsize), int(minobservations), float(cis_scaling)
-    hic = hifive.analysis.HiC(hic_fname, 'r')
+    hic_fname, out_prefix, binsize, minobservations, cis_scaling, exp_binsize, chroms = sys.argv[1:8]
+    binsize, minobservations, cis_scaling, exp_binsize = int(binsize), int(minobservations), float(cis_scaling), int(exp_binsize)
+    hic = hifive.HiC(hic_fname, 'r')
     chroms = chroms.split(',')
     if rank == 0:
         needed_pairs = []
@@ -85,13 +84,13 @@ def main():
             if len(pair) == 1:
                 dynamics[bound_indices[pair[0]]:bound_indices[pair[0] + 1],
                          bound_indices[pair[0]]:bound_indices[pair[0] + 1],
-                         :] = find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations)
+                         :] = find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations, exp_binsize)
             else:
                 dynamics[bound_indices[pair[0]]:bound_indices[pair[0] + 1],
                          bound_indices[pair[1]]:bound_indices[pair[1] + 1],
-                         :] = find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations)
+                         :] = find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations, exp_binsize)
         else:
-            dynamics[pair] = find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations)
+            dynamics[pair] = find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations, exp_binsize)
     if rank == 0:
         for i in range(1, num_procs):
             keys = comm.recv(source=i, tag=11)
@@ -126,13 +125,10 @@ def find_model_fits(dynamic, coordinates, indices, out_prefix):
     log_dynamic = numpy.log(dynamic[where[0], where[1], 0] / dynamic[where[0], where[1], 1])
     log_distances = numpy.log(distances[where])
     model_corr = numpy.corrcoef(log_dynamic, log_distances)
-    hifive.plotting.plot_full_array(dynamic, symmetricscaling=False).save('dynamic.png')
     new_distances = numpy.ones(dynamic.shape, dtype=numpy.float32)
     new_distances[:, :, 0] = distances
     new_distances[where[0], where[1], 0] = 0
     new_distances[where[0], where[1], 1] = 0
-    hifive.plotting.plot_full_array(new_distances, symmetricscaling=False).save('distance.png')
-    print model_corr
     model_corr = model_corr[0, 1]
     output = open("%s_correlations.txt" % out_prefix, 'w')
     print >> output, "model_pearson"
@@ -198,15 +194,20 @@ def learn_model(binned, indices, cis_scaling):
     return coordinates
 
 
-def find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations):
+def find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations, exp_binsize):
     start, stop = starts[pair[0], :2]
     chrom = chroms[pair[0]]
     if len(pair) == 1:
-        binned, mapping = hifive.hic.binning.bin_cis_signal(hic, chrom, datatype='fend', arraytype='upper',
+        dynamic, mapping = hifive.hic_binning.bin_cis_signal(hic, chrom, datatype='fend', arraytype='upper',
                                                    binsize=binsize, start=start, stop=stop, returnmapping=True)
-        mids = numpy.sum(mapping[:, 2:], axis=1).astype(numpy.int32) / 2
-        dynamic = numpy.copy(binned)
-        hifive.hic.binning.dynamically_bin_cis_array(binned, mids, dynamic, minobservations=minobservations,
+        if exp_binsize == 0:
+            mids = numpy.sum(mapping[:, 2:], axis=1).astype(numpy.int32) / 2
+            binned = numpy.copy(dynamic)
+        else:
+            binned, mapping1 = hifive.hic_binning.bin_cis_signal(hic, chrom, datatype='fend', arraytype='upper',
+                                                   binsize=exp_binsize, start=start, stop=stop, returnmapping=True)
+            mids = (mapping1[:, 2] + mapping1[:, 3]) / 2
+        hifive.hic_binning.dynamically_bin_cis_array(binned, mids, dynamic, minobservations=minobservations,
                                                      binbounds=mapping[:, 2:])
         full = numpy.zeros((starts[pair[0], 2], starts[pair[0], 2], 2), dtype=numpy.float32)
         indices = numpy.triu_indices(starts[pair[0], 2], 1)
@@ -216,15 +217,22 @@ def find_dynamic_signal(hic, chroms, starts, pair, binsize, minobservations):
     else:
         chrom2 = chroms[pair[1]]
         start2, stop2 = starts[pair[1], :2]
-        binned, map1, map2 = hifive.hic.binning.bin_trans_signal(hic, chrom, chrom2, datatype='fend',
+        dynamic, map1, map2 = hifive.hic_binning.bin_trans_signal(hic, chrom, chrom2, datatype='fend',
                                                      start1=start, stop1=stop, binsize=binsize,
                                                      start2=start2, stop2=stop2, returnmapping=True)
         bounds1 = map1[:, 2:].astype(numpy.int32)
-        mids1 = (numpy.sum(map1[:, 2:], axis=1) / 2).astype(numpy.int32)
         bounds2 = map2[:, 2:].astype(numpy.int32)
-        mids2 = (numpy.sum(map2[:, 2:], axis=1) / 2).astype(numpy.int32)
-        dynamic = numpy.copy(binned)
-        hifive.hic.binning.dynamically_bin_trans_array(binned, mids1, mids2, dynamic, 
+        if exp_binsize == 0:
+            mids1 = (numpy.sum(map1[:, 2:], axis=1) / 2).astype(numpy.int32)
+            mids2 = (numpy.sum(map2[:, 2:], axis=1) / 2).astype(numpy.int32)
+            binned = numpy.copy(dynamic)
+        else:
+            binned, map1, map2 = hifive.hic_binning.bin_trans_signal(hic, chrom, chrom2, datatype='fend',
+                                                     start1=start, stop1=stop, binsize=exp_binsize,
+                                                     start2=start2, stop2=stop2, returnmapping=True)
+            mids1 = (numpy.sum(map1[:, 2:], axis=1) / 2).astype(numpy.int32)
+            mids2 = (numpy.sum(map2[:, 2:], axis=1) / 2).astype(numpy.int32)
+        hifive.hic_binning.dynamically_bin_trans_array(binned, mids1, mids2, dynamic, 
                                                        binbounds1=bounds1,
                                                        binbounds2=bounds2,
                                                        minobservations=minobservations)

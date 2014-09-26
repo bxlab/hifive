@@ -21,7 +21,7 @@ def main():
         rank = 0
         num_procs = 1
     if len(sys.argv) < 8 and rank == 0:
-        print "Usage: python find_hic_BI.py HIC_FILE OUT_FILE WIDTH WINDOW HEIGHT MINCOUNT SMOOTHING [CHROM_1,CHROM_2...,CHROM_N]"
+        print "Usage: python find_hic_BI.py HIC_FILE OUT_FILE WIDTH HEIGHT WINDOW MINCOUNT SMOOTHING [CHROM_1,CHROM_2...,CHROM_N]"
         print "HIC_FILE            h5dict created by the hifive.HiC class"
         print "OUT_FILE            file name for the new h5dict created by this script"
         print "WIDTH               integer specifying the width about each boundary point"
@@ -41,7 +41,7 @@ def main():
     else:
         chroms = []
     hic = hifive.HiC(hic_fname, 'r')
-    BI = hifive.BI(width=width, window=window, height=height, mincount=10)
+    BI = hifive.BI(width=width, window=window, height=height, mincount=mincount)
     BI.find_bi_from_hic(hic,  datatype='enrichment', chroms=chroms)
     if smoothing > 0:
         BI.smooth_bi(smoothing)
