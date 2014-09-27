@@ -22,7 +22,7 @@ class Fend(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
-    :returns: :class:`Fend` object
+    :returns: :class:`Fend <hifive.fend.Fend>` class object
     """
 
     def __init__(self, filename, mode='r'):
@@ -35,6 +35,8 @@ class Fend(object):
     def save(self):
         """
         Save fend data to h5dict.
+
+        :returns: None
         """
         self.fends.close()
         return None
@@ -49,6 +51,7 @@ class Fend(object):
         :type genome_name: str.
         :param re_name: The name of the restriction enzyme used to produce the fragment set. Optional.
         :type re_name: str.
+        :returns: None
         """
         if not os.path.exists(filename):
             print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),

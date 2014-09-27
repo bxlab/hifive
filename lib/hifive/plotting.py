@@ -52,6 +52,7 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
     :type mid_color: tuple
     :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
     :type max_color: tuple
+    :returns: :mod:`PIL` bitmap object.
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -128,6 +129,7 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
     :type mid_color: tuple
     :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
     :type max_color: tuple
+    :returns: :mod:`PIL` bitmap object.
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -200,6 +202,7 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
     :type mid_color: tuple
     :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
     :type max_color: tuple
+    :returns: :mod:`PIL` bitmap object.
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -279,6 +282,7 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
     :type mid_color: tuple
     :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
     :type max_color: tuple
+    :returns: :mod:`PIL` bitmap object.
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -384,6 +388,7 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
     :type mid_color: tuple
     :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
     :type max_color: tuple
+    :returns: :mod:`PIL` bitmap object.
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -499,6 +504,7 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
     :type mid_color: tuple
     :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
     :type max_color: tuple
+    :returns: :mod:`PIL` bitmap object.
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -606,6 +612,7 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
     :type mid_color: tuple
     :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
     :type max_color: tuple
+    :returns: :mod:`PIL` bitmap object.
     """
     if 'PIL' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL module must be installed to use this function.")
@@ -693,6 +700,7 @@ def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientati
     :type labelattr: str.
     :param log_display: If True, min_score and max_score are taken to be logged values and so labels are evenly spaced in log space but converted to normal space for display.
     :type log_display: bool.
+    :returns: :mod:`Pxy` canvas object.
     """
     if 'PIL' not in sys.modules.keys() or 'pyx' not in sys.modules.keys():
         print >> sys.stderr, ("The PIL and pyx modules must be installed to use this function.")

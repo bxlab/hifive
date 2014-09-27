@@ -35,8 +35,8 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.
 
-    :param hic: A HiC class object containing fend and count data.
-    :type hic: :class:`HiC`
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
     :param chrom: The name of a chromosome contained in 'hic'.
     :type chrom: str.
     :param start: The smallest coordinate to include in the array, measured from fend midpoints. If both 'start' and 'startfend' are given, 'start' will override 'startfend'. If unspecified, this will be set to the midpoint of the first fend for 'chrom'. Optional.
@@ -57,6 +57,7 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
     :type skipfiltered: bool.
     :param returnmapping: If 'True', a list containing the data array and a 1d array containing fend numbers included in the data array is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -159,8 +160,8 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype' aggregated in bins.
 
-    :param hic: A HiC class object containing fend and count data.
-    :type hic: :class:`HiC`
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
     :param chrom: The name of a chromosome contained in 'hic'.
     :type chrom: str.
     :param start: The coordinate at the beginning of the smallest bin. If unspecified, 'start' will be the first multiple of 'binsize' below the 'startfend' mid. If there is a conflict between 'start' and 'startfend', 'start' is given preference. Optional.
@@ -185,6 +186,7 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
     :type skipfiltered: bool.
     :param returnmapping: If 'True', a list containing the data array and a 2d array of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype'.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -299,8 +301,8 @@ def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, bi
     """
     Create an array of format 'arraytype' and fill 'binsize' bins or bins defined by 'binbounds' with data provided in the array passed by 'unbinned'.
 
-    :param hic: A HiC class object containing fend and count data.
-    :type hic: :class:`HiC`
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
     :param unbinned: A 2d or 3d array containing data to be binned. Array format will be determined from the number of dimensions.
     :type unbinned: numpy array
     :param fends: A 1d integer array indicating which position corresponds to which fend in the 'unbinned' array.
@@ -323,6 +325,7 @@ def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, bi
     :type skipfiltered: bool.
     :param returnmapping: If 'True', a list containing the data array and a 2d array of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype' pulled from 'unbinned'.
     """
     # check that arraytype value is acceptable
     if arraytype not in ['full', 'compact', 'upper']:
@@ -420,6 +423,7 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     :type minobservations: int.
     :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
     :type searchdistance: int.
+    :returns: None
     """
     # Determine unbinned array type
     if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) / 2 ==
@@ -486,6 +490,7 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     :type minobservations: int.
     :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
     :type searchdistance: int.
+    :returns: None
     """
     print >> sys.stderr, ("Dynamically binning data..."),
     # Determine bin edges relative to unbinned positions
@@ -511,8 +516,8 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
     """
     Create a rectangular array and fill with trans data requested in 'datatype' aggregated in bins.
 
-    :param hic: A HiC class object containing fend and count data.
-    :type hic: :class:`HiC`
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
     :param chrom1: The name of the first chromosome to use.
     :type chrom1: str.
     :param chrom2: The name of the second chromosome to use.
@@ -542,6 +547,7 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
     :type datatype: str.
     :param returnmapping: If 'True', a list containing the data array and two 2d arrays of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates for the first and second chromosomes is returned. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing trans data requested with 'datatype'.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -691,8 +697,8 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
-    :param hic: A :class:`HiC` class object containing fend and count data.
-    :type hic: :class:`HiC`
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
     :param filename: Location to write h5dict object to.
     :type filename: str.
     :param binsize: Size of bins for interaction arrays.
@@ -703,6 +709,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
     :type remove_distance: bool.
     :param chroms: A list of chromosome names indicating which chromosomes should be included. If left empty, all chromosomes are included. Optional.
     :type chroms: list
+    :returns: None
     """
     # check if MPI is available
     if 'mpi4py' in sys.modules.keys():

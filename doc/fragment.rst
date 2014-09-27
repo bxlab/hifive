@@ -1,5 +1,5 @@
 The Fragment class
 *******************
 
-.. autoclass:: hifive.fragment.Fragment
+.. automodule:: hifive.fragment
   :members:

@@ -1,5 +1,5 @@
 The HiC class
 ***************
 
-.. autoclass:: hifive.hic.HiC
+.. automodule:: hifive.hic
   :members:

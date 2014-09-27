@@ -22,7 +22,7 @@ import libraries._bi as _bi
 
 class BI(object):
     """
-    This class uses a HiC or FiveC object to generate BI scores. These scores can be saved to an h5dict. Once generated or loaded, BI scores can be used to find structural boundaries, create feature-centered BI profiles, or bound-centered feature profiles.
+    This class uses a :class:`HiC <hifive.hic.HiC>` or :class:`FiveC <hifive.fivec.FiveC>` object to generate BI scores. These scores can be saved to an h5dict. Once generated or loaded, BI scores can be used to find structural boundaries, create feature-centered BI profiles, or bound-centered feature profiles.
 
     .. note::
       This class is also available as hifive.BI
@@ -37,6 +37,7 @@ class BI(object):
     :type window: int.
     :param mincount: The minimum number of valid pairs of bins needed to calculate the boundary index for a given location.
     :type mincount: int.
+    :returns: :class:`BI` class object
     """
 
     def __init__(self, width=10000, window=1000000, height=0, mincount=10):
@@ -63,8 +64,9 @@ class BI(object):
         """
         Load BI data and parameters from an h5dict.
 
-        :param filename: This specifies the file name of the :class:`BI` object to load from.
+        :param filename: This specifies the file name of the :class:`BI <hifive.bi.BI>` object to load from.
         :type filename: str.
+        :returns: None
         """
         # ensure data h5dict exists
         if not os.path.exists(filename):
@@ -88,8 +90,9 @@ class BI(object):
         """
         Save BI data and parameters to an h5dict.
 
-        :param filename: This specifies the file name to which to save the :class:`BI` object.
+        :param filename: This specifies the file name to which to save the :class:`BI <hifive.bi.BI>` object.
         :type filename: str.
+        :returns: None
         """
         # see if h5dict exists
         if os.path.exists(filename):
@@ -107,12 +110,13 @@ class BI(object):
 
     def find_bi_from_hic(self, hic, datatype='fend', chroms=[]):
         """
-        Calculate the boundary index for HiC data. This function is MPI compatible.
+        Calculate the boundary index from HiC data. This function is MPI compatible.
 
-        :param hic: A :class:`HiC` class object containing fend and count data.
-        :type hic: :class:`HiC`
+        :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+        :type hic: :class:`HiC <hifive.hic.HiC>`
         :param chroms: A list of chromosome names to limit BI calculations to. If empty, all chromosomes in 'hic' are used.
         :type chroms: list
+        :returns: None
         """
         if 'mpi4py' in sys.modules.keys():
             comm = MPI.COMM_WORLD
@@ -204,10 +208,11 @@ class BI(object):
         """
         Calculate the boundary index for 5C data.
 
-        :param fivec: A :class:`FiveC` class object containing fend and count data.
-        :type fivec: :class:`FiveC`
+        :param fivec: A :class:`FiveC <hifive.fivec.FiveC>` class object containing fend and count data.
+        :type fivec: :class:`FiveC <hifive.fivec.FiveC>`
         :param regions: A list of region numbers to limit BI calculations to. If empty, all regions in 'fivec' are used.
         :type regions: list
+        :returns: None
         """
         print >> sys.stderr, ("Calculating BI..."),
         # save relevant parameters from hic object
@@ -283,6 +288,7 @@ class BI(object):
 
         :param width: The distance, in base pairs, equivalent to one standard deviation for the Gaussian weights.
         :type width: int.
+        :returns: None
         """
         if 'mpi4py' in sys.modules.keys():
             comm = MPI.COMM_WORLD
@@ -355,6 +361,7 @@ class BI(object):
         :type start: int.
         :param stop: The coordinates corresponding to the right edge of the image. If not specified, the first BI midpoint is used.
         :type stop: int.
+        :returns: :mod:`Pyx` format canvas with line plot of bi scores.
         """
         if 'pyx' not in sys.modules.keys():
             print >> sys.stderr, ("The pyx module must be installed to use this function.")
@@ -398,6 +405,7 @@ class BI(object):
         :type binsize: int.
         :param numbins: The number of bins, centered around each coordinate, to aggregate signal in.
         :type numbins: int.
+        :returns: An array of mean aggregate BI signal centered around 'coordinates'.
         """
         print >> sys.stderr, ("Finding BI profile..."),
         signal = numpy.zeros((numbins, 2), dtype=numpy.float32)
@@ -422,6 +430,7 @@ class BI(object):
         :type cutoff: float
         :param chroms: If specified, find bounds for only chromosomes in this list. Otherwise use all chromosomes present in the :class:`BI` object.
         :type chroms: list
+        :returns: Array containing a row for each valid BI score and columns contianing chromosome index, sequence coordinate, and BI score.
         """
         print >> sys.stderr, ("Finding BI bounds..."),
         # if needed, get list of chromosomes

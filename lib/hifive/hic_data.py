@@ -28,6 +28,7 @@ class HiCData(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :returns: :class:`HiCData` class object.
     """
 
     def __init__(self, filename, mode='r'):
@@ -54,6 +55,7 @@ class HiCData(object):
         :type filelist: list
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
+        :returns: None
         """
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
@@ -112,6 +114,7 @@ class HiCData(object):
         :type filelist: list
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
+        :returns: None
         """
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, ("The pysam module must be installed to use this function.")
@@ -225,6 +228,7 @@ class HiCData(object):
         :type filename: str.
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
+        :returns: None
         """
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
@@ -421,6 +425,7 @@ class HiCData(object):
 
         :param outfilename: Specifies the file to save data in.
         :type outfilename: str.
+        :returns: None
         """
         print >> sys.stderr, ("Writing data to mat file..."),
         output = open(outfilename, 'w')

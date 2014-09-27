@@ -6,7 +6,7 @@ This is a module contains scripts for generating compact, upper-triangle and ful
 Concepts
 --------
 
-Data can either be arranged in compact, complete, or flattened (row-major) upper-triangle arrays. Compact arrays are N x M, where N is the number of forward probe fragments and M is the number of reverse probe fragments. Data can be raw, fragment-corrected, distance-dependence removed, or enrichment values. Arrays are 3-dimensional with observed values in the first layer of d3, expected values in the second layer of d3. The exception to this is upper-triangle arrays, which are 2d, divinding observed and expected along the second axis.
+Data can either be arranged in compact, complete, or flattened (row-major) upper-triangle arrays. Compact arrays are N x M, where N is the number of forward probe fragments and M is the number of reverse probe fragments. Data can be raw, fragment-corrected, distance-dependence removed, or enrichment values. Arrays are 3-dimensional with observed values in the first layer of d3, expected values in the second layer of d3. The exception to this is upper-triangle arrays, which are 2d, dividing observed and expected along the second axis.
 
 API documentation
 -----------------
@@ -28,8 +28,8 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.
 
-    :param fivec:  A :class:`FiveC` class object containing fragment and count data.
-    :type fivec: :class:`FiveC`
+    :param fivec:  A :class:`FiveC <hifive.fivec.FiveC>` class object containing fragment and count data.
+    :type fivec: :class:`FiveC <hifive.fivec.FiveC>`
     :param region: The index of the region to pull data from.
     :type region: int.
     :param start: The smallest coordinate to include in the array, measured from fragment midpoints. If both 'start' and 'startfrag' are given, 'start' will override 'startfrag'. If unspecified, this will be set to the midpoint of the first fragment for 'region'. Optional.
@@ -48,6 +48,7 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
     :type skipfiltered: bool.
     :param returnmapping: If 'True', a list containing the data array and a 1d array containing fragment numbers included in the data array is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -175,8 +176,8 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     """
     Create an array of format 'arraytype' and fill 'binsize' bins with data requested in 'datatype'.
 
-    :param fivec: A :class:`FiveC` class object containing fragment and count data.
-    :type fivec: :class:`FiveC`
+    :param fivec: A :class:`FiveC <hifive.fivec.FiveC>` class object containing fragment and count data.
+    :type fivec: :class:`FiveC <hifive.fivec.FiveC>`
     :param region: The index of the region to pull data from.
     :type region: int.
     :param start: The coordinate at the beginning of the smallest bin. If unspecified, 'start' will be the first multiple of 'binsize' below the 'startfend' mid. If there is a conflict between 'start' and 'startfrag', 'start' is given preference. Optional.
@@ -195,6 +196,7 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     :type arraytype: str.
     :param returnmapping: If 'True', a list containing the data array and a 2d array of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype'.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -287,8 +289,8 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
     Create an array of format 'arraytype' and fill 'binsize' bins or bins defined by 'binbounds' with data provided in
     'unbinned'.
 
-    :param fivec: A :class:`FiveC` class object containing fragment and count data.
-    :type fivec: :class:`FiveC`
+    :param fivec: A :class:`FiveC <hifive.fivec.FiveC>` class object containing fragment and count data.
+    :type fivec: :class:`FiveC <hifive.fivec.FiveC>`
     :param unbinned: A full or upper array containing data to be binned. Array format will be determined from the number of dimensions.
     :type unbinned: numpy array
     :param fragments: A 1d integer array indicating which position corresponds to which fragment in the 'unbinned' array.
@@ -303,6 +305,7 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
     :type arraytype: str.
     :param returnmapping: If 'True', a list containing the data array and a 2d array of N x 4 containing the first fragment and last fragment plus one included in each bin and first and last coordinates is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype' pulled from 'unbinned'.
     """
     # check that arraytype value is acceptable
     if arraytype not in ['full', 'upper']:
@@ -390,6 +393,7 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     :type minobservations: int.
     :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
     :type searchdistance: int.
+    :returns: None
     """
     # Determine unbinned array type
     if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) / 2 ==
@@ -443,8 +447,8 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
     """
     Create an array of format 'arraytype' and fill 'binsize' bins with data requested in 'datatype'.
 
-    :param fivec: A :class:`FiveC` class object containing fragment and count data.
-    :type fivec: :class:`FiveC`
+    :param fivec: A :class:`FiveC <hifive.fivec.FiveC>` class object containing fragment and count data.
+    :type fivec: :class:`FiveC <hifive.fivec.FiveC>`
     :param region1: The index of the first region to pull data from.
     :type region1: int.
     :param region2: The index of the second region to pull data from.
@@ -473,6 +477,7 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
     :type skipfiltered: bool.
     :param returnmapping: If 'True', a list containing the data array and two 2d arrasw of N x 4 containing the first fragment and last fragment plus one included in each bin and first and last coordinates for 'region1' and 'region2' is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing inter-region data requested with 'datatype'.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -655,8 +660,8 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
     """
     Create an array and fill 'binsize' bins with trans (inter-region) data requested in 'datatype'.
 
-    :param fivec: A :class:`FiveC` class object containing fragment and count data.
-    :type fivec: :class:`FiveC`
+    :param fivec: A :class:`FiveC <hifive.fivec.FiveC>` class object containing fragment and count data.
+    :type fivec: :class:`FiveC <hifive.fivec.FiveC>`
     :param region1: The index of the first region to pull data from.
     :type region1: int.
     :param region2: The index of the second region to pull data from.
@@ -683,6 +688,7 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
     :type datatype: str.
     :param returnmapping: If 'True', a list containing the data array and two 2d arrays of N x 4 containing the first fragment and last fragment plus one included in each bin and first and last coordinates for 'region1' and 'region2' is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :returns: Array in format requested with 'arraytype' containing binned inter-region data requested with 'datatype'.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -805,8 +811,8 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, removedistan
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
-    :param fivec: A :class:`FiveC` class object containing fragment and count data.
-    :type fivec: :class:`FiveC`
+    :param fivec: A :class:`FiveC <hifive.fivec.FiveC>` class object containing fragment and count data.
+    :type fivec: :class:`FiveC <hifive.fivec.FiveC>`
     :param filename: Location to write h5dict object to.
     :type filename: str.
     :param binsize: Size of bins for interaction arrays. If "binsize" is zero, fragment interactions are returned without binning.
@@ -819,6 +825,7 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, removedistan
     :type arraytype: str.
     :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
     :type regions: list.
+    :returns: None
     """
     # Check if trans mean is needed and calculate if not already done
     if includetrans and removedistance and 'trans_mean' not in fivec.__dict__.keys():

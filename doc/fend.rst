@@ -1,5 +1,5 @@
 The Fend class
 ***************
 
-.. autoclass:: hifive.fend.Fend
+.. automodule:: hifive.fend
   :members:

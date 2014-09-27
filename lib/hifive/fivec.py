@@ -18,7 +18,7 @@ class FiveC(object):
     """
     This is the class for handling 5C analysis.
 
-    This class relies on :class:`Fragment` and :class:`FiveCData` for genomic position and interaction count data. Use this class to perform filtering of fragments based on coverage, model fragment bias and distance dependence, and downstream analysis and manipulation. This includes binning of data, plotting of data, and statistical analysis.
+    This class relies on :class:`Fragment <hifive.fragment.Fragment>` and :class:`FiveCData <hifive.fivec_data.FiveCData>` for genomic position and interaction count data. Use this class to perform filtering of fragments based on coverage, model fragment bias and distance dependence, and downstream analysis and manipulation. This includes binning of data, plotting of data, and statistical analysis.
 
     .. note::
       This class is also available as hifive.FiveC
@@ -29,6 +29,7 @@ class FiveC(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :returns: :class:`FiveC <hifive.fivec.FiveC>` class object.
     """
 
     def __init__(self, filename, mode='r'):
@@ -52,10 +53,11 @@ class FiveC(object):
 
     def load_data(self, filename):
         """
-        Load fragment-pair counts and fragment object from :class:`FiveCData` object.
+        Load fragment-pair counts and fragment object from :class:`FiveCData <hifive.fivec_data.FiveCData>` object.
 
-        :param filename: Specifies the file name of the FiveCData object to associate with this analysis.
+        :param filename: Specifies the file name of the :class:`FiveCData <hifive.fivec_data.FiveCData>` object to associate with this analysis.
         :type filename: str.
+        :returns: None
         """
         # ensure data h5dict exists
         if not os.path.exists(filename):
@@ -89,6 +91,8 @@ class FiveC(object):
     def save(self):
         """
         Save analysis parameters to h5dict.
+        
+        :returns: None
         """
         datafile = h5py.File(self.file, 'w')
         for key in self.__dict__.keys():
@@ -103,9 +107,11 @@ class FiveC(object):
 
     def load(self):
         """
-        Load analysis parameters from h5dict specified at object creation and open h5dicts for associated :class:`FiveCData` and :class:`Fragment` objects.
+        Load analysis parameters from h5dict specified at object creation and open h5dicts for associated :class:`FiveCData <hifive.fivec_data.FiveCData>` and :class:`Fragment <hifive.fragment.Fragment>` objects.
 
         Any call of this function will overwrite current object data with values from the last :func:`save` call.
+
+        :returns: None
         """
         datafile = h5py.File(self.file, 'r')
         for key in datafile.keys():
@@ -151,6 +157,7 @@ class FiveC(object):
 
         :param mininteractions: The required number of interactions for keeping a fragment in analysis.
         :type mininteractions: int.
+        :returns: None
         """
         print >> sys.stderr, ("Filtering fragments..."),
         original_count = numpy.sum(self.filter)
@@ -179,6 +186,8 @@ class FiveC(object):
     def find_distance_parameters(self):
         """
         Regress log counts versus inter-fragment distances to find slope and intercept values and then find the standard deviation of corrected counts.
+
+        :returns: None
         """
         print >> sys.stderr, ("Finding distance parameters..."),
         # copy needed arrays
@@ -214,6 +223,7 @@ class FiveC(object):
         :type recalculate_distance: int.
         :param display: Specifies how many iterations between when cost is calculated and displayed as model is learned. If 'display' is zero, the cost is not calculated of displayed.
         :type display: int.
+        :returns: None
         """
         # determine if distance parameters have been calculated
         if 'gamma' not in self.__dict__.keys():
@@ -307,6 +317,7 @@ class FiveC(object):
         :type remove_distance: bool.
         :param recalculate_distance: Number of iterations that should pass before recalculating the distance bin means to account for the updated fragment corrections. If set to zero, no recalculation is performed.
         :type recalculate_distance: int.
+        :returns: None
         """
         print >> sys.stderr, ("Learning corrections..."),
         # copy and calculate needed arrays
@@ -354,6 +365,8 @@ class FiveC(object):
     def find_trans_mean(self):
         """
         Calculate the mean signal across all valid fragment-pair trans (inter-region) interactions.
+        
+        :returns: None
         """
         print >> sys.stderr, ("Finding mean signal across trans interactions..."),
         possible = 0

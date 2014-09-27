@@ -1,5 +1,5 @@
 The FiveCData class
 *******************
 
-.. autoclass:: hifive.fivec_data.FiveCData
+.. automodule:: hifive.fivec_data
   :members:

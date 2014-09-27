@@ -7,10 +7,10 @@ Getting started
 
 .. _installing_HiFive:
 
-Installing HiFive
+Installing :mod:`HiFive`
 =============================
 
-HiFive can bo obtained from `HiFive <https://bitbucket.org/bxlab/hifive/>`_ using the following command::
+:mod:`HiFive` can bo obtained from `HiFive <https://bitbucket.org/bxlab/hifive/>`_ using the following command::
 
   > hg clone https://bitbucket.org/bxlab/hifive/
 
@@ -19,7 +19,7 @@ or alternatively, download a snapshot of the repository using the following comm
   > wget https://bitbucket.org/bxlab/hifive/downloads/hifive_v2.0.tar.bz2
   > tar -xjf hifive_v2.0.tar.bz2
 
-HiFive depends on a few packages and has several others that extend its functionality.
+:mod:`HiFive` depends on a few packages and has several others that extend its functionality.
 
 Required Packages
 -----------------
@@ -35,11 +35,11 @@ Recommended Packages
   * `mpi4py <http://mpi4py.scipy.org>`_
   * `mlpy <http://mlpy.sourceforge.net>`_
 
-To install HiFive, simply enter the directory that the repository was cloned or downloaded to and use the following command::
+To install :mod:`HiFive`, simply enter the directory that the repository was cloned or downloaded to and use the following command::
 
   > python setup.py install
 
-If you wish to install HiFive in a location other than the default, you can use the prefix option::
+If you wish to install :mod:`HiFive` in a location other than the default, you can use the prefix option::
 
   > python setup.py install --prefix=/your/desired/path
 

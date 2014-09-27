@@ -1,5 +1,5 @@
 The HiCData class
 *******************
 
-.. autoclass:: hifive.hic_data.HiCData
+.. automodule:: hifive.hic_data
   :members:

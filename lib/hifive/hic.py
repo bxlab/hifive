@@ -26,7 +26,7 @@ class HiC(object):
     """
     This is the class for handling HiC analysis.
 
-    This class relies on :class:`Fend` and :class:`HiCData` for genomic position and interaction count data. Use this class to perform filtering of fends based on coverage, model fend bias and distance dependence, and downstream analysis and manipulation. This includes binning of data, plotting of data, modeling of data, and statistical analysis.
+    This class relies on :class:`Fend <hifive.fend.Fend>` and :class:`HiCData <hifive.hic_data.HiCData>` for genomic position and interaction count data. Use this class to perform filtering of fends based on coverage, model fend bias and distance dependence, and downstream analysis and manipulation. This includes binning of data, plotting of data, modeling of data, and statistical analysis.
 
         .. note::
           This class is also available as hifive.HiC
@@ -37,6 +37,7 @@ class HiC(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :returns: :class:`HiC <hifive.hic.HiC>` class object.
     """
 
     def __init__(self, filename, mode='r'):
@@ -61,10 +62,11 @@ class HiC(object):
 
     def load_data(self, filename):
         """
-        Load fend-pair counts and fend object from :class:`HiCData` object.
+        Load fend-pair counts and fend object from :class:`HiCData <hifive.hic_data.HiCData>` object.
 
-        :param filename: Specifies the file name of the HiCData object to associate with this analysis.
+        :param filename: Specifies the file name of the :class:`HiCData <hifive.hic_data.HiCData>` object to associate with this analysis.
         :type filename: str.
+        :returns: None
         """
         filename = os.path.abspath(filename)
         # ensure data h5dict exists
@@ -99,6 +101,8 @@ class HiC(object):
     def save(self):
         """
         Save analysis parameters to h5dict.
+
+        :returns: None
         """
         if 'mpi4py' in sys.modules and MPI.COMM_WORLD.Get_rank() > 0:
             return None
@@ -115,9 +119,11 @@ class HiC(object):
 
     def load(self):
         """
-        Load analysis parameters from h5dict specified at object creation and open h5dicts for associated :class:`HiCData` and :class:`Fend` objects.
+        Load analysis parameters from h5dict specified at object creation and open h5dicts for associated :class:`HiCData <hifive.hic_data.HiCData>` and :class:`Fend <hifive.fend.Fend>` objects.
 
         Any call of this function will overwrite current object data with values from the last :func:`save` call.
+
+        :returns: None
         """
         datafile = h5py.File(self.file, 'r')
         for key in datafile.keys():
@@ -165,6 +171,7 @@ class HiC(object):
         :type mininteractions: int.
         :param maxdistance: The maximum inter-fend distance used to count fend interactions. A value of 0 indicates all cis-data should be used.
         :type maxdistance: int.
+        :returns: None
         """
         print >> sys.stderr, ("Filtering fends..."),
         self.mininteractions = mininteractions
@@ -219,6 +226,7 @@ class HiC(object):
         :type stopfend: int.
         :param corrected: If True, correction values are applied to counts prior to summing.
         :type corrected: bool.
+        :returns: None
         """
         # check if MPI is available
         if 'mpi4py' in sys.modules.keys():
@@ -353,6 +361,7 @@ class HiC(object):
         :type recalculate_distance: int.
         :param display: Specifies how many iterations between when cost is calculated and displayed as model is learned. If 'display' is zero, the cost is not calculated of displayed.
         :type display: int.
+        :returns: None
         """
         # check if MPI is available
         if 'mpi4py' in sys.modules.keys():
@@ -561,6 +570,7 @@ class HiC(object):
         :type recalculate_distance: int.
         :param mininteractions: If a non-zero 'mindistance' is specified or only 'trans' interactions are used, fend filtering will be performed again to ensure that the data being used is sufficient for analyzed fends. This parameter may specify how many interactions are needed for valid fends. If not given, the value used for the last call to :func:`filter_fends` is used or, barring that, one.
         :type mininteractions: int.
+        :returns: None
         """
         num_bins = self.distance_bins.shape[0]
         minsize = self.distance_bins[0]
@@ -728,6 +738,8 @@ class HiC(object):
     def find_trans_mean(self):
         """
         Calculate the mean signal across all valid fend-pair trans interactions.
+
+        :returns: None
         """
         print >> sys.stderr, ("Finding mean signal across trans interactions..."),
         possible = 0
@@ -753,6 +765,7 @@ class HiC(object):
         :type chrom: str.
         :param minobservations: The minimum number of observed reads needed to cease bin expansion in the dynamic binning phase.
         :type minobservations: int.
+        :returns: Array containing a row for each valid fend and columns containing X coordinate, Y coordinate, Z coordinate, and sequence coordinate (fend midpoint).
         """
         if 'mlpy' not in sys.modules.keys():
             print >> sys.stderr, ("The mlpy module must be installed to use this function.")
@@ -776,12 +789,4 @@ class HiC(object):
         pca_fast.learn(data_mat)
         coordinates = pca_fast.transform(data_mat)
         print >> sys.stderr, ("Done\n"),
-        distances = numpy.sum((coordinates.reshape(1, -1, 3) - coordinates.reshape(-1, 1, 3))**2, axis=2)**0.5
-        distances = -numpy.log(distances[numpy.triu_indices(distances.shape[0], 1)])
-        distances -= numpy.mean(distances)
-        distances /= numpy.std(distances)
-        data_mat = data_mat[numpy.triu_indices(mids.shape[0], 1)]
-        data_mat -= numpy.mean(data_mat)
-        data_mat /= numpy.std(data_mat)
-        print numpy.corrcoef(distances, data_mat)[0, 1]
         return numpy.hstack((coordinates, mids.reshape(-1, 1)))

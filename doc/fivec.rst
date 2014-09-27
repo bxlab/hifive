@@ -1,5 +1,5 @@
 The FiveC class
 ***************
 
-.. autoclass:: hifive.fivec.FiveC
+.. automodule:: hifive.fivec
   :members:

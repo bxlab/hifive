@@ -29,6 +29,7 @@ class FiveCData(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :returns: :class:`FiveCData` class object.
     """
 
     def __init__(self, filename, mode='r'):
@@ -42,6 +43,8 @@ class FiveCData(object):
     def save(self):
         """
         Save 5C interaction count data to h5dict.
+
+        :returns: None
         """
         self.data.close()
         return None
@@ -54,6 +57,7 @@ class FiveCData(object):
         :type fragfilename: str.
         :param filelist: A list containing all of the file names of counts text files to be included in the dataset. If only one file is needed, this may be passed as a string.
         :type filelist: list
+        :returns: None
         """
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
@@ -117,6 +121,7 @@ class FiveCData(object):
         :type fragfilename: str.
         :param filelist: A list containing all of the bam file prefices to be included in the dataset. All files containing each prefix will be loaded. If only one pair of files is needed, the prefix may be passed as a string.
         :type filelist: list
+        :returns: None
         """
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, ("The pysam module must be installed to use this function.")

@@ -22,6 +22,7 @@ class Fragment(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :returns: :class:`Fragment <hifive.fragment.Fragment>` class object.
     """
 
     def __init__(self, filename, mode='r'):
@@ -34,6 +35,8 @@ class Fragment(object):
     def save(self):
         """
         Save fragment data to h5dict.
+
+        :returns: None
         """
         self.fragments.close()
         return None
@@ -52,6 +55,7 @@ class Fragment(object):
         :type regions: list
         :param minregionspacing: If 'regions' is not defined, this is used to parse regions by inserting breaks where fragments are spaced apart greater than this value.
         :type minregionspacing: int.
+        :returns: None
         """
         if not os.path.exists(filename):
             print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
