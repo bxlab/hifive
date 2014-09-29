@@ -806,7 +806,7 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
         return data_array
 
 
-def write_heatmap_dict(fivec, filename, binsize, includetrans=True, removedistance=False, arraytype='full',
+def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_distance=False, arraytype='full',
                        regions=[]):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
@@ -819,8 +819,8 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, removedistan
     :type binsize: int.
     :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
     :type includetrans: bool.
-    :param removedistance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fragment corrections are used.
-    :type removedistance: bool.
+    :param remove_distance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fragment corrections are used.
+    :type remove_distance: bool.
     :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'. 'compact' means data are arranged in a N x M x 2 array where N is the number of bins, M is the maximum number of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2.
     :type arraytype: str.
     :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
@@ -828,7 +828,7 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, removedistan
     :returns: None
     """
     # Check if trans mean is needed and calculate if not already done
-    if includetrans and removedistance and 'trans_mean' not in fivec.__dict__.keys():
+    if includetrans and remove_distance and 'trans_mean' not in fivec.__dict__.keys():
         fivec.find_trans_mean()
     # Check if filename already exists, and remove if it does
     if os.path.exists(filename):
@@ -837,7 +837,7 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, removedistan
     print >> sys.stderr, ("Creating binned heatmap...\n"),
     output = h5py.File(filename, 'w')
     # Determine the requested data type
-    if removedistance:
+    if remove_distance:
         datatype = 'enrichment'
     else:
         datatype = 'fragment'

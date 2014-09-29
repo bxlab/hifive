@@ -13,13 +13,13 @@ def main():
         print "REMOVE_DIST   Specifies whether to remove distance-dependent portion of the signal prior to learning."
         print "RECALC        Number of iterations to wait between recalculating distance function parameters."
         return None
-    fivec_fname, iterations, removedistance, recalculatedistance = sys.argv[1:5]
+    fivec_fname, iterations, remove_distance, recalculatedistance = sys.argv[1:5]
     fivec = hifive.FiveC(fivec_fname, 'r')
-    if removedistance in ['1', 'true', 'True', 'TRUE']:
-        removedistance = True
+    if remove_distance in ['1', 'true', 'True', 'TRUE']:
+        remove_distance = True
     else:
-        removedistance = False
-    fivec.find_express_fragment_corrections(iterations=int(iterations), remove_distance=removedistance,
+        remove_distance = False
+    fivec.find_express_fragment_corrections(iterations=int(iterations), remove_distance=remove_distance,
                                              recalculatedistance=int(recalculatedistance))
     fivec.save()
 

@@ -423,6 +423,8 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     :type minobservations: int.
     :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
     :type searchdistance: int.
+    :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+    :type removefailed: bool.
     :returns: None
     """
     # Determine unbinned array type
@@ -721,7 +723,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
         rank = 0
         num_procs = 1
     # Check if trans mean is needed and calculate if not already done
-    if includetrans and removedistance and 'trans_mean' not in hic.__dict__.keys():
+    if includetrans and remove_distance and 'trans_mean' not in hic.__dict__.keys():
         hic.find_trans_mean()
     # Check if filename already exists, and remove if it does
     if rank == 0:
@@ -752,7 +754,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
     else:
         node_needed = comm.recv(source=0, tag=11)
     # Determine the requested data type
-    if removedistance:
+    if remove_distance:
         datatype = 'enrichment'
     else:
         datatype = 'fend'

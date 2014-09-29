@@ -32,15 +32,15 @@ def main():
         return None
     elif len(sys.argv) < 8:
         return None
-    hic_fname, iterations, mininteractions, mindistance, usereads, removedistance, recalc = sys.argv[1:8]
-    if removedistance in ['1', 'true', 'True', 'TRUE']:
-        removedistance = True
+    hic_fname, iterations, mininteractions, mindistance, usereads, remove_distance, recalc = sys.argv[1:8]
+    if remove_distance in ['1', 'true', 'True', 'TRUE']:
+        remove_distance = True
     else:
-        removedistance = False
+        remove_distance = False
     hic = hifive.HiC(hic_fname, 'r')
     hic.find_express_fend_corrections(iterations=int(iterations), mindistance=int(mindistance),
                                       mininteractions=int(mininteractions), usereads=usereads,
-                                      removedistance=removedistance, recalculate_distance=int(recalc))
+                                      remove_distance=remove_distance, recalculate_distance=int(recalc))
     if rank == 0:
         hic.save()
 

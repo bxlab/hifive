@@ -18,23 +18,21 @@ def main():
         return None
     elif len(sys.argv) < 6:
         return None
-    hic_fname, out_fname, binsize, includetrans, removedistance, chroms = sys.argv[1:7]
+    hic_fname, out_fname, binsize, includetrans, remove_distance, chroms = sys.argv[1:7]
     chroms = sys.argv[6].split(',')
     binsize = int(binsize)
     if includetrans in ['True','true','1']:
         includetrans = True
     else:
         includetrans = False
-    if removedistance in ['True','true','1']:
-        removedistance = True
+    if remove_distance in ['True','true','1']:
+        remove_distance = True
     else:
-        removedistance = False
+        remove_distance = False
     hic = hifive.HiC(hic_fname, 'r')
     hifive.hic_binning.write_heatmap_dict(hic, out_fname, binsize, includetrans=includetrans,
-                                          removedistance=removedistance, chroms=chroms)
+                                          remove_distance=remove_distance, chroms=chroms)
 
 
 if __name__ == "__main__":
-    main():
-
-    create_hic_heatmap_h5dict(hic_fname, out_fname, binsize, includetrans, removedistance, chroms)
+    main()
