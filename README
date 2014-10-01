@@ -12,6 +12,9 @@ This package makes extensive use of the h5py and numpy packages. In addition, if
 mpi4py is installed, several methods are compatible with parallelization,
 including HiC normalization and heatmap generation.
 
+Documentation can be found at `here <http://hifive.docs.taylorlab.org/en/latest/>`_.
+
+
 Installing HiFive
 =============================
 
