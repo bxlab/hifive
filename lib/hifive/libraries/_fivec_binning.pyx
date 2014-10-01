@@ -233,7 +233,7 @@ def binned_signal_upper(
                 index = i * num_bins - i * (i + 1) / 2 - i - 1
                 for k in range(indices[frag1], indices[frag1 + 1]):
                     frag2 = data[k, 1]
-                    if filter[frag2] == 0:
+                    if frag2 >= num_frags or filter[frag2] == 0:
                         continue
                     j = mapping[frag2]
                     if i == j:

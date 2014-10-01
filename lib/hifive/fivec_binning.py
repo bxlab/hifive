@@ -258,6 +258,9 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     # Create requested array
     data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
     # Fill in data values
+
+    print num_bins, num_frags, mapping.shape[0], numpy.amin(data[:,0]), numpy.amax(data[:,0]), numpy.amin(data[:,1]), numpy.amax(data[:,1]), numpy.amin(mapping), numpy.amax(mapping), data.shape[0], data_indices[-1]
+
     _fivec_binning.binned_signal_upper(data, data_indices, fivec.filter[startfrag:stopfrag], mapping,
                                  fivec.corrections[startfrag:stopfrag], mids, strands, data_array,
                                  fivec.mu, fivec.gamma, fivec.sigma, datatype_int, num_bins)
