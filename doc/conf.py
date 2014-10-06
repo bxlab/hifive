@@ -20,6 +20,8 @@ import sys, os
 
 # -- General configuration -----------------------------------------------------
 
+autodoc_mock_imports = ['numpy','scipy','h5py']
+
 # If your documentation needs a minimal Sphinx version, state it here.
 #needs_sphinx = '1.0'
 
