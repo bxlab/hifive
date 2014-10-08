@@ -21,12 +21,13 @@ from mock import Mock as MagicMock
 
 class Mock(MagicMock):
     @classmethod
-    def __getattr__(cls, name):
-            return Mock()
+    def __init__(self):
+        self.dtype = type
 
     @classmethod
-    def dtype(spec=type):
-      return type
+    def __getattr__(cls, name):
+        return Mock()
+
 
 # -- General configuration -----------------------------------------------------
 
