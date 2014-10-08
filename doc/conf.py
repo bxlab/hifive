@@ -26,12 +26,7 @@ class Mock(MagicMock):
 
 # -- General configuration -----------------------------------------------------
 
-autodoc_mock_imports = ['numpy', 'scipy', 'scipy.stats', 'h5py', 'libraries._bi', 'libraries._fivec_binning',
-                        'libraries._fivec_binning.find_fragment_coverage', 'libraries._fivec_distance',
-                        'libraries._hic_binning', 'libraries._hic_binning.find_fend_coverage',
-                        'libraries._hic_binning.dynamically_bin_unbinned_upper',
-                        'libraries._hic_binning.dynamically_bin_upper_from_upper', 'libraries._hic_distance',
-                        'libraries._hic_distance.find_max_fend']
+autodoc_mock_imports = ['numpy', 'scipy', 'h5py']
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
 
 # If your documentation needs a minimal Sphinx version, state it here.
