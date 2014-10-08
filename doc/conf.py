@@ -23,6 +23,7 @@ class Mock(MagicMock):
     @classmethod
     def __init__(self):
         self.dtype = type
+        self.flatiter = type
 
     @classmethod
     def __getattr__(cls, name):
