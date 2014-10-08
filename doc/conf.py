@@ -22,7 +22,7 @@ from mock import Mock as MagicMock
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
-            return Mock()
+            return Mock(spec=type)
 
 # -- General configuration -----------------------------------------------------
 
