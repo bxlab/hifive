@@ -21,18 +21,13 @@ from mock import Mock as MagicMock
 
 class Mock(MagicMock):
     @classmethod
-    def __init__(self):
-        self.dtype = type
-        self.flatiter = type
-
-    @classmethod
     def __getattr__(cls, name):
         return Mock()
 
 
 # -- General configuration -----------------------------------------------------
 
-autodoc_mock_imports = ['numpy', 'scipy', 'h5py']
+autodoc_mock_imports = ['h5py']
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
 
 # If your documentation needs a minimal Sphinx version, state it here.
