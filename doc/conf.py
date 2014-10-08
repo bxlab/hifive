@@ -25,7 +25,7 @@ class Mock(MagicMock):
             return Mock()
 
     @classmethod
-    def dtype()
+    def dtype(spec=type):
       return type
 
 # -- General configuration -----------------------------------------------------
