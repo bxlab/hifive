@@ -138,8 +138,10 @@ class Fragment(object):
             regions['stop'][i] = region_array[i][4]
         # write all data to h5dict
         dset = self.fragments.create_dataset(name='fragments', data=fragments)
-        dset.attrs['re_name'] = re_name
-        dset.attrs['genome_name'] = genome_name
+        if not re_name is None:
+            dset.attrs['re_name'] = re_name
+        if not genome_name is None:
+            dset.attrs['genome_name'] = genome_name
         self.fragments.create_dataset(name='chr_indices', data=chr_indices)
         self.fragments.create_dataset(name='chromosomes', data=chromosomes)
         self.fragments.create_dataset(name='regions', data=regions)
