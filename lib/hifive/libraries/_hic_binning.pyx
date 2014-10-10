@@ -1119,7 +1119,7 @@ def dynamically_bin_compact_from_compact(
                             binned[x, y - x - 1, 1] += unbinned[i, uY - i - 1, 1]
                     # determine min distance
                     min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                if binned[x, y - x - 1, 0] < minobservations and removefailed:
+                if binned[x, y - x - 1, 0] < minobservations and removefailed == 1:
                     binned[x, y - x - 1, 0] = 0
                     binned[x, y - x - 1, 1] = 0
     return None
@@ -1199,7 +1199,8 @@ def dynamically_bin_trans(
         np.ndarray[DTYPE_int_t, ndim=1] b_mids1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] b_mids2 not None,
         int minobservations,
-        int maxsearch):
+        int maxsearch,
+        int removefailed):
     cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist
     cdef long long int num_bins1 = bounds1.shape[0]
     cdef long long int num_bins2 = bounds2.shape[0]
@@ -1276,7 +1277,7 @@ def dynamically_bin_trans(
                             binned[x, y, 1] += unbinned[i, uY, 1]
                     # determine min distance
                     min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                if binned[x, y, 0] < minobservations:
+                if binned[x, y, 0] < minobservations and removefailed == 1:
                     binned[x, y, 0] = 0
                     binned[x, y, 1] = 0
     return None

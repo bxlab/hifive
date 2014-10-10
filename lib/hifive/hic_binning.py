@@ -471,7 +471,7 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
 
 
 def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binbounds1, binbounds2,
-                                minobservations=10, searchdistance=0):
+                                minobservations=10, searchdistance=0, removefailed=False):
     """
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
     or 'searchdistance' criteria.
@@ -492,6 +492,8 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     :type minobservations: int.
     :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
     :type searchdistance: int.
+    :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+    :type removefailed: bool.
     :returns: None
     """
     print >> sys.stderr, ("Dynamically binning data..."),
@@ -507,7 +509,7 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     mids2 = (binbounds2[:, 0] + binbounds2[:, 1]) / 2
     # Dynamically bin using appropriate array type combination
     _hic_binning.dynamically_bin_trans(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binedges1,
-                                   binedges2, mids1, mids2, minobservations, searchdistance)
+                                   binedges2, mids1, mids2, minobservations, searchdistance, int(removefailed))
     print >> sys.stderr, ("Done\n"),
     return None
 

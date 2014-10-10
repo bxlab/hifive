@@ -46,7 +46,7 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
     :type arraytype: str.
     :param skipfiltered: If 'True', all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
     :type skipfiltered: bool.
-    :param returnmapping: If 'True', a list containing the data array and a 1d array containing fragment numbers included in the data array is return. Otherwise only the data array is returned.
+    :param returnmapping: If 'True', a list containing the data array and either a 1d array containing fragment numbers included in the data array if the array is not compact or two 1d arrays containin fragment numbers for forward and reverse fragments if the array is compact is return. Otherwise only the data array is returned.
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
     """
@@ -258,9 +258,6 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     # Create requested array
     data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
     # Fill in data values
-
-    print num_bins, num_frags, mapping.shape[0], numpy.amin(data[:,0]), numpy.amax(data[:,0]), numpy.amin(data[:,1]), numpy.amax(data[:,1]), numpy.amin(mapping), numpy.amax(mapping), data.shape[0], data_indices[-1]
-
     _fivec_binning.binned_signal_upper(data, data_indices, fivec.filter[startfrag:stopfrag], mapping,
                                  fivec.corrections[startfrag:stopfrag], mids, strands, data_array,
                                  fivec.mu, fivec.gamma, fivec.sigma, datatype_int, num_bins)
@@ -379,7 +376,7 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
 
 
 def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, minobservations=50,
-                              searchdistance=0):
+                              searchdistance=0, removefailed=True):
     """
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
     or 'searchdistance' criteria.
@@ -396,6 +393,8 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     :type minobservations: int.
     :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
     :type searchdistance: int.
+    :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+    :type removefailed: bool.
     :returns: None
     """
     # Determine unbinned array type
@@ -434,7 +433,7 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     mids = (binbounds[:, 0] + binbounds[:, 1]) / 2
     # Dynamically bin using appropriate array type combination
     _fivec_binning.dynamically_bin_upper_from_upper(ub_signal, unbinnedpositions, b_signal, binedges,
-                                              mids, minobservations, searchdistance)
+                                              mids, minobservations, searchdistance, int(removefailed))
     if binned_type == 'full':
         binned[indices[0], indices[1], 0] = b_signal[:, 0]
         binned[indices[0], indices[1], 1] = b_signal[:, 1]
@@ -478,9 +477,9 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
     :type arraytype: str.
     :param skipfiltered: If 'True', all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
     :type skipfiltered: bool.
-    :param returnmapping: If 'True', a list containing the data array and two 2d arrasw of N x 4 containing the first fragment and last fragment plus one included in each bin and first and last coordinates for 'region1' and 'region2' is return. Otherwise only the data array is returned.
+    :param returnmapping: If 'True', a list containing the data array and mapping information is returned. Otherwise only a data array(s) is returned.
     :type returnmapping: bool.
-    :returns: Array in format requested with 'arraytype' containing inter-region data requested with 'datatype'.
+    :returns: Array in format requested with 'arraytype' containing inter-region data requested with 'datatype'. If 'returnmapping' is True, a list is returned with mapping information. If 'arraytype' is 'full', a single data array and a 1d array of fragments corresponding to rows and columns is returned. If 'arraytype' is 'compact', two data arrays are returned (forward1 by reverse2 and forward2 by reverse1) along with forward and reverse fragment positions for each array for a total of 5 arrays.
     """
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -807,6 +806,50 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
     else:
         print >> sys.stderr, ("Done\n"),
         return data_array
+
+
+def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binbounds1, binbounds2,
+                                minobservations=50, searchdistance=0, removefailed=True):
+    """
+    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
+    or 'searchdistance' criteria.
+
+    :param unbinned: A full array containing data to be binned.
+    :type unbinned: numpy array
+    :param unbinnedpositions1: A 1d integer array indicating the mid-point of each bin in 'unbinned' array along the first axis.
+    :type unbinnedpositions1: numpy array
+    :param unbinnedpositions2: A 1d integer array indicating the mid-point of each bin in 'unbinned' array along the second axis.
+    :type unbinnedpositions2: numpy array
+    :param binned: A full array containing binned data to be dynamically binned. Data in this array will be altered by this function.
+    :type binned: numpy array
+    :param binbounds1: A N x 2 integer array indicating the start and end position of each of N bins in 'binned' array along the first axis.
+    :type binbounds1: numpy array
+    :param binbounds2: A N x 2 integer array indicating the start and end position of each of N bins in 'binned' array along the second axis.
+    :type binbounds2: numpy array
+    :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+    :type minobservations: int.
+    :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+    :type searchdistance: int.
+    :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+    :type removefailed: bool.
+    :returns: None
+    """
+    print >> sys.stderr, ("Dynamically binning data..."),
+    # Determine bin edges relative to unbinned positions
+    binedges1 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
+    binedges1[:, 0] = numpy.searchsorted(unbinnedpositions1, binbounds1[:, 0])
+    binedges1[:, 1] = numpy.searchsorted(unbinnedpositions1, binbounds1[:, 1])
+    binedges2 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
+    binedges2[:, 0] = numpy.searchsorted(unbinnedpositions2, binbounds2[:, 0])
+    binedges2[:, 1] = numpy.searchsorted(unbinnedpositions2, binbounds2[:, 1])
+    # Determine bin midpoints
+    mids1 = (binbounds1[:, 0] + binbounds1[:, 1]) / 2
+    mids2 = (binbounds1[:, 0] + binbounds1[:, 1]) / 2
+    # Dynamically bin using appropriate array type combination
+    _fivec_binning.dynamically_bin_trans(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binedges1,
+                                         binedges2, mids1, mids2, minobservations, searchdistance, int(removefailed))
+    print >> sys.stderr, ("Done\n"),
+    return None
 
 
 def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_distance=False, arraytype='full',

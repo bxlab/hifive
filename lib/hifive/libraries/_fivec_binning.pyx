@@ -308,7 +308,8 @@ def dynamically_bin_upper_from_upper(
         np.ndarray[DTYPE_int_t, ndim=2] bounds not None,
         np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
         int minobservations,
-        int maxsearch):
+        int maxsearch,
+        int removefailed):
     cdef int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index, index2
     cdef int num_bins = bounds.shape[0]
     cdef int num_fends = ub_mids.shape[0]
@@ -388,7 +389,7 @@ def dynamically_bin_upper_from_upper(
                             binned[index + y, 1] += unbinned[index2 + uY, 1]
                     # determine min distance
                     min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                if binned[index + y, 0] < minobservations:
+                if binned[index + y, 0] < minobservations and removefailed == 1:
                     binned[index + y, 0] = 0
                     binned[index + y, 1] = 0
     return None
@@ -585,4 +586,101 @@ def binned_signal_trans(
                 if datatype == 3:
                     expected = pow(expected, 1.0 / sigma)
                 signal[i, j, 1] += expected
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def dynamically_bin_trans(
+        np.ndarray[DTYPE_t, ndim=3] unbinned not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids2 not None,
+        np.ndarray[DTYPE_t, ndim=3] binned not None,
+        np.ndarray[DTYPE_int_t, ndim=2] bounds1 not None,
+        np.ndarray[DTYPE_int_t, ndim=2] bounds2 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] b_mids1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] b_mids2 not None,
+        int minobservations,
+        int maxsearch,
+        int removefailed):
+    cdef int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist
+    cdef int num_bins1 = bounds1.shape[0]
+    cdef int num_bins2 = bounds2.shape[0]
+    cdef int num_frags1 = mids1.shape[0]
+    cdef int num_frags2 = mids2.shape[0]
+    with nogil:
+        for x in range(num_bins1):
+            for y in range(num_bins2):
+                # if bin already meets our criteria, skip
+                if binned[x, y, 0] >= minobservations:
+                    continue
+                # otherwise, set boarding unbinned positions according to bounds
+                lX = bounds1[x, 0]
+                uX = bounds1[x, 1] - 1
+                lY = bounds2[y, 0]
+                uY = bounds2[y, 1] - 1
+                # find distance in each direction
+                if lX > 0:
+                    lX_dist = b_mids1[x] - mids1[lX - 1]
+                else:
+                    lX_dist = 1000000000
+                if uX < num_frags1 - 1:
+                    uX_dist = mids1[uX + 1] - b_mids1[x]
+                else:
+                    uX_dist = 1000000000
+                if lY > 0:
+                    lY_dist = b_mids2[y] - mids2[lY - 1]
+                else:
+                    lY_dist = 1000000000
+                if uY < num_frags2 - 1:
+                    uY_dist = mids2[uY + 1] - b_mids2[y]
+                else:
+                    uY_dist = 1000000000
+                # determine min distance
+                min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                # keep searching while less than maxsearch and minobservations
+                while (maxsearch == 0 or min_dist < maxsearch) and binned[x, y, 0] < minobservations:
+                    # find min dist, update distance, and add new row or col of observations
+                    if min_dist == lX_dist:
+                        lX -= 1
+                        if lX > 0:
+                            lX_dist = b_mids1[x] - mids1[lX - 1]
+                        else:
+                            lX_dist = 1000000000
+                        for i in range(lY, uY + 1):
+                            binned[x, y, 0] += unbinned[lX, i, 0]
+                            binned[x, y, 1] += unbinned[lX, i, 1]
+                    if min_dist == uX_dist:
+                        uX += 1
+                        if uX < num_frags1 - 1:
+                            uX_dist = mids1[uX + 1] - b_mids1[x]
+                        else:
+                            uX_dist = 1000000000
+                        for i in range(lY, uY + 1):
+                            binned[x, y, 0] += unbinned[uX, i, 0]
+                            binned[x, y, 1] += unbinned[uX, i, 1]
+                    if min_dist == lY_dist:
+                        lY -= 1
+                        if lY > 0:
+                            lY_dist = b_mids2[y] - mids2[lY - 1]
+                        else:
+                            lY_dist = 1000000000
+                        for i in range(lX, uX + 1):
+                            binned[x, y, 0] += unbinned[i, lY, 0]
+                            binned[x, y, 1] += unbinned[i, lY, 1]
+                    if min_dist == uY_dist:
+                        uY += 1
+                        if uY < num_frags2 - 1:
+                            uY_dist = mids2[uY + 1] - b_mids2[y]
+                        else:
+                            uY_dist = 1000000000
+                        for i in range(lX, uX + 1):
+                            binned[x, y, 0] += unbinned[i, uY, 0]
+                            binned[x, y, 1] += unbinned[i, uY, 1]
+                    # determine min distance
+                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                if binned[x, y, 0] < minobservations and removefailed == 1:
+                    binned[x, y, 0] = 0
+                    binned[x, y, 1] = 0
     return None

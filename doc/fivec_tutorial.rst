@@ -147,13 +147,12 @@ In the above call, the 'remove_distance' argument specifies whether to remove th
 Generating a heatmap
 ====================
 
-In order to immediately make use of data, :mod:`HiFive` allows you to pull data from a regions and create a heatmap. The data can be returned unbinned, binned using a fixed-width bin size, or binned using boundaries passed by the user. There are  several options for the format the data can be passed back in. Please refer to the :meth:`bin_cis_signal <hifive.fivec_binning.bin_cis_signal>` function for more details. There are also several options for transformations to the data. These are used to remove the distance-dependence signal, fragment bias, both, or to return only the predicted signal. In this example, we'll get a set of data from an entire region binned into 10 Kb bins as follows::
+In order to immediately make use of data, :mod:`HiFive` allows you to pull data from a regions and create a heatmap. The data can be returned unbinned, binned using a fixed-width bin size, or binned using boundaries passed by the user. There are  several options for the format the data can be passed back in. Please refer to the :meth:`cis_heatmap <hifive.fivec.FiveC.cis_heatmap>` function for more details. There are also several options for transformations to the data. These are used to remove the distance-dependence signal, fragment bias, both, or to return only the predicted signal. In this example, we'll get a set of data from an entire region binned into 10 Kb bins as follows::
 
-  heatmap = hifive.fivec_binning(fivec,
-                                 region=1,
-                                 binsize=10000,
-                                 arraytype='compact',
-                                 datatype='enrichment')
+  heatmap = fivec.cis_heatmap(region=1,
+                              binsize=10000,
+                              arraytype='compact',
+                              datatype='enrichment')
 
 In the above call, 'enrichment' specifies to find the observed counts and expected counts, which includes the distance-dependence and fragment bias values. The observed counts are in the first index of the last dimension of the returned array, the expected counts are in the second index of the last dimension. 'compact' specifies a rectangular array where the first axis is the forward primers and the second axis is the reverse primers. 'region' refers to the region index given by :mod:`HiFive`. To find out more details about that region, we could do the following::
 
@@ -173,4 +172,4 @@ In order to visualize the heatmap we just produced, :mod:`HiFive` has several pl
 
 In calling the function, we pass the heatmap and that would be sufficient. There are, however, additional options. For example, 'symmetric_scaling' specifies whether the color scale should be expanded to run from the minimum value to the maximum (False) or so that the maximum absolute value determine both upper and lower color bounds. The image returned is a PIL image of type 'png'.
 
-.. note:: The next thing on the todo list is write wrappers within the :class:`FiveC <hifive.fivec.FiveC>` and :class:`HiC <hifive.hic.HiC>` classes for running binning and plotting through the analysis objects themselves.
+.. note:: The next thing on the todo list is write wrappers within the :class:`FiveC <hifive.fivec.FiveC>` and :class:`HiC <hifive.hic.HiC>` classes for running plotting through the analysis objects themselves.

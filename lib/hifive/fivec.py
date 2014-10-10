@@ -12,6 +12,7 @@ from fragment import Fragment
 from fivec_data import FiveCData
 from libraries._fivec_binning import find_fragment_coverage
 import libraries._fivec_distance as _distance
+import fivec_binning
 
 
 class FiveC(object):
@@ -381,4 +382,247 @@ class FiveC(object):
         actual = numpy.sum(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]] * trans_data[:, 2])
         self.trans_mean = actual / float(possible)
         print >> sys.stderr, ('Done\n'),
+        return None
+
+    def cis_heatmap(self, region, start=None, stop=None, startfrag=None, stopfrag=None, binsize=0,
+                    datatype='enrichment', arraytype='full', skipfiltered=False, returnmapping=False,
+                    dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
+                    removefailed=False):
+        """
+        Return a heatmap of cis data of the type and shape specified by the passed arguments.
+
+        This function returns a heatmap for a single region, bounded by either 'start' and 'stop' or 'startfend' and 'stopfend' ('start' and 'stop' take precedence). If neither is given, the complete region is included. The data in the array is determined by the 'datatype', being raw, fragment-corrected, distance-corrected, enrichment, or expected data. The array shape is given by 'arraytype' and can be compact (if unbinned), upper, or full. See :mod:`fivec_binning <hifive.fivec_binning>` for further explanation of 'datatype' and 'arraytype'. If using dynamic binning ('dynamically_binned' is set to True), 'minobservations', 'searchdistance', 'expansion_binsize', and 'removefailed' are used to control the dynamic binning process. Otherwise these arguments are ignored.
+
+        :param region: The index of the region to obtain data from.
+        :type region: int.
+        :param start: The smallest coordinate to include in the array, measured from fragment midpoints. If both 'start' and 'startfrag' are given, 'start' will override 'startfrag'. If unspecified, this will be set to the midpoint of the first fragment for 'region'. Optional.
+        :type start: int.
+        :param stop: The largest coordinate to include in the array, measured from fragment midpoints. If both 'stop' and 'stopfrag' are given, 'stop' will override 'stopfrag'. If unspecified, this will be set to the midpoint of the last fragment plus one for 'region'. Optional.
+        :type stop: int.
+        :param startfrag: The first fragment to include in the array. If unspecified and 'start' is not given, this is set to the first fragment in 'region'. In cases where 'start' is specified and conflicts with 'startfrag', 'start' is given preference. Optional
+        :type startfrag: int.
+        :param stopfrag: The first fragment not to include in the array. If unspecified and 'stop' is not given, this is set to the last fragment in 'region' plus one. In cases where 'stop' is specified and conflicts with 'stopfrag', 'stop' is given preference. Optional.
+        :type stopfrag: str.
+        :param binsize: This is the coordinate width of each bin. If 'binsize' is zero, unbinned data is returned.
+        :type binsize: int.
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+        :type datatype: str.
+        :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' (if unbinned), 'full', and 'upper'. 'compact' means data are arranged in a N x M x 2 array where N and M are the number of forward and reverse probe fragments, respectively. 'full' returns a square, symmetric array of size N x N x 2 where N is the total number of fragments or bins. 'upper' returns only the flattened upper triangle of a full array, excluding the diagonal of size (N * (N - 1) / 2) x 2, where N is the total number of fragments or bins.
+        :type arraytype: str.
+        :param skipfiltered: If True, all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
+        :type skipfiltered: bool.
+        :param returnmapping: If True, a list containing the data array and either a 1d array containing fragment numbers included in the data array if the array is not compact or two 1d arrays containin fragment numbers for forward and reverse fragments if the array is compact is return. Otherwise only the data array is returned.
+        :type returnmapping: bool.
+        :param dynamically_binned: If True, return dynamically binned data.
+        :type dynamically_binned: bool.
+        :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+        :type minobservations: int.
+        :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+        :type searchdistance: int.
+        :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+        :type expansion_binsize: int.
+        :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+        :type removefailed: bool.
+        :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
+        """
+        # check that all values are acceptable
+        datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
+        if datatype not in datatypes:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+            return None
+        else:
+            datatype_int = datatypes[datatype]
+        if ((dynamically_binned and arraytype not in ['full', 'upper']) or
+            (binsize != 0 and arraytype not in ['full', 'upper']) or
+            (arraytype not in ['full', 'compact', 'upper'])):
+            print >> sys.stderr, ("Unrecognized or inappropriate array type. No data returned.\n"),
+            return None
+        # determine if data is to be dynamically binned
+        if not dynamically_binned:
+            # determine if data is to be unbinned or binned
+            if binsize == 0:
+                # data should be unbinned
+                data = fivec_binning.unbinned_cis_signal(self, region, start=start, stop=stop, startfrag=startfrag,
+                                                         stopfrag=stopfrag, datatype=datatype, arraytype=arraytype,
+                                                         skipfiltered=skipfiltered, returnmapping=returnmapping)
+            else:
+                # data should be binned
+                data = fivec_binning.bin_cis_signal(self, region, start=start, stop=stop, startfrag=startfrag,
+                                                    stopfrag=stopfrag, binsize=binsize, datatype=datatype,
+                                                    arraytype=arraytype, returnmapping=returnmapping)
+        else:
+            if expansion_binsize == 0:
+                # data should be dynamically binned with unbinned expansion data
+                expansion, frags = fivec_binning.unbinned_cis_signal(self, region, start=start, stop=stop,
+                                                                     startfrag=startfrag, stopfrag=stopfrag,
+                                                                     datatype=datatype, arraytype=arraytype,
+                                                                     skipfiltered=True, returnmapping=True)
+                mids = self.frags['fragments']['mid'][frags]
+            else:
+                expansion, mapping = fivec_binning.bin_cis_signal(self, region, start=start, stop=stop,
+                                                                  startfrag=startfrag, stopfrag=stopfrag,
+                                                                  binsize=expansion_binsize, datatype=datatype,
+                                                                  arraytype=arraytype, returnmapping=True)
+                mids = (mapping[:, 2] + mapping[:, 3]) / 2
+            binned, mapping = fivec_binning.bin_cis_signal(self, region, start=start, stop=stop, startfrag=startfrag,
+                                                           stopfrag=stopfrag, binsize=binsize, datatype=datatype,
+                                                           arraytype=arraytype, returnmapping=True)
+            fivec_binning.dynamically_bin_cis_array(expansion, mids, binned, mapping[:, 2:],
+                                                    minobservations=minobservations, searchdistance=searchdistance,
+                                                    removefailed=removefailed)
+            if returnmapping:
+                data = [binned, mapping]
+            else:
+                data = binned
+        return data
+
+    def trans_heatmap(self, region1, region2, start1=0, stop1=None, startfrag1=None, stopfrag1=None, start2=0,
+                      stop2=None, startfrag2=None, stopfrag2=None, binsize=1000000, datatype='enrichment',
+                      arraytype='full', returnmapping=False, dynamically_binned=False, minobservations=0,
+                      searchdistance=0, expansion_binsize=0, removefailed=False):
+        """
+        Return a heatmap of trans data of the type and shape specified by the passed arguments.
+
+        This function returns a heatmap for trans interactions between two regions, bounded by either 'start1', 'stop1', 'start2' and 'stop2' or 'startfrag1', 'stopfrag1', 'startfrag2', and 'stopfrag2' ('start' and 'stop' take precedence). The data in the array is determined by the 'datatype', being raw, fragment-corrected, distance-corrected, enrichment, or expected data. The array shape is always rectangular but can be either compact (which returns two arrays) or full. See :mod:`fivec_binning <hifive.fivec_binning>` for further explanation of 'datatype' and 'arraytype'. If using dynamic binning ('dynamically_binned' is set to True), 'minobservations', 'searchdistance', 'expansion_binsize', and 'removefailed' are used to control the dynamic binning process. Otherwise these arguments are ignored.
+
+        :param region1: The index of the first region to obtain data from.
+        :type region1: int.
+        :param region2: The index of the second region to obtain data from.
+        :type region2: int.
+        :param start1: The coordinate at the beginning of the smallest bin from 'region1'. If unspecified, 'start1' will be the first multiple of 'binsize' below the 'startfrag1' mid. If there is a conflict between 'start1' and 'startfrag1', 'start1' is given preference. Optional.
+        :type start1: int.
+        :param stop1: The largest coordinate to include in the array from 'region1', measured from fragment midpoints. If both 'stop1' and 'stopfrag1' are given, 'stop1' will override 'stopfrag1'. 'stop1' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+        :type stop1: int.
+        :param startfrag1: The first fragment from 'region1' to include in the array. If unspecified and 'start1' is not given, this is set to the first valid fend in 'region1'. In cases where 'start1' is specified and conflicts with 'startfrag1', 'start1' is given preference. Optional.
+        :type startfrag1: int.
+        :param stopfrag1: The first fragment not to include in the array from 'region1'. If unspecified and 'stop1' is not given, this is set to the last valid fragment in 'region1' + 1. In cases where 'stop1' is specified and conflicts with 'stopfrag1', 'stop1' is given preference. Optional.
+        :type stopfrag1: int.
+        :param start1: The coordinate at the beginning of the smallest bin from 'region1'. If unspecified, 'start1' will be the first multiple of 'binsize' below the 'startfrag1' mid. If there is a conflict between 'start1' and 'startfrag1', 'start1' is given preference. Optional.
+        :type start2: int.
+        :param stop2: The largest coordinate to include in the array from 'region2', measured from fragment midpoints. If both 'stop2' and 'stopfrag2' are given, 'stop2' will override 'stopfrag2'. 'stop2' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+        :type stop2: int.
+        :param startfrag2: The first fragment from 'region2' to include in the array. If unspecified and 'start2' is not given, this is set to the first valid fend in 'region2'. In cases where 'start2' is specified and conflicts with 'startfrag2', 'start2' is given preference. Optional.
+        :type startfrag2: int.
+        :param stopfrag2: The first fragment not to include in the array from 'region2'. If unspecified and 'stop2' is not given, this is set to the last valid fragment in 'region2' + 2. In cases where 'stop2' is specified and conflicts with 'stopfrag2', 'stop2' is given preference. Optional.
+        :type stopfrag2: int.
+        :param binsize: This is the coordinate width of each bin.
+        :type binsize: int.
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-filtered bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+        :type datatype: str.
+        :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' (if unbinned) and 'full'. 'compact' means data are arranged in a N x M x 2 array where N and M are the number of forward and reverse probe fragments, respectively. Two arrays will be returned for this format, the first with forward probe fragments from region1 and reverse probe fragments from region2. The second is the compliment of the first. 'full' returns a square, symmetric array of size N x N x 2 where N is the total number of fragments or bins.
+        :type arraytype: str.
+        :param returnmapping: If 'True', a list containing the data array and mapping information is returned. Otherwise only a data array(s) is returned.
+        :type returnmapping: bool.
+        :param dynamically_binned: If 'True', return dynamically binned data.
+        :type dynamically_binned: bool.
+        :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+        :type minobservations: int.
+        :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+        :type searchdistance: int.
+        :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+        :type expansion_binsize: int.
+        :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+        :type removefailed: bool.
+        :returns: Array in format requested with 'arraytype' containing inter-region data requested with 'datatype'. If 'returnmapping' is True, a list is returned with mapping information. If 'arraytype' is 'full', a single data array and two 1d arrays of fragments corresponding to rows and columns, respectively is returned. If 'arraytype' is 'compact', two data arrays are returned (forward1 by reverse2 and forward2 by reverse1) along with forward and reverse fragment positions for each array for a total of 5 arrays.
+        """
+        # check that all values are acceptable
+        datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
+        if datatype not in datatypes:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+            return None
+        else:
+            datatype_int = datatypes[datatype]
+        if ((dynamically_binned and arraytype != 'full') or
+            (binsize != 0 and arraytype != 'full') or
+            (arraytype not in ['full', 'compact'])):
+            print >> sys.stderr, ("Unrecognized or inappropriate array type. No data returned.\n"),
+            return None
+        # determine if data is to be dynamically binned
+        if not dynamically_binned:
+            if binsize == 0:
+                data = fivec_binning.unbinned_trans_signal(self, region1, region2, start1=start1, stop1=stop1,
+                                                           startfrag1=startfrag1, stopfrag1=stopfrag1, start2=start2,
+                                                           stop2=stop2, startfrag2=startfrag2, stopfrag2=stopfrag2,
+                                                           datatype=datatype, arraytype=arraytype,
+                                                           skipfiltered=skipfiltered, returnmapping=returnmapping)
+            else:
+                # data should be binned
+                data = fivec_binning.bin_trans_signal(self, region1, region2, start1=start1, stop1=stop1,
+                                                      startfrag1=startfrag1, stopfrag1=stopfrag1, start2=start2,
+                                                      stop2=stop2, startfrag2=startfrag2, stopfrag2=stopfrag2,
+                                                      binsize=binsize, datatype=datatype, returnmapping=returnmapping)
+        else:
+            if expansion_binsize == 0:
+                expansion, frags1, frags2 = fivec_binning.unbinned_trans_signal(self, region1, region2, start1=start1,
+                                                                                stop1=stop1, startfrag1=startfrag1,
+                                                                                stopfrag1=stopfrag1, start2=start2,
+                                                                                stop2=stop2, startfrag2=startfrag2,
+                                                                                stopfrag2=stopfrag2, datatype=datatype,
+                                                                                arraytype='full', skipfiltered=True,
+                                                                                returnmapping=True)
+                mids1 = self.frags['fragments']['mid'][frags1]
+                mids2 = self.frags['fragments']['mid'][frags2]
+            else:
+                expansion, map1, map2 = fivec_binning.bin_trans_signal(self, region1, region2, start1=start1,
+                                                                       stop1=stop1, startfrag1=startfrag1,
+                                                                       stopfrag1=stopfrag1, start2=start2, stop2=stop2,
+                                                                       startfrag2=startfrag2, stopfrag2=stopfrag2,
+                                                                       binsize=expansion_binsize, datatype=datatype,
+                                                                       returnmapping=True)
+                mids1 = (map1[:, 2] + map1[:, 3]) / 2
+                mids2 = (map2[:, 2] + map2[:, 3]) / 2
+            if binsize == 0:
+                binned, mapping1, mapping2 = fivec_binning.unbinned_trans_signal(self, region1, region2, start1=start1,
+                                                                                 stop1=stop1, startfrag1=startfrag1,
+                                                                                 stopfrag1=stopfrag1, start2=start2,
+                                                                                 stop2=stop2, startfrag2=startfrag2,
+                                                                                 stopfrag2=stopfrag2,
+                                                                                 datatype=datatype,
+                                                                                 arraytype='full', skipfiltered=True,
+                                                                                 returnmapping=True)
+                bounds1 = numpy.hstack((self.frags['fragments']['start'][mapping1].reshape(-1, 1),
+                                        self.frags['fragments']['stop'][mapping1].reshape(-1, 1)))
+                bounds2 = numpy.hstack((self.frags['fragments']['start'][mapping2].reshape(-1, 1),
+                                        self.frags['fragments']['stop'][mapping2].reshape(-1, 1)))
+            else:
+                binned, mapping1, mapping2 = fivec_binning.bin_trans_signal(self, region1, region2, start1=start1,
+                                                                            stop1=stop1, startfrag1=startfrag1,
+                                                                            stopfrag1=stopfrag1, start2=start2,
+                                                                            stop2=stop2, startfrag2=startfrag2,
+                                                                            stopfrag2=stopfrag2,
+                                                                            binsize=binsize, datatype=datatype,
+                                                                            returnmapping=True)
+                bounds1 = mapping1[:, 2:4]
+                bounds2 = mapping2[:, 2:4]
+            fivec_binning.dynamically_bin_trans_array(expansion, mids1, mids2, binned, bounds1, bounds2,
+                                                      minobservations=minobservations, searchdistance=searchdistance,
+                                                      removefailed=removefailed)
+            if returnmapping:
+                data = [binned, mapping1, mapping2]
+            else:
+                data = binned
+        return data
+
+    def write_heatmap_dict(self, filename, binsize, includetrans=True, remove_distance=False, arraytype='full',
+                           regions=[]):
+        """
+        Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
+
+        :param filename: Location to write h5dict object to.
+        :type filename: str.
+        :param binsize: Size of bins for interaction arrays. If "binsize" is zero, fragment interactions are returned without binning.
+        :type binsize: int.
+        :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
+        :type includetrans: bool.
+        :param remove_distance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fragment corrections are used.
+        :type remove_distance: bool.
+        :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'. 'compact' means data are arranged in a N x M x 2 array where N is the number of bins, M is the maximum number of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2.
+        :type arraytype: str.
+        :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
+        :type regions: list.
+        :returns: None
+        """
+        fivec_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
+                                         remove_distance=remove_distance, arraytype=arraytype,
+                                         regions=regions)
         return None

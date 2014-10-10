@@ -18,7 +18,7 @@ except:
 from fend import Fend
 from hic_data import HiCData
 from libraries._hic_binning import find_fend_coverage, dynamically_bin_unbinned_upper, dynamically_bin_upper_from_upper
-from hic_binning import unbinned_cis_signal
+import hic_binning
 import libraries._hic_distance as _distance
 
 
@@ -771,8 +771,8 @@ class HiC(object):
             print >> sys.stderr, ("The mlpy module must be installed to use this function.")
             return None
         print >> sys.stderr, ("Learning fend-resolution 3D model..."),
-        unbinned, mapping = unbinned_cis_signal(self, chrom, datatype='fend', arraytype='upper',
-                                                skipfiltered=True, returnmapping=True)
+        unbinned, mapping = hic_binning.unbinned_cis_signal(self, chrom, datatype='fend', arraytype='upper',
+                                                            skipfiltered=True, returnmapping=True)
         mids = self.fends['fends']['mid'][mapping]
         print >> sys.stderr, ("Dynamically binning data..."),
         dynamic = numpy.copy(unbinned)
@@ -790,3 +790,219 @@ class HiC(object):
         coordinates = pca_fast.transform(data_mat)
         print >> sys.stderr, ("Done\n"),
         return numpy.hstack((coordinates, mids.reshape(-1, 1)))
+
+    def cis_heatmap(self, chrom, start=0, stop=None, startfend=None, stopfend=None, binsize=0, binbounds=None,
+                    datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
+                    dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
+                    removefailed=False):
+        """
+        Return a heatmap of cis data of the type and shape specified by the passed arguments.
+
+        This function returns a heatmap for a single chromosome region, bounded by either 'start' and 'stop' or 'startfend' and 'stopfend' ('start' and 'stop' take precedence), or if given, the outer coordinates of the array passed by 'binbounds'. If none of these are specified, data for the complete chromosome is used. The data in the array is determined by the 'datatype', being raw, fend-corrected, distance-corrected, enrichment, or expected data. The array shape is given by 'arraytype' and can be compact, upper, or full. See :mod:`hic_binning <hifive.hic_binning>` for further explanation of 'datatype' and 'arraytype'. The returned data will include interactions ranging from zero to 'maxdistance' apart. If maxdistance is zero, all interactions within the requested bounds are returned. If using dynamic binning ('dynamically_binned' is set to True), 'minobservations', 'searchdistance', 'expansion_binsize', and 'removefailed' are used to control the dynamic binning process. Otherwise these arguments are ignored.
+
+        :param chrom: The name of a chromosome to obtain data from.
+        :type chrom: str.
+        :param start: The smallest coordinate to include in the array, measured from fend midpoints. If both 'start' and 'startfend' are given, 'start' will override 'startfend'. If unspecified, this will be set to the midpoint of the first fend for 'chrom'. Optional.
+        :type start: int.
+        :param stop: The largest coordinate to include in the array, measured from fend midpoints. If both 'stop' and 'stopfend' are given, 'stop' will override 'stopfend'. If unspecified, this will be set to the midpoint of the last fend plus one for 'chrom'. Optional.
+        :type stop: int.
+        :param startfend: The first fend to include in the array. If unspecified and 'start' is not given, this is set to the first fend in 'chrom'. In cases where 'start' is specified and conflicts with 'startfend', 'start' is given preference. Optional
+        :type startfend: int.
+        :param stopfend: The first fend not to include in the array. If unspecified and 'stop' is not given, this is set to the last fend in 'chrom' plus one. In cases where 'stop' is specified and conflicts with 'stopfend', 'stop' is given preference. Optional.
+        :type stopfend: str.
+        :param binsize: This is the coordinate width of each bin. If 'binsize' is zero, unbinned data is returned. If 'binbounds' is not None, this value is ignored.
+        :type binsize: int.
+        :param binbounds: An array containing start and stop coordinates for a set of user-defined bins. Any fend not falling in a bin is ignored. Optional.
+        :type binbounds: numpy array
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+        :type datatype: str.
+        :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact', 'full', and 'upper'. 'compact' means data are arranged in a N x M x 2 array where N is the number of fends or bins, M is the maximum number of steps between included fend pairs or bin pairs and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2. 'upper' returns only the flattened upper triangle of a full array, excluding the diagonal of size (N * (N - 1) / 2) x 2.
+        :type arraytype: str.
+        :param maxdistance: This specifies the maximum coordinate distance between bins that will be included in the array. If set to zero, all distances are included.
+        :type maxdistance: str.
+        :param skipfiltered: If 'True', all interaction bins for filtered out fends are removed and a reduced-size array is returned.
+        :type skipfiltered: bool.
+        :param returnmapping: If 'True', a list containing the data array and a 1d array containing fend numbers included in the data array if unbinned or a 2d array of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates if binned is return. Otherwise only the data array is returned.
+        :type returnmapping: bool.
+        :param dynamically_binned: If 'True', return dynamically binned data.
+        :type dynamically_binned: bool.
+        :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+        :type minobservations: int.
+        :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+        :type searchdistance: int.
+        :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+        :type expansion_binsize: int.
+        :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+        :type removefailed: bool.
+        :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
+        """
+        # check that all values are acceptable
+        datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
+        if datatype not in datatypes:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+            return None
+        else:
+            datatype_int = datatypes[datatype]
+        if ((dynamically_binned == True and arraytype not in ['compact', 'upper']) or
+            (arraytype not in ['full', 'compact', 'upper'])):
+            print >> sys.stderr, ("Unrecognized or inappropriate array type. No data returned.\n"),
+            return None
+        # determine if data is to be dynamically binned
+        if not dynamically_binned:
+            # determine if data is to be unbinned or binned
+            if binbounds is None and binsize == 0:
+                # data should be unbinned
+                data = hic_binning.unbinned_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
+                                                       stopfend=stopfend, datatype=datatype, arraytype=arraytype,
+                                                       maxdistance=maxdistance, skipfiltered=skipfiltered,
+                                                       returnmapping=returnmapping)
+            else:
+                # data should be binned
+                data = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
+                                                  stopfend=stopfend, binsize=binsize, binbounds=binbounds,
+                                                  datatype=datatype, arraytype=arraytype, maxdistance=maxdistance,
+                                                  returnmapping=returnmapping)
+        else:
+            if expansion_binsize == 0:
+                # data should be dynamically binned with unbinned expansion data
+                expansion, fends = hic_binning.unbinned_cis_signal(self, chrom, start=start, stop=stop,
+                                                                   startfend=startfend, stopfend=stopfend,
+                                                                   datatype=datatype, arraytype=arraytype,
+                                                                   maxdistance=maxdistance, skipfiltered=True,
+                                                                   returnmapping=True)
+                mids = self.fends['fends']['mid'][fends]
+                binned, mapping = hic_binning.bin_cis_array(self, expansion, fends, start=start, stop=stop,
+                                                            binsize=binsize, binbounds=binbounds, arraytype=arraytype,
+                                                            returnmapping=True)
+            else:
+                # data should be dynamically binned with binned expansion data
+                expansion, mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop,
+                                                                startfend=startfend, stopfend=stopfend,
+                                                                binsize=expansion_binsize, binbounds=None,
+                                                                datatype=datatype, arraytype=arraytype,
+                                                                maxdistance=maxdistance, returnmapping=True)
+                mids = (mapping[:, 2] + mapping[:, 3]) / 2
+                binned, mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
+                                                             stopfend=stopfend, binsize=binsize, binbounds=binbounds,
+                                                             datatype=datatype, arraytype=arraytype,
+                                                             maxdistance=maxdistance, returnmapping=True)
+            hic_binning.dynamically_bin_cis_array(expansion, mids, binned, mapping[:, 2:],
+                                                  minobservations=minobservations, searchdistance=searchdistance,
+                                                  removefailed=removefailed)
+            if returnmapping:
+                data = [binned, mapping]
+            else:
+                data = binned
+        return data
+
+
+    def trans_heatmap(self, chrom1, chrom2, start1=0, stop1=None, startfend1=None, stopfend1=None, binbounds1=None,
+                      start2=0, stop2=None, startfend2=None, stopfend2=None, binbounds2=None, binsize=1000000,
+                      datatype='enrichment', returnmapping=False, dynamically_binned=False, minobservations=0,
+                      searchdistance=0, expansion_binsize=0, removefailed=False):
+        """
+        Return a heatmap of trans data of the type and shape specified by the passed arguments.
+
+        This function returns a heatmap for trans interactions between two chromosomes within a region, bounded by either 'start1', 'stop1', 'start2' and 'stop2' or 'startfend1', 'stopfend1', 'startfend2', and 'stopfend2' ('start' and 'stop' take precedence), or if given, the outer coordinates of the arrays passed by 'binbounds1' and 'binbounds2'. The data in the array is determined by the 'datatype', being raw, fend-corrected, distance-corrected, enrichment, or expected data. The array shape is always rectangular. See :mod:`hic_binning <hifive.hic_binning>` for further explanation of 'datatype'. If using dynamic binning ('dynamically_binned' is set to True), 'minobservations', 'searchdistance', 'expansion_binsize', and 'removefailed' are used to control the dynamic binning process. Otherwise these arguments are ignored.
+
+        :param chrom1: The name of the first chromosome to obtain data from.
+        :type chrom1: str.
+        :param chrom2: The name of the second chromosome to obtain data from.
+        :type chrom2: str.
+        :param start1: The coordinate at the beginning of the smallest bin from 'chrom1'. If unspecified, 'start1' will be the first multiple of 'binsize' below the 'startfend1' mid. If there is a conflict between 'start1' and 'startfend1', 'start1' is given preference. Optional.
+        :type start1: int.
+        :param stop1: The largest coordinate to include in the array from 'chrom1', measured from fend midpoints. If both 'stop1' and 'stopfend1' are given, 'stop1' will override 'stopfend1'. 'stop1' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+        :type stop1: int.
+        :param startfend1: The first fend from 'chrom1' to include in the array. If unspecified and 'start1' is not given, this is set to the first valid fend in 'chrom1'. In cases where 'start1' is specified and conflicts with 'startfend1', 'start1' is given preference. Optional
+        :type startfend1: int.
+        :param stopfend1: The first fend not to include in the array from 'chrom1'. If unspecified and 'stop1' is not given, this is set to the last valid fend in 'chrom1' + 1. In cases where 'stop1' is specified and conflicts with 'stopfend1', 'stop1' is given preference. Optional.
+        :param binbounds1: An array containing start and stop coordinates for a set of user-defined bins to use for partitioning 'chrom1'. Any fend not falling in a bin is ignored.
+        :type binbounds1: numpy array
+        :param start2: The coordinate at the beginning of the smallest bin from 'chrom2'. If unspecified, 'start2' will be the first multiple of 'binsize' below the 'startfend2' mid. If there is a conflict between 'start2' and 'startfend2', 'start2' is given preference. Optional.
+        :type start2: int.
+        :param stop2: The largest coordinate to include in the array from 'chrom2', measured from fend midpoints. If both 'stop2' and 'stopfend2' are given, 'stop2' will override 'stopfend2'. 'stop2' will be shifted higher as needed to make the last bin of size 'binsize'. Optional.
+        :type stop2: int.
+        :param startfend2: The first fend from 'chrom2' to include in the array. If unspecified and 'start2' is not given, this is set to the first valid fend in 'chrom2'. In cases where 'start2' is specified and conflicts with 'startfend2', 'start2' is given preference. Optional
+        :type startfend2: int.
+        :param stopfend2: The first fend not to include in the array from 'chrom2'. If unspecified and 'stop2' is not given, this is set to the last valid fend in 'chrom2' + 1. In cases where 'stop2' is specified and conflicts with 'stopfend2', 'stop1' is given preference. Optional.
+        :type stopfend2: str.
+        :param binbounds2: An array containing start and stop coordinates for a set of user-defined bins to use for partitioning 'chrom2'. Any fend not falling in a bin is ignored.
+        :type binbounds2: numpy array
+        :param binsize: This is the coordinate width of each bin. If binbounds is not None, this value is ignored.
+        :type binsize: int.
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+        :type datatype: str.
+        :param returnmapping: If 'True', a list containing the data array and two 2d arrays of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates for the first and second chromosomes is returned. Otherwise only the data array is returned.
+        :type returnmapping: bool.
+        :param dynamically_binned: If 'True', return dynamically binned data.
+        :type dynamically_binned: bool.
+        :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+        :type minobservations: int.
+        :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+        :type searchdistance: int.
+        :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+        :type expansion_binsize: int.
+        :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+        :type removefailed: bool.
+        :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
+        """
+        # check that all values are acceptable
+        datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
+        if datatype not in datatypes:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+            return None
+        else:
+            datatype_int = datatypes[datatype]
+        # determine if data is to be dynamically binned
+        if not dynamically_binned:
+            data = hic_binning.bin_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,
+                                                startfend1=startfend1, stopfend1=stopfend1, binbounds1=binbounds1,
+                                                start2=start2, stop2=stop2, startfend2=startfend2, stopfend2=stopfend2,
+                                                binbounds2=binbounds2, binsize=binsize, datatype=datatype,
+                                                returnmapping=returnmapping)
+        else:
+            expansion, mapping1, mapping2 = hic_binning.bin_trans_signal(self, chrom1, chrom2, start1=start1,
+                                                                         stop1=stop1, startfend1=startfend1,
+                                                                         stopfend1=stopfend1, binbounds1=binbounds1,
+                                                                         start2=start2, stop2=stop2,
+                                                                         startfend2=startfend2, stopfend2=stopfend2,
+                                                                         binbounds2=binbounds2,
+                                                                         binsize=expansion_binsize, datatype=datatype,
+                                                                         returnmapping=True)
+            mids1 = (mapping1[:, 2] + mapping1[:, 3]) / 2
+            mids2 = (mapping2[:, 2] + mapping2[:, 3]) / 2
+            binned, mapping1, mapping2 = hic_binning.bin_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,
+                                                                      startfend1=startfend1, stopfend1=stopfend1,
+                                                                      binbounds1=binbounds1, start2=start2,
+                                                                      stop2=stop2, startfend2=startfend2,
+                                                                      stopfend2=stopfend2, binbounds2=binbounds2,
+                                                                      binsize=binsize, datatype=datatype,
+                                                                      returnmapping=True)
+            hic_binning.dynamically_bin_trans_array(expansion, mids1, mids2, binned, mapping1[:, 2:], mapping2[:, 2:],
+                                                    minobservations=minobservations, searchdistance=searchdistance,
+                                                    removefailed=removefailed)
+            if returnmapping:
+                data = [binned, mapping1, mapping2]
+            else:
+                data = binned
+        return data
+
+    def write_heatmap_dict(self, filename, binsize, includetrans=True, remove_distance=False, chroms=[]):
+        """
+        Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
+
+        :param filename: Location to write h5dict object to.
+        :type filename: str.
+        :param binsize: Size of bins for interaction arrays.
+        :type binsize: int.
+        :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
+        :type includetrans: bool.
+        :param remove_distance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fend corrections are used.
+        :type remove_distance: bool.
+        :param chroms: A list of chromosome names indicating which chromosomes should be included. If left empty, all chromosomes are included. Optional.
+        :type chroms: list
+        :returns: None
+        """
+        hic_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
+                                       remove_distance=remove_distance, chroms=chroms)
+        return None
