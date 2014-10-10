@@ -22,7 +22,7 @@ def main():
         genome_name = None
         re_name = None
     fragments = hifive.Fragment(out_fname, mode='w')
-    fragments.load_fragments(fragment_fname, genome_name=genome_name, re_name=RE_name)
+    fragments.load_fragments(fragment_fname, genome_name=genome_name, re_name=re_name)
     fragments.fragments.close()
     return None
 
