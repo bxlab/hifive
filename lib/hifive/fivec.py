@@ -66,7 +66,7 @@ class FiveC(object):
             return None
         self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
                                        os.path.dirname(self.file)), os.path.basename(filename))
-        self.data = HiCData(filename).data
+        self.data = FiveCData(filename).data
         fragfilename = self.data['/'].attrs['fragfilename']
         if fragfilename[:2] == './':
             fragfilename = fragfilename[2:]
