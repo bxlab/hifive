@@ -50,13 +50,13 @@ create_fivec_dataset.py
 
 This script produces a :class:`FiveCData <hifive.fivec_data.FiveCData>` h5dict from a set of counts files or BAM files containing mapped paired-end reads. This script can be called as follows::
 
-  > Usage python create_fivec_set.py DATA_FILE OUT_FILE MIN_INTERACTIONS
+  > python create_fivec_dataset.py FRAG_FILE DATA_FILE_1[,...,DATA_FILE_N] OUT_FILE
 
 **Arguments:**
 
-* **DATA_FILE** (*str.*) - File name of :class:`FiveCData <hifive.fivec_data.FiveCData>` h5dict to link with analysis.
-* **OUT_FILE** (*str.*) - File name to write :class:`FiveC <hifive.fivec.FiveC>` h5dict to.
-* **MIN_INTERACTIONS** (*int.*) - Minimum number of interactions needed for valid fragment.
+* **FRAG_FILE** (*str.*) - File name of :class:`Fragment <hifive.fragment.Fragment>` h5dict to link with data.
+* **DATA_FILE_1...** (*str.*) - A comma-separated list of either count file names or BAM file prefices.
+* **OUT_FILE** (*str.*) - File name to write :class:`FiveCData <hifive.fivec_data.FiveCData>` h5dict to.
 
 **Returns:**  None
 
