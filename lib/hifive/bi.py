@@ -456,19 +456,21 @@ class BI(object):
             coords = self.BI['mid'][self.chr_indices[chrint]:self.chr_indices[chrint + 1]]
             peaks = numpy.where((scores[1:-1] > scores[2:]) * (scores[1:-1] > scores[:-2]))[0] + 1
             valid = []
-            if scores[peaks[0]] - numpy.amin(scores[:peaks[0]]) >= cutoff:
-                valid.append(0)
-            for i in range(1, peaks.shape[0] - 1):
-                if scores[peaks[i]] - numpy.amin(scores[(peaks[i - 1] + 1):peaks[i + 1]]) >= cutoff:
-                    valid.append(i)
-            if scores[peaks[-1]] - numpy.amin(scores[(peaks[-1] + 1):]) >= cutoff:
-                valid.append(peaks.shape[0] - 1)
-            peaks = peaks[valid]
+            if peaks.shape[0] > 0:
+                if scores[peaks[0]] - numpy.amin(scores[:peaks[0]]) >= cutoff:
+                    valid.append(0)
+                for i in range(1, peaks.shape[0] - 1):
+                    if scores[peaks[i]] - numpy.amin(scores[(peaks[i - 1] + 1):peaks[i + 1]]) >= cutoff:
+                        valid.append(i)
+                if scores[peaks[-1]] - numpy.amin(scores[(peaks[-1] + 1):]) >= cutoff:
+                    valid.append(peaks.shape[0] - 1)
+                peaks = peaks[valid]
             new_bounds = numpy.zeros(peaks.shape[0], dtype=numpy.dtype([('chr', numpy.int32),
                                      ('coord', numpy.int32), ('score', numpy.float32)]))
-            new_bounds['chr'][:] = chrint
-            new_bounds['coord'][:] = self.BI['mid'][self.chr_indices[chrint] + peaks]
-            new_bounds['score'][:] = scores[peaks]
+            if peaks.shape[0] > 0:
+                new_bounds['chr'][:] = chrint
+                new_bounds['coord'][:] = self.BI['mid'][self.chr_indices[chrint] + peaks]
+                new_bounds['score'][:] = scores[peaks]
             print "Chr %s   %i out of %i" % (chrom, new_bounds.shape[0], scores.shape[0])
             bounds = numpy.hstack((bounds, new_bounds))
         print >> sys.stderr, ("Done\n"),
