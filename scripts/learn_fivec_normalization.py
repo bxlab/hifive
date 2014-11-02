@@ -15,13 +15,13 @@ def main():
         print "RECALC      Number of iterations to wait between recalculating distance function parameters."
         print "DISPLAY     Number of iterations to wait before explicitly calculating cost and updating display."
         return None
-    fivec_fname, leraningrate, burnin_iterations, annealing_iterations, maxdistance, recalculatedistance, display = (
+    fivec_fname, learningrate, burnin_iterations, annealing_iterations, maxdistance, recalculate_distance, display = (
         sys.argv[1:8])
     fivec = hifive.FiveC(fivec_fname, 'r')
     fivec.find_fragment_corrections(display=int(display), maxdistance=int(maxdistance),
                                     burnin_iterations=int(burnin_iterations),
                                     annealing_iterations=int(annealing_iterations),
-                                    recalculatedistance=int(recalculatedistance),
+                                    recalculate_distance=int(recalculate_distance),
                                     learningrate=float(learningrate))
     fivec.save()
 
