@@ -123,15 +123,19 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
         data_array = numpy.zeros((num_bins, max_bin, 2), dtype=numpy.float32)
     else:
         data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
+    distance_mid_logs = numpy.log(hic.distance_mids).astype(numpy.float32)
+    distance_mean_logs = numpy.log(hic.distance_means).astype(numpy.float32)
     # Fill in data values
     if arraytype == 'compact':
         _hic_binning.unbinned_signal_compact(data, data_indices, hic.filter, mapping,
-                                         hic.corrections, mids, hic.distance_mids,
-                                         hic.distance_means, max_fend, data_array, datatype_int, startfend)
+                                         hic.corrections, mids, hic.distance_mids, distance_mid_logs,
+                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
+                                         distance_mean_logs, max_fend, data_array, datatype_int, startfend)
     else:
         _hic_binning.unbinned_signal_upper(data, data_indices, hic.filter, mapping,
-                                       hic.corrections, mids, hic.distance_mids,
-                                       hic.distance_means, max_fend, data_array, datatype_int, startfend)
+                                       hic.corrections, mids, hic.distance_mids, distance_mid_logs,
+                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
+                                         distance_mean_logs, max_fend, data_array, datatype_int, startfend)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -265,15 +269,19 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
         data_array = numpy.zeros((num_bins, max_bin, 2), dtype=numpy.float32)
     else:
         data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
+    distance_mid_logs = numpy.log(hic.distance_mids).astype(numpy.float32)
+    distance_mean_logs = numpy.log(hic.distance_means).astype(numpy.float32)
     # Fill in data values
     if arraytype == 'compact':
         _hic_binning.binned_signal_compact(data, data_indices, hic.filter[startfend:stopfend], mapping,
-                                       hic.corrections[startfend:stopfend], mids, hic.distance_mids,
-                                       hic.distance_means, max_fend, data_array, datatype_int)
+                                       hic.corrections[startfend:stopfend], mids, hic.distance_mids, distance_mid_logs,
+                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
+                                         distance_mean_logs, max_fend, data_array, datatype_int)
     else:
         _hic_binning.binned_signal_upper(data, data_indices, hic.filter[startfend:stopfend], mapping,
-                                     hic.corrections[startfend:stopfend], mids, hic.distance_mids,
-                                     hic.distance_means, max_fend, data_array, datatype_int, num_bins)
+                                     hic.corrections[startfend:stopfend], mids, hic.distance_mids, distance_mid_logs,
+                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
+                                         distance_mean_logs, max_fend, data_array, datatype_int, num_bins)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)

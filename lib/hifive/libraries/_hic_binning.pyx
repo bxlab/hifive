@@ -101,7 +101,10 @@ def unbinned_signal_compact(
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
         np.ndarray[DTYPE_t, ndim=1] distance_means not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         int datatype,
@@ -152,8 +155,9 @@ def unbinned_signal_compact(
                         if k == 0:
                             signal[i, j - i - 1, 1] *= distance_means[0]
                         elif k < num_distance_bins:
-                            frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                            signal[i, j - i - 1, 1] *= distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                            signal[i, j - i - 1, 1] *= exp(distance_mean_logs[k] * frac +
+                                                           distance_mean_logs[k - 1] * (1.0 - frac))
                         else:
                             signal[i, j - i - 1, 1] *= distance_means[num_distance_bins - 1]
                 j += 1
@@ -175,8 +179,9 @@ def unbinned_signal_compact(
                         if k == 0:
                             signal[i, j - i - 1, 1] *= distance_means[0]
                         elif k < num_distance_bins:
-                            frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                            signal[i, j - i - 1, 1] *= distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                            signal[i, j - i - 1, 1] *= exp(distance_mean_logs[k] * frac +
+                                                           distance_mean_logs[k - 1] * (1.0 - frac))
                         else:
                             signal[i, j - i - 1, 1] *= distance_means[num_distance_bins - 1]
                     # if finding expected only, fill in filter values for observed signal
@@ -196,8 +201,11 @@ def unbinned_signal_upper(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mids not None,        
+        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
         np.ndarray[DTYPE_t, ndim=1] distance_means not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         int datatype,
@@ -250,8 +258,9 @@ def unbinned_signal_upper(
                         if k == 0:
                             signal[index + j, 1] *= distance_means[0]
                         elif k < num_distance_bins:
-                            frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                            signal[index + j, 1] *= distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                            signal[index + j, 1] *= exp(distance_mean_logs[k] * frac +
+                                                        distance_mean_logs[k - 1] * (1.0 - frac))
                         else:
                             signal[index + j, 1] *= distance_means[num_distance_bins - 1]
                 j += 1
@@ -273,8 +282,9 @@ def unbinned_signal_upper(
                         if k == 0:
                             signal[index + j, 1] *= distance_means[0]
                         elif k < num_distance_bins:
-                            frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                            signal[index + j, 1] *= distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                            signal[index + j, 1] *= exp(distance_mean_logs[k] * frac +
+                                                        distance_mean_logs[k - 1] * (1.0 - frac))
                         else:
                             signal[index + j, 1] *= distance_means[num_distance_bins - 1]
                     # if finding expected only, fill in filter values for observed signal
@@ -295,7 +305,10 @@ def binned_signal_compact(
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
         np.ndarray[DTYPE_t, ndim=1] distance_means not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         int datatype):
@@ -336,8 +349,8 @@ def binned_signal_compact(
                     if k == 0:
                         expected *= distance_means[0]
                     elif k < num_distance_bins:
-                        frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                        expected *= distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                        frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                        expected *= exp(distance_mean_logs[k] * frac + distance_mean_logs[k - 1] * (1.0 - frac))
                     else:
                         expected *= distance_means[num_distance_bins - 1]
                 signal[mapping[i], mapping[j] - mapping[i] - 1, 0] += observed
@@ -356,7 +369,10 @@ def binned_signal_upper(
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
         np.ndarray[DTYPE_t, ndim=1] distance_means not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         int datatype,
@@ -399,8 +415,8 @@ def binned_signal_upper(
                     if k == 0:
                         expected *= distance_means[0]
                     elif k < num_distance_bins:
-                        frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                        expected *= distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                        frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                        expected *= exp(distance_mean_logs[k] * frac + distance_mean_logs[k - 1] * (1.0 - frac))
                     else:
                         expected *= distance_means[num_distance_bins - 1]
                 signal[index + mapping[j], 0] += observed
@@ -1280,4 +1296,35 @@ def dynamically_bin_trans(
                 if binned[x, y, 0] < minobservations and removefailed == 1:
                     binned[x, y, 0] = 0
                     binned[x, y, 1] = 0
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def remap_counts(
+        np.ndarray[DTYPE_int_t, ndim=1] indices0,
+        np.ndarray[DTYPE_int_t, ndim=1] indices1,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping,
+        np.ndarray[DTYPE_int_t, ndim=1] data,
+        np.ndarray[DTYPE_int_t, ndim=2] temp_data,
+        int start_fend):
+    cdef int i, j, fend0, fend1
+    cdef int num_pairs = indices0.shape[0]
+    cdef int num_data = temp_data.shape[0]
+    with nogil:
+        i = 0
+        for j in range(num_data):
+            fend0 = mapping[temp_data[j, 0] - start_fend]
+            if fend0 == -1:
+                continue
+            fend1 = mapping[temp_data[j, 1] - start_fend]
+            if fend1 == -1:
+                continue
+            while i < num_pairs and indices0[i] < fend0:
+                i += 1
+            while i < num_pairs and indices1[i] < fend1:
+                i += 1
+            if fend0 == indices0[i] and fend1 == indices1[i]:
+                data[i] = temp_data[j, 2]
     return None

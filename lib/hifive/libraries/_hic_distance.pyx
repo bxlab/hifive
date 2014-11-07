@@ -220,7 +220,10 @@ def find_interaction_distance_means(
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_t, ndim=1] distance_means not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
         np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None):
     cdef int i, j, k, distance
     cdef double frac
@@ -239,8 +242,8 @@ def find_interaction_distance_means(
                 if k == 0:
                     means[i, j - i - 1] = distance_means[0]
                 elif k < num_bins:
-                    frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                    means[i, j - i - 1] = distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                    frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                    means[i, j - i - 1] = exp(distance_mean_logs[k] * frac + distance_mean_logs[k - 1] * (1.0 - frac))
                 else:
                     means[i, j - i - 1] = distance_means[num_bins - 1]
             j = (i / 2 + 2) * 2
@@ -252,7 +255,7 @@ def find_interaction_distance_means(
                     if k == 0:
                         means[i, j - i - 1] = distance_means[0]
                     elif k < num_bins:
-                        frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
+                        frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
                         means[i, j - i - 1] = distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
                     else:
                         means[i, j - i - 1] = distance_means[num_bins - 1]
@@ -270,7 +273,10 @@ def find_data_distance_means(
         np.ndarray[DTYPE_int_t, ndim=1] data_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_t, ndim=1] distance_means not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
         np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
         int maxdistance):
     cdef int i, j, k, distance, fend2
     cdef double frac
@@ -292,8 +298,8 @@ def find_data_distance_means(
                     if k == 0:
                         means[j] = distance_means[0]
                     elif k < num_bins:
-                        frac = (distance - distance_mids[k - 1]) / (distance_mids[k] - distance_mids[k - 1])
-                        means[j] = distance_means[k] * frac + distance_means[k - 1] * (1.0 - frac)
+                        frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
+                        means[j] = exp(distance_mean_logs[k] * frac + distance_mean_logs[k - 1] * (1.0 - frac))
                     else:
                         means[j] = distance_means[num_bins - 1]
     return None
@@ -431,4 +437,86 @@ def find_fend_means(
             corrections[i] *= pow(temp, 0.5)
             cost += pow(temp - 1.0, 2.0)
         cost = pow(cost, 0.5)
+    return cost
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_remapped_distance_means(
+        np.ndarray[DTYPE_int_t, ndim=1] indices0,
+        np.ndarray[DTYPE_int_t, ndim=1] indices1,
+        np.ndarray[DTYPE_t, ndim=1] distances,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_int_t, ndim=1] distance_mids,
+        np.ndarray[DTYPE_t, ndim=1] distance_means,
+        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs,
+        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
+        int mindistance,
+        int maxdistance):
+    cdef int i, j, distance, previous_index, index0, index1
+    cdef double frac
+    cdef int num_bins = distance_mids.shape[0]
+    cdef int num_pairs = indices0.shape[0]
+    with nogil:
+        previous_index = 0
+        for i in range(num_pairs):
+            index0 = indices0[i]
+            index1 = indices1[i]
+            if index1 - index0 == 1:
+                continue
+            if index1 - index0 == 3 and index0 % 2 == 0:
+                continue
+            if previous_index != index0:
+                j = 0
+                previous_index = index0
+            distance = mids[index1] - mids[index0]
+            if (maxdistance == 0 or distance <= maxdistance) and distance >= mindistance:
+                while j < num_bins and distance > distance_mids[j]:
+                    j += 1
+                if j == 0:
+                    distances[i] = distance_means[0]
+                elif j < num_bins:
+                    frac = (log(distance) - distance_mid_logs[j - 1]) / distance_log_spaces[j - 1]
+                    distances[i] = exp(distance_mean_logs[j] * frac + distance_mean_logs[j - 1] * (1.0 - frac))
+                else:
+                    distances[i] = distance_means[num_bins - 1]
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_gradients2(
+        np.ndarray[DTYPE_int_t, ndim=1] indices0 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] indices1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] data not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_means not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections not None,
+        np.ndarray[DTYPE_t, ndim=1] gradients not None,
+        int findcost):
+    cdef int i, index0, index1, count
+    cdef double value, cost, distance_mean, correction0, correction1
+    cdef int num_pairs = indices0.shape[0]
+    with nogil:
+        cost = 0.0
+        for i in range(num_pairs):
+            index0 = indices0[i]
+            index1 = indices1[i]
+            count = data[i]
+            distance_mean = distance_means[i]
+            correction0 = corrections[index0]
+            correction1 = corrections[index1]
+            if data[i] > 0:
+                gradients[index0] += distance_mean * correction1 - count / correction0
+                gradients[index1] += distance_mean * correction0 - count / correction1
+                if findcost == 1:
+                    value = distance_mean * correction0 * correction1
+                    cost += value - count * log(value)
+            else:
+                gradients[index0] += distance_mean * correction1
+                gradients[index1] += distance_mean * correction0
+                if findcost == 1:
+                    cost += distance_mean * correction0 * correction1
     return cost
