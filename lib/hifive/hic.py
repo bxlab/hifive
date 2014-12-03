@@ -169,7 +169,7 @@ class HiC(object):
         datafile.close()
         return None
 
-    def filter_fends(self, mininteractions=10, maxdistance=0):
+    def filter_fends(self, mininteractions=10, mindistance=0, maxdistance=0):
         """
         Iterate over the dataset and remove fends that do not have 'minobservations' within 'maxdistance' of themselves using only unfiltered fends.
 
@@ -177,12 +177,15 @@ class HiC(object):
 
         :param mininteractions: The required number of interactions for keeping a fend in analysis.
         :type mininteractions: int.
-        :param maxdistance: The maximum inter-fend distance used to count fend interactions. A value of 0 indicates all cis-data should be used.
+        :param mindistance: The minimum inter-fend distance used to count fend interactions.
+        :type mindistance: int.
+        :param maxdistance: The maximum inter-fend distance used to count fend interactions. A value of 0 indicates no maximum should be used.
         :type maxdistance: int.
         :returns: None
         """
         print >> sys.stderr, ("Filtering fends..."),
         self.mininteractions = mininteractions
+        self.mindistance = mindistance
         self.maxdistance = maxdistance
         original_count = numpy.sum(self.filter)
         previous_valid = original_count + 1
@@ -190,12 +193,18 @@ class HiC(object):
         coverage = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
         # determine maximum ranges of valid interactions for each fend
         max_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
+        min_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
         _distance.find_max_fend(max_fend,
                                 self.fends['fends']['mid'][...],
                                 self.fends['fends']['chr'][...],
                                 self.fends['chr_indices'][...],
                                 0,
                                 maxdistance)
+        _distance.find_min_fend(min_fend,
+                        self.fends['fends']['mid'][...],
+                        self.fends['fends']['chr'][...],
+                        self.fends['chr_indices'][...],
+                        mindistance)
          # copy needed arrays
         data = self.data['cis_data'][...]
         indices = self.data['cis_indices'][...]
@@ -206,6 +215,7 @@ class HiC(object):
             find_fend_coverage(data,
                                indices,
                                self.filter,
+                               min_fend,
                                max_fend,
                                coverage,
                                mininteractions)
@@ -213,8 +223,7 @@ class HiC(object):
         print >> sys.stderr, ("Removed %i of %i fends\n") % (original_count - current_valid, original_count),
         return None
 
-    def find_distance_means(self, numbins=90, minsize=200, maxsize=0, smoothed=0, startfend=0, stopfend=None,
-                             corrected=False):
+    def find_distance_means(self, numbins=90, minsize=200, maxsize=0, corrected=False):
         """
         Count reads and possible interactions from valid fend pairs in each distance bin to find mean bin signals. This function is MPI compatible.
 
@@ -226,98 +235,184 @@ class HiC(object):
         :type minsize: int.
         :param maxsize: If this value is larger than the largest included chromosome, it will extend bins out to maxsize. If this value is smaller, it is ignored.
         :type maxsize: int.
-        :param smoothed: Indicates the degree of smoothing to the distance curve for noise reduction. A value of less than 1 indicates no smoothing.
-        :type smoothed: int.
-        :param startfend: The first fend to include interactions from in calculating bin means.
-        :type startfend: int.
-        :param stopfend: The first fend to exclude interactions from in calculating bin means. If stopfend is None, there is no upper bound on included fends.
-        :type stopfend: int.
         :param corrected: If True, correction values are applied to counts prior to summing.
         :type corrected: bool.
         :returns: None
         """
-        if stopfend is None:
-            stopfend = self.filter.shape[0]
-        self.distance_smoothing = smoothed
         if self.rank == 0:
-            print >> sys.stderr, ("Find distance means..."),
-            # determine maximum valid inter-fend distance
-            max_distance = 0
-            for i in range(self.fends['fends']['chr'][startfend],
-                           self.fends['fends']['chr'][stopfend - 1] + 1):
-                start_fend = max(self.fends['chr_indices'][i], startfend)
-                while start_fend < min(stopfend, self.fends['chr_indices'][i + 1]) and self.filter[start_fend] == 0:
-                    start_fend += 1
-                stop_fend = min(stopfend, self.fends['chr_indices'][i + 1])
-                while stop_fend > max(start_fend, self.fends['chr_indices'][i]) and self.filter[stop_fend - 1] == 0:
-                    stop_fend -= 1
-                if start_fend < stop_fend:
-                    max_distance = max(max_distance, self.fends['fends']['mid'][stop_fend - 1] -
-                                       self.fends['fends']['mid'][start_fend])
-            max_distance = max(maxsize, max_distance)
-            # find bin cutoffs
-            self.distance_bins = numpy.empty(numbins, dtype=numpy.int32)
-            self.distance_bins[0] = minsize
-            if numbins > 1:
-                binsize = (log(max_distance) - log(minsize)) / (numbins - 1)
-                self.distance_bins[1:] = numpy.ceil(numpy.exp(numpy.arange(1, numbins) * binsize +
-                                                    log(minsize))).astype(numpy.int32)
-            self.distance_mids = numpy.zeros(numbins, dtype=numpy.float32)
-            self.distance_mids[:] = self.distance_bins.astype(numpy.float32) / exp(binsize * (1.0 - 0.5 ** 0.5))
-            # send bins to other workers
+            print >> sys.stderr, ('Finding distance arrays...'),
+        # determine max distance range of data
+        chr_indices = self.fends['chr_indices'][...]
+        max_dist = 0
+        valid_chroms = []
+        for i in range(chr_indices.shape[0] - 1):
+            start_fend = chr_indices[i]
+            stop_fend = chr_indices[i + 1]
+            while start_fend < stop_fend and self.filter[start_fend] == 0:
+                start_fend += 1
+            while stop_fend > start_fend and self.filter[stop_fend - 1] == 0:
+                stop_fend -= 1
+            if stop_fend - 1 > start_fend:
+                valid_chroms.append(i)
+                max_dist = max(max_dist,
+                               self.fends['fends']['mid'][stop_fend - 1] - self.fends['fends']['mid'][start_fend])
+        valid_chroms = numpy.asarray(valid_chroms, dtype=numpy.int32)
+        num_chroms = valid_chroms.shape[0]
+        # create cutoff values evenly spaced in log space
+        cutoffs = numpy.linspace(numpy.log(max(minsize, 1.0)), numpy.log(max(maxsize, max_dist)),
+                                 numbins).astype(numpy.float32)
+        cutoffs[-1] += 1.0
+        bin_size = numpy.zeros((num_chroms + 1, numbins), dtype=numpy.int64)
+        count_sum = numpy.zeros((num_chroms + 1, numbins), dtype=numpy.float64)
+        logdistance_sum = numpy.zeros((num_chroms + 1, numbins), dtype=numpy.float64)
+        # for each chromosome, find counts, possible interactions, and distance sums for each bin
+        for h, i in enumerate(valid_chroms):
+            start_fend = chr_indices[i]
+            stop_fend = chr_indices[i + 1]
+            rev_mapping = numpy.where(self.filter[start_fend:stop_fend] == 1)[0].astype(numpy.int32)
+            num_valid = rev_mapping.shape[0]
+            if self.rank == 0:
+                print >> sys.stderr, ('\r%s\rFinding distances for chromosome %s...') % \
+                                     (' ' * 80, self.fends['chromosomes'][i]),
+            # partition total possible interactions into roughly even-sized groups to spread across nodes
+            total_pairs = num_valid * (num_valid - 1) / 2
+            node_cutoffs = numpy.linspace(0, total_pairs, self.num_procs + 1).astype(numpy.float64)
+            pair_sums = numpy.r_[0, num_valid - numpy.arange(1, num_valid + 1)].astype(numpy.int64)
+            for j in range(1, pair_sums.shape[0]):
+                pair_sums[j] += pair_sums[j - 1]
+            node_ranges = numpy.searchsorted(pair_sums, node_cutoffs, side='left')
+            for j in range(1, node_cutoffs.shape[0] - 1):
+                if pair_sums[node_ranges[j]] - node_cutoffs[j] > node_cutoffs[j] - pair_sums[node_ranges[j] - 1]:
+                    node_ranges[j] -= 1
+            node_start = node_ranges[self.rank]
+            node_stop = node_ranges[self.rank + 1]
+            mapping = numpy.zeros(stop_fend - start_fend, dtype=numpy.int32) - 1
+            mapping[rev_mapping] = numpy.arange(num_valid)
+            mids = self.fends['fends']['mid'][rev_mapping + start_fend]
+            # pull relevant data
+            start_index = self.data['cis_indices'][rev_mapping[node_start] + start_fend]
+            stop_index = self.data['cis_indices'][rev_mapping[node_stop - 1] + 1 + start_fend]
+            indices = self.data['cis_data'][start_index:stop_index, :]
+            counts = indices[:, 2].astype(numpy.float64)
+            if corrected:
+                counts /= (self.corrections[indices[:, 0]] * self.corrections[indices[:, 1]])
+            indices = indices[:, :2]
+            indices -= start_fend
+            # find bin sums
+            _distance.find_distance_bin_sums(mapping,
+                                             rev_mapping,
+                                             cutoffs,
+                                             mids,
+                                             counts,
+                                             indices,
+                                             bin_size,
+                                             count_sum,
+                                             logdistance_sum,
+                                             node_start,
+                                             node_stop,
+                                             h)
+        if self.rank == 0:
+            # exchange arrays
+            print >> sys.stderr, ('\r%s\rExchanging distance arrays...') % (' ' * 80),
             for i in range(1, self.num_procs):
-                self.comm.send([max_distance, self.distance_bins, self.distance_mids], dest=i, tag=11)
-            # divide fends amongst workers
-            needed = (numpy.where(self.filter[startfend:stopfend] > 0)[0] + startfend).astype(numpy.int32)
-            numpy.random.shuffle(needed)
-            worker_size = int(ceil(needed.shape[0] / float(self.num_procs)))
+                bin_size += self.comm.recv(source=i, tag=11)
+                count_sum += self.comm.recv(source=i, tag=11)
+                logdistance_sum += self.comm.recv(source=i, tag=11)
+            # find chromosome means
+            bin_size[-1, :] = numpy.sum(bin_size[:-1, :], axis=0)
+            count_sum[-1, :] = numpy.sum(count_sum[:-1, :], axis=0)
+            logdistance_sum[-1, :] = numpy.sum(logdistance_sum[:-1, :], axis=0)
+            bin_size = bin_size.astype(numpy.float64)
+            count_sum = count_sum.astype(numpy.float64)
+            valid = numpy.where(count_sum[-1, :] > 0.0)[0]
+            count_means = numpy.log(count_sum[-1, valid] / bin_size[-1, valid])
+            distance_means = logdistance_sum[-1, valid] / bin_size[-1, valid]
+            # find distance line parameters, cutoffs, slopes and intercepts
+            distance_parameters = numpy.zeros((valid.shape[0] - 1, 3), dtype=numpy.float32)
+            distance_parameters[:-1, 0] = distance_means[1:-1]
+            distance_parameters[-1, 0] = numpy.inf
+            distance_parameters[:, 1] = ((count_means[1:] - count_means[:-1]) /
+                                         (distance_means[1:] - distance_means[:-1]))
+            distance_parameters[:, 2] = (count_means[1:] - distance_parameters[:, 1] * distance_means[1:])
+            # distribute distance parameters and chromosome means to all nodes
             for i in range(1, self.num_procs):
-                self.comm.send(needed[((i - 1) * worker_size):(i * worker_size)], dest=i, tag=11)
-            node_needed = needed[((self.num_procs - 1) * worker_size):]
+                self.comm.send(distance_parameters, dest=i, tag=11)
         else:
-            max_distance, self.distance_bins, self.distance_mids = self.comm.recv(source=0, tag=11)
-            node_needed = self.comm.recv(source=0, tag=11)
-        # allocate arrays
-        bin_sums = numpy.zeros(self.distance_bins.shape[0], dtype=numpy.float64)
-        bin_counts = numpy.zeros(self.distance_bins.shape[0], dtype=numpy.int64)
-        data = self.data['cis_data'][...]
-        data_indices = self.data['cis_indices'][...]
-        mids = self.fends['fends']['mid'][...]
-        chroms = self.fends['fends']['chr'][...]
-        chr_indices = self.fends['chr_indices']
-        # update arrays for each fend
-        for fend in node_needed:
-            stop_fend = min(stopfend, chr_indices[chroms[fend] + 1])
-            _distance.find_fend_distance_bin_values(self.filter,
-                                                    self.corrections,
-                                                    data,
-                                                    data_indices,
-                                                    mids,
-                                                    self.distance_bins,
-                                                    bin_sums,
-                                                    bin_counts,
-                                                    fend,
-                                                    stop_fend,
-                                                    int(corrected))
+            self.comm.send(bin_size, dest=0, tag=11)
+            self.comm.send(count_sum, dest=0, tag=11)
+            self.comm.send(logdistance_sum, dest=0, tag=11)
+            distance_parameters = self.comm.recv(source=0, tag=11)
+        self.distance_parameters = distance_parameters
+        if not corrected:
+            chrom_sums = self._find_chromosome_means()
+            if self.rank == 0:
+                self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
+                valid = numpy.where(chrom_sums > 0.0)[0]
+                chrom_sums[valid_chroms] /= numpy.sum(bin_size[:-1, :], axis=1)
+                chrom_sums[-1] /= numpy.sum(bin_size[-1, :])
+                chrom_sums[valid_chroms] = numpy.log(chrom_sums[valid_chroms])
+                chrom_sums[-1] = numpy.log(chrom_sums[-1])
+                self.chromosome_means[valid_chroms] = chrom_sums[-1] - chrom_sums[valid_chroms]
+                for i in range(1, self.num_procs):
+                    self.comm.send(self.chromosome_means, dest=i, tag=11)
+            else:
+                self.chromosome_means = self.comm.recv(source=0, tag=11)
+        if self.rank == 0:
+            print >> sys.stderr, ('\r%s\rFinding distance curve... Done\n') % (' ' * 80),
+        return [bin_size, count_sum, logdistance_sum, valid_chroms]
+
+    def _find_chromosome_means(self):
+        chr_indices = self.fends['chr_indices'][...]
+        self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
+        chrom_sums = numpy.zeros(chr_indices.shape[0], dtype=numpy.float64)
+        for i in range(chr_indices.shape[0] - 1):
+            start_fend = chr_indices[i]
+            stop_fend = chr_indices[i + 1]
+            num_valid = numpy.sum(self.filter[start_fend:stop_fend])
+            if num_valid == 0:
+                continue
+            rev_mapping = numpy.where(self.filter[start_fend:stop_fend] == 1)[0].astype(numpy.int32)
+            if self.rank == 0:
+                print >> sys.stderr, ('\r%s\rFinding mean for chromosome %s...') % \
+                                     (' ' * 80, self.fends['chromosomes'][i]),
+            # partition total possible interactions into roughly even-sized groups to spread across nodes
+            total_pairs = num_valid * (num_valid - 1) / 2
+            node_cutoffs = numpy.linspace(0, total_pairs, self.num_procs + 1).astype(numpy.float64)
+            pair_sums = numpy.r_[0, num_valid - numpy.arange(1, num_valid + 1)].astype(numpy.int64)
+            for j in range(1, pair_sums.shape[0]):
+                pair_sums[j] += pair_sums[j - 1]
+            node_ranges = numpy.searchsorted(pair_sums, node_cutoffs, side='left')
+            for j in range(1, node_cutoffs.shape[0] - 1):
+                if pair_sums[node_ranges[j]] - node_cutoffs[j] > node_cutoffs[j] - pair_sums[node_ranges[j] - 1]:
+                    node_ranges[j] -= 1
+            node_start = node_ranges[self.rank]
+            node_stop = node_ranges[self.rank + 1]
+            mapping = numpy.zeros(stop_fend - start_fend, dtype=numpy.int32) - 1
+            mapping[rev_mapping] = numpy.arange(num_valid)
+            mids = self.fends['fends']['mid'][rev_mapping + start_fend]
+            # pull relevant data
+            start_index = self.data['cis_indices'][rev_mapping[node_start] + start_fend]
+            stop_index = self.data['cis_indices'][rev_mapping[node_stop - 1] + 1 + start_fend]
+            data = self.data['cis_data'][start_index:stop_index, :]
+            data[:, 0] = mapping[data[:, 0] - start_fend]
+            data[:, 1] = mapping[data[:, 1] - start_fend]
+            valid = numpy.where((data[:, 0] != -1) * (data[:, 1] != -1))[0]
+            data = data[valid, :]
+            _distance.find_chromosome_sums(mids,
+                                           data,
+                                           self.distance_parameters,
+                                           chrom_sums,
+                                           i)
         if self.rank == 0:
             for i in range(1, self.num_procs):
-                temp = self.comm.recv(source=i, tag=11)
-                bin_sums += temp[0]
-                bin_counts += temp[1]
-            where = numpy.where(bin_counts > 0)[0]
-            bin_sums[where] /= bin_counts[where]
-            self.distance_means = bin_sums.astype(numpy.float32)[:]
-            print >> sys.stderr, ("Done\n"),
-            # if requested, smooth distance curve
-            if smoothed > 0:
-                self._smooth_distance_means(smoothed)
-            # send results back to workers
+                chrom_sums += self.comm.recv(source=i, tag=11)
+            chrom_sums[-1] = numpy.sum(chrom_sums[:-1])
             for i in range(1, self.num_procs):
-                self.comm.send(self.distance_means, dest=i, tag=11)
+                self.comm.Send(chrom_sums, dest=i, tag=13)
         else:
-            self.comm.send([bin_sums, bin_counts], dest=0, tag=11)
-            self.distance_means = self.comm.recv(source=0, tag=11)
-        return None
+            self.comm.send(chrom_sums, dest=0, tag=11)
+            self.comm.Recv(chrom_sums, source=0, tag=13)
+        return chrom_sums
 
     def _smooth_distance_means(self, smoothed):
         """Smooth distance curve in log-space using triangular smoothing of
@@ -343,194 +438,9 @@ class HiC(object):
         print >> sys.stderr, ("Done\n"),
         return None
 
-    def find_fend_corrections(self, maxdistance=0, burnin_iterations=10000, annealing_iterations=10000,
-                              learningrate=0.01, recalculate_distance=0, display=0):
-        """
-        Using gradient descent, learn correction values for each valid fend based on a Poisson distribution of observations. This function is MPI compatible.
-
-        :param maxdistance: The maximum inter-fend distance to be included in modeling.
-        :type maxdistance: int.
-        :param burnin_iterations: The number of iterations to use with constant learning rate in gradient descent for learning fend corrections.
-        :type burnin_iterations: int.
-        :param annealing_iterations: The number of iterations to use with a linearly-decreasing learning rate in gradient descent for learning fend corrections.
-        :type annealing_iterations: int.
-        :param learningrate: The gradient scaling factor for parameter updates.
-        :type learningrate: float
-        :param recalculate_distance: Number of iterations that should pass before recalculating the distance bin means to account for the updated fend corrections. If set to zero, no recalculation is performed.
-        :type recalculate_distance: int.
-        :param display: Specifies how many iterations between when cost is calculated and displayed as model is learned. If 'display' is zero, the cost is not calculated of displayed.
-        :type display: int.
-        :returns: None
-        """
-        num_bins = self.distance_bins.shape[0]
-        minsize = self.distance_bins[0]
-        smoothed = int(self.distance_smoothing)
-        # find range of fends for worker. starts and stops must always include whole fragments
-        valid = numpy.where(self.filter)[0]
-        worker_size = int(ceil(valid.shape[0] / float(self.num_procs)))
-        if self.rank == 0:
-            print >> sys.stderr, ("Find fend correction arrays..."),
-            if self.num_procs > 1:
-                start_fend = valid[worker_size * (self.num_procs - 1)]
-                start_fend -= start_fend % 2
-                stop_fend = valid[-1] + 1
-                stop_fend += stop_fend % 2
-            else:
-                start_fend = 0
-                stop_fend = self.filter.shape[0]
-        else:
-            start_fend = valid[worker_size * (self.rank - 1)]
-            start_fend -= start_fend % 2
-            stop_fend = valid[worker_size * self.rank]
-            stop_fend -= stop_fend % 2
-        # create arrays needed for root and find possible interactions
-        if self.rank == 0:
-            all_gradients = numpy.zeros(self.filter.shape[0], dtype=numpy.float32)
-            all_corrections = numpy.copy(self.corrections).astype(numpy.float32)
-            interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
-            _distance.find_possible_interactions(interactions,
-                                                 self.filter,
-                                                 self.fends['fends']['mid'][:],
-                                                 self.fends['chr_indices'][...],
-                                                 maxdistance)
-            fend_ranges = numpy.zeros((self.num_procs, 3), dtype=numpy.int32)
-        else:
-            all_gradients = None
-            all_corrections = None
-            fend_ranges = None
-        # create arrays common to all workers
-        num_fends = stop_fend - start_fend
-        max_fend = numpy.zeros(num_fends, dtype=numpy.int32)
-        _distance.find_max_fend(max_fend,
-                                self.fends['fends']['mid'][start_fend:],
-                                self.fends['fends']['chr'][start_fend:stop_fend],
-                                self.fends['chr_indices'][...],
-                                start_fend,
-                                maxdistance)
-        num_fends2 = max_fend[num_fends - 1]
-        stop_fend2 = num_fends2 + start_fend
-        gradients = numpy.zeros(num_fends2, dtype=numpy.float32)
-        corrections = self.corrections[start_fend:stop_fend2].astype(numpy.float32)
-        # if using multiple cores, send worker ranges to root and allocate arrays for receiving gradient data
-        if self.num_procs > 1:
-            if self.rank != 0:
-                self.comm.send([start_fend, stop_fend, stop_fend2], dest=0, tag=11)
-                gradient_arrays = None
-            else:
-                gradient_arrays = {}
-                fend_ranges[0, 0] = start_fend
-                fend_ranges[0, 1] = stop_fend
-                fend_ranges[0, 2] = stop_fend2
-                for i in range(1, self.num_procs):
-                    temp = self.comm.recv(source=i, tag=11)
-                    fend_ranges[i, 0] = temp[0]
-                    fend_ranges[i, 1] = temp[1]
-                    fend_ranges[i, 2] = temp[2]
-                    gradient_arrays[i] = numpy.empty(temp[2] - temp[0], dtype=numpy.float32)
-        # pull only needed data, adjusting as necessary
-        data_indices = self.data['cis_indices'][start_fend:(stop_fend + 1)]
-        data = self.data['cis_data'][data_indices[0]:data_indices[-1], :]
-        data_indices -= data_indices[0]
-        data[:, :2] -= start_fend
-        filter = self.filter[start_fend:stop_fend2]
-        original_chr_indices = self.fends['chr_indices'][...]
-        chr_indices = original_chr_indices - start_fend
-        # precalculate interaction distance means for all included interactions, if needed
-        max_bin = numpy.amax(max_fend - numpy.arange(num_fends))
-        interaction_means = numpy.zeros((num_fends, max_bin), dtype=numpy.float32)
-        distance_mid_logs = numpy.log(self.distance_mids).astype(numpy.float32)
-        distance_mean_logs = numpy.log(self.distance_means).astype(numpy.float32)
-        _distance.find_interaction_distance_means(interaction_means,
-                                                  filter,
-                                                  self.fends['fends']['mid'][start_fend:stop_fend2],
-                                                  self.distance_means,
-                                                  self.distance_mean_logs,
-                                                  self.distance_mids,
-                                                  distance_mid_logs,
-                                                  distance_mid_logs[1:] - distance_mid_logs[:-1],
-                                                  max_fend)
-      # calculate correction gradients
-        if self.rank == 0:
-            print >> sys.stderr, ("Done\n"),
-            print >> sys.stderr, ("Learning corrections..."),
-        learningstep = learningrate / max(1, annealing_iterations)
-        for phase in ['burnin', 'annealing']:
-            if phase == 'burnin':
-                iterations = burnin_iterations
-            else:
-                iterations = annealing_iterations
-            for iteration in range(iterations):
-                gradients.fill(0.0)
-                if display > 0 and iteration%display == 0:
-                    findcost = 1
-                else:
-                    findcost = 0
-                cost = _distance.calculate_gradients(data,
-                                                     data_indices,
-                                                     filter,
-                                                     interaction_means,
-                                                     corrections,
-                                                     gradients,
-                                                     max_fend,
-                                                     findcost)
-                # if using multiple cores, pass gradients to root
-                if self.num_procs > 1:
-                    cost = self._exchange_gradients(gradients, all_gradients, fend_ranges, gradient_arrays, cost)
-                else:
-                    all_gradients = gradients
-                if self.rank == 0:
-                    if findcost > 0:
-                        print >> sys.stderr, ("\r%s phase:%s iteration:%i  cost:%f ") %\
-                                             ('Learning corrections...', phase, iteration, cost),
-                    # update corrections on root only
-                    _distance.update_corrections(all_corrections,
-                                                 all_gradients,
-                                                 interactions,
-                                                 learningrate)
-                # if using multiple cores, distribute needed correction values to workers
-                if self.num_procs > 1:
-                    self._exchange_corrections(corrections, all_corrections, fend_ranges)
-                else:
-                    corrections = all_corrections[start_fend:stop_fend2]
-                if phase == 'annealing':
-                    learningrate -= learningstep
-                if recalculate_distance > 0 and (iteration + 1) % recalculate_distance == 0:
-                    if self.rank == 0:
-                        self.corrections = all_corrections.astype(numpy.float32)
-                        if self.num_procs > 1:
-                            for i in range(1, self.num_procs):
-                                self.comm.Send(self.corrections, dest=i, tag=13)
-                    else:
-                        self.comm.Recv(self.corrections, source=0, tag=13)
-                        self.corrections = self.corrections.astype(numpy.float32)
-                    self.find_distance_means(numbins=num_bins, minsize=minsize, smoothed=smoothed,
-                                             corrected=True)
-                    interaction_means[:, :] = 0.0
-                    distance_mid_logs = numpy.log(self.distance_mids).astype(numpy.float32)
-                    distance_mean_logs = numpy.log(self.distance_means).astype(numpy.float32)
-                    _distance.find_interaction_distance_means(interaction_means,
-                                                  filter,
-                                                  self.fends['fends']['mid'][start_fend:stop_fend2],
-                                                  self.distance_means,
-                                                  self.distance_mean_logs,
-                                                  self.distance_mids,
-                                                  distance_mid_logs,
-                                                  distance_mid_logs[1:] - distance_mid_logs[:-1],
-                                                  max_fend)
-        if self.rank == 0:
-            self.corrections = all_corrections.astype(numpy.float32)
-            if self.num_procs > 1:
-                for i in range(1, self.num_procs):
-                    self.comm.Send(self.corrections, dest=i, tag=13)
-            print >> sys.stderr, ("\rLearning corrections... Done%s\n") % (' ' * 60),
-        elif self.num_procs > 1:
-            self.comm.Recv(self.corrections, source=0, tag=13)
-            self.corrections = self.corrections.astype(numpy.float32)
-        return None
-
-    def find_fend_corrections2(self, mindistance=0, maxdistance=0, minchange=0.0, burnin_iterations=10000,
-                               annealing_iterations=10000, learningrate=0.1, display=0, chroms=None,
-                               precalculate=True):
+    def find_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0015, burnin_iterations=10000,
+                              annealing_iterations=10000, learningrate=0.1, display=0, chroms=None,
+                              precalculate=True):
         """
         Using gradient descent, learn correction values for each valid fend based on a Poisson distribution of observations. This function is MPI compatible.
 
@@ -560,211 +470,228 @@ class HiC(object):
         for chrom in chroms:
             chrint = self.chr2int[chrom]
             if self.rank == 0:
-                print >> sys.stderr, ("%s\rFinding fend correction arrays for chromosome %s...") % (' ' * 80, chrom),
-                start_fend = self.chr_indices[chrint]
-                stop_fend = self.chr_indices[chrint + 1]
+                print >> sys.stderr, ("\r%s\rFinding fend correction arrays for chromosome %s...") % (' ' * 80, chrom),
+                start_fend = self.fends['chr_indices'][chrint]
+                stop_fend = self.fends['chr_indices'][chrint + 1]
                 while start_fend < stop_fend and self.filter[start_fend] == 0:
                     start_fend += 1
                 while stop_fend > start_fend and self.filter[stop_fend - 1] == 0:
                     stop_fend -= 1
-                num_valid = numpy.sum(self.filter[start_fend:stop_fend])
-                indices0, indices1 = numpy.triu_indices(num_valid, 1)
-                if self.num_procs > 1:
-                    node_ranges = numpy.round(numpy.linspace(0, indices.shape[0], self.num_procs)).astype(numpy.int32)
-                    for i in range(1, self.num_procs):
-                        self.comm.send([start_fend, stop_fend], dest=i, tag=11)
-                        self.comm.send(indices0[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
-                        self.comm.send(indices1[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
-                    indices0 = indices0[:node_ranges[1]]
-                    indices1 = indices1[:node_ranges[1]]
+                for i in range(1, self.num_procs):
+                    self.comm.send([start_fend, stop_fend], dest=i, tag=11)
             else:
                 start_fend, stop_fend = self.comm.recv(source=0, tag=11)
-                indices0 = self.comm.recv(source=0, tag=11)
-                indices1 = self.comm.recv(source=0, tag=11)
-                num_valid = numpy.sum(self.filter[start_fend:stop_fend])
             num_fends = stop_fend - start_fend
-            mapping = numpy.zeros(num_fends, dtype=numpy.int32) - 1
             rev_mapping = numpy.where(self.filter[start_fend:stop_fend] == 1)[0].astype(numpy.int32)
+            num_valid = rev_mapping.shape[0]
+            node_ranges = numpy.round(numpy.linspace(0, num_valid, self.num_procs + 1)).astype(numpy.int32)
+            mapping = numpy.zeros(num_fends, dtype=numpy.int32) - 1
             mapping[rev_mapping] = numpy.arange(num_valid)
-            distances = numpy.zeros(indices0.shape[0], dtype=numpy.float32)
-            distance_mid_logs = numpy.log(self.distance_mids).astype(numpy.float32)
-            distance_mean_logs = numpy.log(self.distance_means).astype(numpy.float32)
-            _distance.find_remapped_distance_means(indices0, indices1, distances,
-                                                   self.fends['fends']['mid'][rev_mapping + start_fend],
-                                                   self.distance_mids, self.distance_means, distance_mean_logs,
-                                                   distance_mid_logs, distance_mid_logs[1:] - distance_mid_logs[:-1],
-                                                   mindistance, maxdistance)
-            valid = numpy.where(distances > 0.0)[0]
-            indices0 = indices0[valid]
-            indices1 = indices1[valid]
-            distances = distances[valid]
+            fend_ranges = numpy.zeros((num_valid, 3), dtype=numpy.int64)
+            mids = self.fends['fends']['mid'][rev_mapping + start_fend]
+            if maxdistance == 0:
+                maxdistance = mids[-1] - mids[0]
+            # find number of downstream interactions for each fend using distance limits
+            _distance.find_fend_ranges(rev_mapping,
+                                       mids,
+                                       fend_ranges,
+                                       mindistance,
+                                       maxdistance,
+                                       node_ranges[self.rank],
+                                       node_ranges[self.rank + 1])
             if self.rank == 0:
-                if self.num_procs > 1:
-                    for i in range(1, self.num_procs):
-                        indices0 = numpy.hstack((indices0, self.comm.recv(source=i, tag=11)))
-                    node_ranges = numpy.round(numpy.linspace(0, indices0.shape[0], self.num_procs)).astype(numpy.int32)
-                    for i in range(1, self.num_procs):
-                        self.comm.send(indices0[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
-                    indices0 = indices0[:node_ranges[1]]
-                    for i in range(1, self.num_procs):
-                        indices1 = numpy.hstack((indices1, self.comm.recv(source=i, tag=11)))
-                    for i in range(1, self.num_procs):
-                        self.comm.send(indices1[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
-                    indices1 = indices1[:node_ranges[1]]
-                    for i in range(1, self.num_procs):
-                        distances = numpy.hstack((distances, self.comm.recv(source=i, tag=11)))
-                    for i in range(1, self.num_procs):
-                        self.comm.send(distances[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
-                    distances = distances[:node_ranges[1]]
-                interactions = numpy.bincount(indices0, minlength=rev_mapping.shape[0])
-                interactions += numpy.bincount(indices1, minlength=rev_mapping.shape[0])
-                if self.num_procs > 1:
-                    for i in range(1, self.num_procs):
-                        interactions += self.comm.recv(source=i, tag=11)
-                    temp = numpy.zeros(rev_mapping.shape[0], dtype=numpy.float32)
+                for i in range(1, self.num_procs):
+                    fend_ranges[node_ranges[i]:node_ranges[i + 1], :] = self.comm.recv(source=i, tag=11)
+                for i in range(1, self.num_procs):
+                    self.comm.Send(fend_ranges, dest=i, tag=13)
             else:
-                self.comm.send(indices0, dest=0, tag=11)
-                indices0 = self.comm.recv(source=0, tag=11)
-                self.comm.send(indices1, dest=0, tag=11)
-                indices1 = self.comm.recv(source=0, tag=11)
-                self.comm.send(distances, dest=0, tag=11)
-                distances = self.comm.recv(source=0, tag=11)
-                interactions = numpy.bincount(indices0, minlength=rev_mapping.shape[0])
-                interactions += numpy.bincount(indices1, minlength=rev_mapping.shape[0])
+                self.comm.send(fend_ranges[node_ranges[self.rank]:node_ranges[self.rank + 1], :], dest=0, tag=11)
+                self.comm.Recv(fend_ranges, source=0, tag=13)
+            total_pairs = numpy.sum(fend_ranges[:, 0])
+            node_ranges = numpy.round(numpy.linspace(0, total_pairs, self.num_procs + 1)).astype(numpy.int64)
+            num_pairs = node_ranges[self.rank + 1] - node_ranges[self.rank]
+            indices0 = numpy.zeros(num_pairs, dtype=numpy.int32)
+            indices1 = numpy.zeros(num_pairs, dtype=numpy.int32)
+            distance_means = numpy.zeros(num_pairs, dtype=numpy.float32)
+            data = numpy.zeros(num_pairs, dtype=numpy.int32)
+            _distance.find_node_indices(rev_mapping,
+                                        indices0,
+                                        indices1,
+                                        fend_ranges,
+                                        node_ranges[self.rank],
+                                        node_ranges[self.rank + 1])            
+            interactions = numpy.bincount(indices0, minlength=rev_mapping.shape[0])
+            interactions += numpy.bincount(indices1, minlength=rev_mapping.shape[0])
+            if self.rank == 0:
+                for i in range(1, self.num_procs):
+                    interactions += self.comm.recv(source=i, tag=11)
+                    temp = numpy.zeros(rev_mapping.shape[0], dtype=numpy.float64)
+            else:
                 self.comm.send(interactions, dest=0, tag=11)
                 temp = None
-            data = numpy.zeros(indices0.shape[0], dtype=numpy.int32)
-            start_index = self.data['cis_indices'][start_fend + indices0[0]]
-            stop_index = self.data['cis_indices'][start_fend + indices0[-1] + 1]
+            if self.rank == 0:
+                print >> sys.stderr, ("\r%s\rFinding distance means for chromosome %s...") % (' ' * 80, chrom),
+            _distance.find_remapped_distance_means(indices0,
+                                                   indices1,
+                                                   mids,
+                                                   distance_means,
+                                                   self.distance_parameters,
+                                                   self.chromosome_means[chrint])
+            if self.rank == 0:
+                print >> sys.stderr, ("\r%s\rRemapping counts for chromosome %s...") % (' ' * 80, chrom),
+            start_index = self.data['cis_indices'][start_fend]
+            stop_index = self.data['cis_indices'][stop_fend]
+            #start_index = self.data['cis_indices'][start_fend + indices0[0]]
+            #stop_index = self.data['cis_indices'][start_fend + indices0[-1] + 1]
             temp_data = self.data['cis_data'][start_index:stop_index, :]
-            remap_counts(indices0, indices1, mapping, data, temp_data, start_fend)
+            temp_data = temp_data[numpy.where(temp_data[:, 1] < stop_fend)[0], :]
+            temp_data[:, 0] = mapping[temp_data[:, 0] - start_fend]
+            temp_data[:, 1] = mapping[temp_data[:, 1] - start_fend]
+            temp_data = temp_data[numpy.where((temp_data[:, 0] >= 0) * (temp_data[:, 1] >= 0))[0], :]
+            indices = indices0.astype(numpy.int64) * num_valid + indices1.astype(numpy.int64)
+            data_indices = temp_data[:, 0].astype(numpy.int64) * num_valid + temp_data[:, 1].astype(numpy.int64)
+            temp_indices = numpy.searchsorted(indices[:-1], data_indices)
+            where = numpy.where(data_indices == indices[temp_indices])
+            where = numpy.where(data_indices == indices[temp_indices])[0]
+            data[temp_indices[where]] = temp_data[where, 2]
+            #remap_counts(indices0, indices1, data, temp_data)
             if precalculate:
-                count_sums = numpy.bincount(indices0, weights=data, minlength=rev_mapping.shape[0])
-                count_sums += numpy.bincount(indices1, weights=data, minlength=rev_mapping.shape[0])
+                enrichments = data / distance_means
+                count_sums = numpy.bincount(indices0, weights=enrichments, minlength=rev_mapping.shape[0])
+                count_sums += numpy.bincount(indices1, weights=enrichments, minlength=rev_mapping.shape[0])
                 if self.rank == 0:
                     for i in range(1, self.num_procs):
                         count_sums += self.comm.recv(source=i, tag=11)
-                    corrections = (count_sums / interactions.astype(numpy.float32)).astype(numpy.float32)
+                    corrections = ((count_sums / interactions.astype(numpy.float32)) ** 0.5).astype(numpy.float32)
                     for i in range(1, self.num_procs):
                         self.comm.send(corrections, dest=i, tag=11)
+                else:
+                    self.comm.send(count_sums, dest=0, tag=11)
+                    corrections = self.comm.recv(source=0, tag=11)
             else:
                 corrections = self.corrections[numpy.where(mapping >= 0)[0] + start_fend]
-            prev_corrections = numpy.copy(corrections)
-            gradients = numpy.zeros(corrections.shape[0], dtype=numpy.float32)
+            where = numpy.where(data > 0)[0]
+            nonzero_indices0 = indices0[where]
+            nonzero_indices1 = indices1[where]
+            counts = data[where]
+            nonzero_means = distance_means[where]
+            where = numpy.where(data == 0)[0]
+            del data
+            zero_indices0 = indices0[where]
+            del indices0
+            zero_indices1 = indices1[where]
+            del indices1
+            zero_means = distance_means[where]
+            del distance_means
+            del where
+            gradients = numpy.zeros(corrections.shape[0], dtype=numpy.float64)
             cont = True
-            node_ranges = numpy.round(numpy.linspace(0, corrections.shape[0], self.num_procs)).astype(numpy.int32)
-            start_index = node_ranges[self.rank]
-            stop_index = node_ranges[self.rank + 1]
             # calculate correction gradients
             learningstep = learningrate / max(1, annealing_iterations)
             if self.rank == 0:
-                print >> sys.stderr, ("\r%s") % (' ' * 80),
+                print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
             for phase in ['burnin', 'annealing']:
                 if phase == 'burnin':
                     iterations = burnin_iterations
                 else:
                     iterations = annealing_iterations
+                if iterations == 0:
+                    cont = False
+                else:
+                    cont = True
                 iteration = 1
-                cont = True
                 while cont:
                     gradients.fill(0.0)
                     if display > 0 and iteration%display == 0:
-                        findcost = 1
+                        findcost = True
                     else:
-                        findcost = 0
-                    cost = _distance.calculate_gradients2(indices0,
-                                                          indices1,
-                                                          data,
-                                                          distances,
-                                                          corrections,
-                                                          gradients,
-                                                          findcost)
+                        findcost = False
+                    _distance.calculate_gradients(zero_indices0,
+                                                  zero_indices1,
+                                                  nonzero_indices0,
+                                                  nonzero_indices1,
+                                                  nonzero_means,
+                                                  zero_means,
+                                                  counts,
+                                                  corrections,
+                                                  gradients)
+                    if findcost:
+                        cost = _distance.calculate_cost(zero_indices0,
+                                                        zero_indices1,
+                                                        nonzero_indices0,
+                                                        nonzero_indices1,
+                                                        nonzero_means,
+                                                        zero_means,
+                                                        counts,
+                                                        corrections)
+                        if self.rank == 0:
+                            for i in range(1, self.num_procs):
+                                cost += self.comm.recv(source=i, tag=11)
+                        else:
+                            self.comm.send(cost, dest=0, tag=11)
                     # if using multiple cores, pass gradients to root
-                    if self.num_procs > 1:
-                        cost = self._exchange_gradients2(gradients, temp, cost)
-                    # update corrections
-                    change = self._exchange_corrections2(corrections,
-                                                         previous_corrections,
+                    self._exchange_gradients(gradients, temp)
+                    change = self._exchange_corrections(corrections,
                                                          gradients,
                                                          interactions,
-                                                         learningrate,
-                                                         start_index,
-                                                         stop_index)
-                    previous_corrections = numpy.copy(corrections)
+                                                         learningrate)
                     if self.rank == 0 and findcost > 0:
-                        print >> sys.stderr, ("\r%s phase:%s iteration:%i  cost:%f  change:%f ") %\
-                                             ('Learning corrections...', phase, iteration, cost, change),
+                        print >> sys.stderr, ("\r%s phase:%s iteration:%i  cost:%f  change:%f %s") %\
+                                             ('Learning corrections...', phase, iteration, cost, change, ' ' * 20),
                     if phase == 'annealing':
                         learningrate -= learningstep
-                        if iteration == annealing_iterations:
+                        if iteration >= annealing_iterations:
                             cont = False
                     else:
                         if iteration >= burnin_iterations and change <= minchange:
                             cont = False
                     iteration += 1
             self.corrections[rev_mapping + start_fend] = corrections
+            cost = _distance.calculate_cost(zero_indices0,
+                                            zero_indices1,
+                                            nonzero_indices0,
+                                            nonzero_indices1,
+                                            nonzero_means,
+                                            zero_means,
+                                            counts,
+                                            corrections)
+            if self.rank == 0:
+                for i in range(1, self.num_procs):
+                    cost += self.comm.recv(source=i, tag=11)
+                print >> sys.stderr, ("\rLearning corrections... chromosome %s  Final Cost:%f  Done%s\n") % \
+                    (chrom, cost, ' ' * 60),
+            else:
+                self.comm.send(cost, dest=0, tag=11)
         if self.rank == 0:
-            print >> sys.stderr, ("\rLearning corrections... Done%s\n") % (' ' * 60),
+            print >> sys.stderr, ("\rLearning corrections... Done%s\n") % (' ' * 80),
         return None
 
-    def _exchange_gradients(self, gradients, all_gradients, fend_ranges, gradient_arrays, cost):
-        """Compile all gradients on root"""
-        if self.rank == 0:
-            all_gradients.fill(0.0)
-            all_gradients[fend_ranges[0, 0]:fend_ranges[0, 2]] += gradients
-            for i in range(1, fend_ranges.shape[0]):
-                cost += self.comm.recv(source=i, tag=11)
-                self.comm.Recv(gradient_arrays[i], source=i, tag=13)
-                all_gradients[fend_ranges[i, 0]:fend_ranges[i, 2]] += gradient_arrays[i]
-        else:
-            self.comm.send(cost, dest=0, tag=11)
-            self.comm.Send(gradients, dest=0, tag=13)
-        return cost
-
-    def _exchance_gradients2(self, gradients, temp, cost):
+    def _exchange_gradients(self, gradients, temp):
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 self.comm.Recv(temp, source=i, tag=13)
                 gradients += temp
-                cost += self.comm.recv(source=i, tag=11)
         else:
             self.comm.Send(gradients, dest=0, tag=13)
-            self.comm.send(cost, dest=0, tag=11)
         return None
 
-    def _exchange_corrections(self, corrections, all_corrections, fend_ranges):
-        """Distribute correction values needed to each worker"""
+    def _exchange_corrections(self, corrections, gradients, interactions, learningrate):
         if self.rank == 0:
-            for i in range(1, fend_ranges.shape[0]):
-                self.comm.Send(all_corrections[fend_ranges[i, 0]:fend_ranges[i, 2]], dest=i, tag=13)
-            corrections[:] = all_corrections[fend_ranges[0, 0]:fend_ranges[0, 2]]
-        else:
-            self.comm.Recv(corrections, source=0, tag=13)
-        return None
-
-    def _exchange_corrections2(self, corrections, previous_corrections, gradients, interactions, learningrate,
-                               start_index, stop_index):
-        if self.rank == 0:
-            corrections -= learningrate * gradients
+            gradients /= interactions
+            change = numpy.mean(numpy.abs(gradients) / corrections)
+            corrections[:] = numpy.minimum(100.0, numpy.maximum(0.001,
+                                           corrections - learningrate * gradients))
             for i in range(1, self.num_procs):
                 self.comm.Send(corrections, dest=i, tag=13)
-            change = numpy.sum(numpy.abs(previous_corrections[start_index:stop_index] /
-                                         corrections[start_index:stop_index] - 1.0))
-            for i in range(1, self.num_procs):
-                change += self.comm.recv(source=i, tag=11)
-            change /= corrections.shape[0]
             for i in range(1, self.num_procs):
                 self.comm.send(change, dest=i, tag=11)
         else:
-            self.comm.Recv(corrections, source=i, tag=13)
-            change = numpy.sum(numpy.abs(previous_corrections[start_index:stop_index] /
-                                         corrections[start_index:stop_index] - 1.0))
-            self.comm.send(change, dest=0, tag=11)
+            self.comm.Recv(corrections, source=0, tag=13)
             change = self.comm.recv(source=0, tag=11)
         return change
 
     def find_express_fend_corrections(self, iterations=100, mindistance=0, remove_distance=True, usereads='cis',
-                                      recalculate_distance=0, mininteractions=None):
+                                      mininteractions=None):
         """
         Using iterative approximation, learn correction values for each valid fend. This function is MPI compatible.
 
@@ -776,193 +703,168 @@ class HiC(object):
         :type remove_distance: bool.
         :param usereads: Specifies which set of interactions to use, 'cis', 'trans', or 'all'.
         :type usereads: str.
-        :param recalculate_distance: Number of iterations that should pass before recalculating the distance bin means to account for the updated fend corrections. If set to zero, no recalculation is performed.
-        :type recalculate_distance: int.
         :param mininteractions: If a non-zero 'mindistance' is specified or only 'trans' interactions are used, fend filtering will be performed again to ensure that the data being used is sufficient for analyzed fends. This parameter may specify how many interactions are needed for valid fends. If not given, the value used for the last call to :func:`filter_fends` is used or, barring that, one.
         :type mininteractions: int.
         :returns: None
         """
-        num_bins = self.distance_bins.shape[0]
-        minsize = self.distance_bins[0]
-        smoothed = int(self.distance_smoothing)
         if mininteractions is None:
             if 'mininteractions' in self.__dict__.keys():
                 mininteractions = self.mininteractions
             else:
                 mininteractions = 1
-        if self.rank == 0:
-            print >> sys.stderr, ("Creating needed arrays for fast correction..."),
-            # make sure usereads has a valid value
-            read_int = {'cis':0, 'all':1, 'trans':2}
-            if usereads not in read_int:
-                print >> sys.stderr, ("usereads does not have a valid value.\n"),
-                return None
-            useread_int = read_int[usereads]
-            # create needed arrays
-            fend_means = numpy.zeros(self.filter.shape[0], dtype=numpy.float64)
-            interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int64)
-            mids = self.fends['fends']['mid'][:]
-            chr_indices = self.fends['chr_indices'][:]
-            all_valid = numpy.sum(self.filter)
-            min_fend = numpy.zeros((self.filter.shape[0], 2), dtype=numpy.int32)
-            mids = self.fends['fends']['mid'][:]
-            print >> sys.stderr, ("Done\nCopy data for fast correction..."),
-            # copy needed arrays from h5dict
-            if useread_int < 2:
-                data = self.data['cis_data'][...]
-                valid = numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]] *
-                                    (mids[data[:, 1]] - mids[data[:, 0]] >= mindistance))[0]
-                data = data[valid, :]
-            else:
-                data = None
-            if useread_int > 0:
-                trans_data = self.data['trans_data'][:, :]
-                valid = numpy.where(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]])[0]
-                trans_data = trans_data[valid, :]
-            else:
-                trans_data = None
-            print >> sys.stderr, ("Done\nCount interactions for fast correction..."),
-            # filter any fends with too few observed interactions
-            current_fends = numpy.sum(self.filter)
-            previous_fends = current_fends + 1
-            while current_fends < previous_fends:
-                if data is None:
-                    observed_interactions = numpy.bincount(numpy.r_[trans_data[:, 0], trans_data[:, 1]],
-                                                           minlength=self.filter.shape[0])
-                elif trans_data is None:
-                    observed_interactions = numpy.bincount(numpy.r_[data[:, 0], data[:, 1]],
-                                                           minlength=self.filter.shape[0])
-                else:
-                    observed_interactions = numpy.bincount(numpy.r_[data[:, 0], data[:, 1], trans_data[:, 0],
-                                                           trans_data[:, 1]], minlength=self.filter.shape[0])
-                self.filter[numpy.where(observed_interactions < mininteractions)] = 0
-                previous_fends = current_fends
-                current_fends = numpy.sum(self.filter)
-                if not data is None:
-                    data = data[numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0], :]
-                if not trans_data is None:
-                    trans_data = trans_data[numpy.where(self.filter[trans_data[:, 0]] *
-                                                        self.filter[trans_data[:, 1]])[0], :]
-            if not data is None:
-                data_indices = numpy.r_[0, numpy.bincount(data[:, 0], minlength=self.filter.shape[0])].astype(numpy.int32)
-                for i in range(1, data_indices.shape[0]):
-                    data_indices[i] += data_indices[i - 1]
-            print >> sys.stderr, ("Done\nFind MinDistance for fast correction..."),
-            for i in range(chr_indices.shape[0]-1):
-                # first fend outside of mindistance range
-                start = chr_indices[i]
-                stop = chr_indices[i]
-                for j in range(chr_indices[i], chr_indices[i + 1]):
-                    while start < j and mids[j] - mids[start] >= mindistance:
-                        start += 1
-                    min_fend[j, 0] = start
-                    stop = max(stop, j + 1)
-                    while stop < chr_indices[i + 1] and mids[stop] - mids[j] < mindistance:
-                        stop += 1
-                    min_fend[j, 1] = stop
-            _distance.find_mindistance_interactions(interactions,
-                                                    chr_indices,
-                                                    min_fend,
-                                                    self.filter,
-                                                    useread_int)
-            print >> sys.stderr, ("Done\nPrecalculate Distances for fast correction..."),
-            # precalculate interaction distance means for all included interactions
-            if not remove_distance or data is None:
-                distance_means = None
-                if trans_data is None:
-                    mu = (2.0 * numpy.sum(data[:, 2])) / numpy.sum(interactions)
-                    trans_mu = 1.0
-                elif data is None:
-                    mu = 1.0
-                    trans_mu = (2.0 * numpy.sum(trans_data[:, 2])) / numpy.sum(interactions)
-                else:
-                    mu = (2.0 * (numpy.sum(data[:, 2]) + numpy.sum(trans_data[:, 2]))) / numpy.sum(interactions)
-                    trans_mu = mu
-            else:
-                mu = 1.0
-                distance_means = numpy.zeros(data.shape[0], dtype=numpy.float32)
-                distance_mid_logs = numpy.log(self.distance_mids).astype(numpy.float32)
-                distance_mean_logs = numpy.log(self.distance_means).astype(numpy.float32)
-                _distance.find_data_distance_means(distance_means,
-                                                   self.filter,
-                                                   data,
-                                                   data_indices,
-                                                   mids,
-                                                   self.distance_means,
-                                                   self.distance_mean_logs,
-                                                   self.distance_mids,
-                                                   distance_mid_logs,
-                                                   distance_mid_logs[1:] - distance_mid_logs[:-1],
-                                                   0)
-                if not trans_data is None:
-                    total_possible = numpy.sum(self.filter) ** 2
-                    for i in range(self.fends['chr_indices'].shape[0] - 1):
-                        start = self.fends['chr_indices'][i]
-                        stop = self.fends['chr_indices'][i + 1]
-                        total_possible -= numpy.sum(self.filter[start:stop]) ** 2
-                    trans_mu = (2.0 * numpy.sum(trans_data[:, 2])) / total_possible
-                else:
-                    trans_mu = 1.0
-            print >> sys.stderr, ("Done\nFinding fend corrections...\n"),
-            # calculate corrections
-            for iteration in range(iterations):
-                cost = _distance.find_fend_means(distance_means,
-                                                 interactions,
-                                                 fend_means,
-                                                 data,
-                                                 trans_data,
-                                                 self.filter,
-                                                 self.corrections,
-                                                 mu,
-                                                 trans_mu)
-                print >> sys.stderr, ("\rIteration: %i  Cost: %f    ") % (iteration, cost),
-                if (recalculate_distance > 0 and (iteration + 1) % recalculate_distance == 0 and
-                        not data is None and remove_distance):
-                    for i in range(1, self.num_procs):
-                        self.comm.send(1, dest=i, tag=11)
-                    self.find_distance_means(numbins=num_bins, minsize=minsize, smoothed=smoothed,
-                                             corrected=True)
-                    distance_mid_logs = numpy.log(self.distance_mids).astype(numpy.float32)
-                    distance_mean_logs = numpy.log(self.distance_means).astype(numpy.float32)
-                    _distance.find_data_distance_means(distance_means,
-                                                       self.filter,
-                                                       data,
-                                                       data_indices,
-                                                       mids,
-                                                       self.distance_means,
-                                                       self.distance_mean_logs,
-                                                       self.distance_mids,
-                                                       distance_mid_logs,
-                                                       distance_mid_logs[1:] - distance_mid_logs[:-1],
-                                                       0)
-            print >> sys.stderr, ("\r%s\rFinal cost: %f\n") % (' ' * 80, cost),
-            for i in range(1, self.num_procs):
-                self.comm.send(0, dest=i, tag=11)      
+        print >> sys.stderr, ("Creating needed arrays for fast correction..."),
+        # make sure usereads has a valid value
+        read_int = {'cis':0, 'all':1, 'trans':2}
+        if usereads not in read_int:
+            print >> sys.stderr, ("usereads does not have a valid value.\n"),
+            return None
+        useread_int = read_int[usereads]
+        # create needed arrays
+        fend_means = numpy.zeros(self.filter.shape[0], dtype=numpy.float64)
+        interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int64)
+        mids = self.fends['fends']['mid'][:]
+        chr_indices = self.fends['chr_indices'][:]
+        all_valid = numpy.sum(self.filter)
+        min_fend = numpy.zeros((self.filter.shape[0], 2), dtype=numpy.int32)
+        mids = self.fends['fends']['mid'][:]
+        chroms = self.fends['fends']['chr'][:]
+        print >> sys.stderr, ("Done\nCopy data for fast correction..."),
+        # copy needed arrays from h5dict
+        if useread_int < 2:
+            data = self.data['cis_data'][...]
+            valid = numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]] *
+                                (mids[data[:, 1]] - mids[data[:, 0]] >= mindistance))[0]
+            data = data[valid, :]
         else:
-            task = self.comm.recv(source=0, tag=11)
-            while task == 1:
-                self.find_distance_means(numbins=num_bins, minsize=minsize, smoothed=smoothed,
-                                         corrected=True)
-                task = self.comm.recv(source=0, tag=11)
+            data = None
+        if useread_int > 0:
+            trans_data = self.data['trans_data'][:, :]
+            valid = numpy.where(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]])[0]
+            trans_data = trans_data[valid, :]
+        else:
+            trans_data = None
+        print >> sys.stderr, ("Done\nCount interactions for fast correction..."),
+        # filter any fends with too few observed interactions
+        current_fends = numpy.sum(self.filter)
+        previous_fends = current_fends + 1
+        while current_fends < previous_fends:
+            if data is None:
+                observed_interactions = numpy.bincount(numpy.r_[trans_data[:, 0], trans_data[:, 1]],
+                                                       minlength=self.filter.shape[0])
+            elif trans_data is None:
+                observed_interactions = numpy.bincount(numpy.r_[data[:, 0], data[:, 1]],
+                                                       minlength=self.filter.shape[0])
+            else:
+                observed_interactions = numpy.bincount(numpy.r_[data[:, 0], data[:, 1], trans_data[:, 0],
+                                                       trans_data[:, 1]], minlength=self.filter.shape[0])
+            self.filter[numpy.where(observed_interactions < mininteractions)] = 0
+            previous_fends = current_fends
+            current_fends = numpy.sum(self.filter)
+            if not data is None:
+                data = data[numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0], :]
+            if not trans_data is None:
+                trans_data = trans_data[numpy.where(self.filter[trans_data[:, 0]] *
+                                                    self.filter[trans_data[:, 1]])[0], :]
+        if not data is None:
+            data_indices = numpy.r_[0, numpy.bincount(data[:, 0], minlength=self.filter.shape[0])].astype(numpy.int32)
+            for i in range(1, data_indices.shape[0]):
+                data_indices[i] += data_indices[i - 1]
+        print >> sys.stderr, ("Done\nFind MinDistance for fast correction..."),
+        for i in range(chr_indices.shape[0]-1):
+            # first fend outside of mindistance range
+            start = chr_indices[i]
+            stop = chr_indices[i]
+            for j in range(chr_indices[i], chr_indices[i + 1]):
+                while start < j and mids[j] - mids[start] >= mindistance:
+                    start += 1
+                min_fend[j, 0] = start
+                stop = max(stop, j + 1)
+                while stop < chr_indices[i + 1] and mids[stop] - mids[j] < mindistance:
+                    stop += 1
+                min_fend[j, 1] = stop
+        _distance.find_mindistance_interactions(interactions,
+                                                chr_indices,
+                                                min_fend,
+                                                self.filter,
+                                                useread_int)
+        print >> sys.stderr, ("Done\nPrecalculate Distances for fast correction..."),
+        # precalculate interaction distance means for all included interactions
+        if not remove_distance or data is None:
+            distance_means = None
+            if trans_data is None:
+                mu = (2.0 * numpy.sum(data[:, 2])) / numpy.sum(interactions)
+                trans_mu = 1.0
+            elif data is None:
+                mu = 1.0
+                trans_mu = (2.0 * numpy.sum(trans_data[:, 2])) / numpy.sum(interactions)
+            else:
+                mu = (2.0 * (numpy.sum(data[:, 2]) + numpy.sum(trans_data[:, 2]))) / numpy.sum(interactions)
+                trans_mu = mu
+        else:
+            mu = 1.0
+            distance_means = numpy.zeros(data.shape[0], dtype=numpy.float32)
+            _distance.find_data_distance_means(distance_means,
+                                               self.filter,
+                                               data,
+                                               data_indices,
+                                               mids,
+                                               chroms,
+                                               self.distance_parameters,
+                                               self.chromosome_means)
+            if not trans_data is None:
+                total_possible = numpy.sum(self.filter) ** 2
+                for i in range(self.fends['chr_indices'].shape[0] - 1):
+                    start = self.fends['chr_indices'][i]
+                    stop = self.fends['chr_indices'][i + 1]
+                    total_possible -= numpy.sum(self.filter[start:stop]) ** 2
+                trans_mu = (2.0 * numpy.sum(trans_data[:, 2])) / total_possible
+            else:
+                trans_mu = 1.0
+        print >> sys.stderr, ("Done\nFinding fend corrections...\n"),
+        # calculate corrections
+        for iteration in range(iterations):
+            cost = _distance.find_fend_means(distance_means,
+                                             interactions,
+                                             fend_means,
+                                             data,
+                                             trans_data,
+                                             self.filter,
+                                             self.corrections,
+                                             mu,
+                                             trans_mu)
+            print >> sys.stderr, ("\rIteration: %i  Cost: %f    ") % (iteration, cost),
+        print >> sys.stderr, ("\r%s\rFinal cost: %f\n") % (' ' * 80, cost),
         return None
 
-    def find_trans_mean(self):
+    def find_trans_means(self):
         """
-        Calculate the mean signal across all valid fend-pair trans interactions.
+        Calculate the mean signals across all valid fend-pair trans interactions for each chromosome pair.
 
         :returns: None
         """
-        print >> sys.stderr, ("Finding mean signal across trans interactions..."),
-        possible = 0
+        print >> sys.stderr, ("Finding mean signals across trans interactions..."),
         chr_indices = self.fends['chr_indices'][...]
+        num_chroms = chr_indices.shape[0] - 1
+        possible = numpy.zeros(num_chroms * (num_chroms - 1) / 2, dtype=numpy.int32)
+        pos = 0
         for i in range(chr_indices.shape[0] - 2):
             valid1 = numpy.sum(self.filter[chr_indices[i]:chr_indices[i + 1]])
             for j in range(i + 1, chr_indices.shape[0] - 1):
                 valid2 = numpy.sum(self.filter[chr_indices[j]:chr_indices[j + 1]])
-                possible += valid1 * valid2
+                possible[pos] = valid1 * valid2
+                pos += 1
         trans_data = self.data['trans_data'][...]
-        actual = numpy.sum(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]] * trans_data[:, 2])
-        self.trans_mean = actual / float(possible)
+        valid = numpy.where(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]])[0]
+        trans_data = trans_data[valid, :]
+        del valid
+        chrom = self.fends['fends']['chr'][trans_data[:, 0]]
+        indices = chrom * num_chroms - (chrom * (chrom - 1) / 2)
+        indices += self.fends['fends']['chr'][trans_data[:, 1]]
+        del chrom
+        counts = trans_data[:, 2] / (self.corrections[trans_data[:, 0]] * self.corrections[trans_data[:, 1]])
+        del trans_data
+        actual = numpy.bincount(indices, weights=counts, minlength=possible.shape[0])
+        self.trans_means = actual / numpy.maximum(1.0, possible.astype(numpy.float32))
         print >> sys.stderr, ('Done\n'),
         return None
 

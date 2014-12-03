@@ -66,6 +66,7 @@ def find_fend_coverage(
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
         np.ndarray[DTYPE_int_t, ndim=1] data_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
+        np.ndarray[DTYPE_int_t, ndim=1] min_fend not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_int_t, ndim=1] coverage not None,
         int mincoverage):
@@ -77,6 +78,8 @@ def find_fend_coverage(
             if filter[fend1] == 0:
                 continue
             i = data_indices[fend1]
+            while i < data_indices[fend1 + 1] and data[i, 1] < min_fend[fend1]:
+                i += 1
             while i < data_indices[fend1 + 1] and data[i, 1] < max_fend[fend1]:
                 if filter[data[i, 1]] == 1:
                     coverage[fend1] += 1
@@ -100,19 +103,16 @@ def unbinned_signal_compact(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_means not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
+        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
+        np.ndarray[DTYPE_t, ndim=2] parameters not None,
+        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         int datatype,
         int startfend):
-    cdef long long int fend1, fend2, i, j, k, distance, last_index
-    cdef double frac
+    cdef long long int fend1, fend2, i, j, k, last_index
+    cdef double distance, chrom_mean
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_distance_bins = distance_mids.shape[0]
     with nogil:
         # if finding anything but expected, fill in actual signal
         if datatype < 4:
@@ -136,6 +136,7 @@ def unbinned_signal_compact(
             fend1 = mapping[i]
             if filter[fend1] == 0:
                 continue
+            chrom_mean = chromosome_means[chroms[i]]
             j = i + 1
             fend2 = mapping[j]
             k = 0
@@ -149,17 +150,10 @@ def unbinned_signal_compact(
                         signal[i, j - i - 1, 1] *= corrections[fend1] * corrections[fend2]
                     # if finding distance, enrichment, or expected, correct for distance
                     if datatype > 1:
-                        distance = mids[j] - mids[i]
-                        while k < num_distance_bins and distance_mids[k] < distance:
+                        distance = log(mids[j] - mids[i])
+                        while distance > parameters[k, 0]:
                             k += 1
-                        if k == 0:
-                            signal[i, j - i - 1, 1] *= distance_means[0]
-                        elif k < num_distance_bins:
-                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
-                            signal[i, j - i - 1, 1] *= exp(distance_mean_logs[k] * frac +
-                                                           distance_mean_logs[k - 1] * (1.0 - frac))
-                        else:
-                            signal[i, j - i - 1, 1] *= distance_means[num_distance_bins - 1]
+                        signal[i, j - i - 1, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                 j += 1
                 if j < num_fends:
                     fend2 = mapping[j]
@@ -173,17 +167,10 @@ def unbinned_signal_compact(
                         signal[i, j - i - 1, 1] *= corrections[fend1] * corrections[fend2]
                     # if finding distance, enrichment, or expected, correct for distance
                     if datatype > 1:
-                        distance = mids[j] - mids[i]
-                        while k < num_distance_bins and distance_mids[k] < distance:
+                        distance = log(mids[j] - mids[i])
+                        while distance > parameters[k, 0]:
                             k += 1
-                        if k == 0:
-                            signal[i, j - i - 1, 1] *= distance_means[0]
-                        elif k < num_distance_bins:
-                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
-                            signal[i, j - i - 1, 1] *= exp(distance_mean_logs[k] * frac +
-                                                           distance_mean_logs[k - 1] * (1.0 - frac))
-                        else:
-                            signal[i, j - i - 1, 1] *= distance_means[num_distance_bins - 1]
+                        signal[i, j - i - 1, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                     # if finding expected only, fill in filter values for observed signal
                     if datatype == 4:
                         signal[i, j - i - 1, 0] = 1.0
@@ -201,20 +188,17 @@ def unbinned_signal_upper(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mids not None,        
-        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_means not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
+        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
+        np.ndarray[DTYPE_t, ndim=2] parameters not None,
+        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         int datatype,
         int startfend):
-    cdef long long int fend1, fend2, k, distance
+    cdef long long int fend1, fend2, k
     cdef long long int index, i, j
-    cdef double frac
+    cdef double distance, chrom_mean
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_distance_bins = distance_mids.shape[0]
     cdef long long int signal_size = signal.shape[0]
     with nogil:
         # if finding anything but expected, fill in actual signal
@@ -238,6 +222,7 @@ def unbinned_signal_upper(
             fend1 = mapping[i]
             if filter[fend1] == 0:
                 continue
+            chrom_mean = chromosome_means[chroms[i]]
             index = i * num_fends - i * (i + 1) / 2 - i - 1
             j = i + 1
             fend2 = mapping[j]
@@ -252,17 +237,10 @@ def unbinned_signal_upper(
                         signal[index + j, 1] *= corrections[fend1] * corrections[fend2]
                     # if finding distance, enrichment, or expected, correct for distance
                     if datatype > 1:
-                        distance = mids[j] - mids[i]
-                        while k < num_distance_bins and distance_mids[k] < distance:
+                        distance = log(mids[j] - mids[i])
+                        while distance > parameters[k, 0]:
                             k += 1
-                        if k == 0:
-                            signal[index + j, 1] *= distance_means[0]
-                        elif k < num_distance_bins:
-                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
-                            signal[index + j, 1] *= exp(distance_mean_logs[k] * frac +
-                                                        distance_mean_logs[k - 1] * (1.0 - frac))
-                        else:
-                            signal[index + j, 1] *= distance_means[num_distance_bins - 1]
+                        signal[index + j, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                 j += 1
                 if j < num_fends:
                     fend2 = mapping[j]
@@ -277,16 +255,9 @@ def unbinned_signal_upper(
                     # if finding distance, enrichment, or expected, correct for distance
                     if datatype > 1:
                         distance = mids[j] - mids[i]
-                        while k < num_distance_bins and distance_mids[k] < distance:
+                        while distance > parameters[k, 0]:
                             k += 1
-                        if k == 0:
-                            signal[index + j, 1] *= distance_means[0]
-                        elif k < num_distance_bins:
-                            frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
-                            signal[index + j, 1] *= exp(distance_mean_logs[k] * frac +
-                                                        distance_mean_logs[k - 1] * (1.0 - frac))
-                        else:
-                            signal[index + j, 1] *= distance_means[num_distance_bins - 1]
+                        signal[index + j, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                     # if finding expected only, fill in filter values for observed signal
                     if datatype == 4:
                         signal[index + j, 0] = 1.0
@@ -304,22 +275,20 @@ def binned_signal_compact(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_means not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
+        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
+        np.ndarray[DTYPE_t, ndim=2] parameters not None,
+        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         int datatype):
-    cdef long long int i, j, k, l, distance
-    cdef double frac, expected, observed
+    cdef long long int i, j, k, l
+    cdef double distance, chrom_mean, expected, observed
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_distance_bins = distance_mids.shape[0]
     with nogil:
         for i in range(num_fends - 1):
             if filter[i] == 0 or mapping[i] == -1:
                 continue
+            chrom_mean = chromosome_means[chroms[i]]
             k = 0
             l = indices[i]
             # fill in signal
@@ -343,16 +312,10 @@ def binned_signal_compact(
                     expected *= corrections[i] * corrections[j]
                 # if finding distance, enrichment, or expected, correct for distance
                 if datatype > 1:
-                    distance = mids[j] - mids[i]
-                    while k < num_distance_bins and distance_mids[k] < distance:
+                    distance = log(mids[j] - mids[i])
+                    while distance > parameters[k, 0]:
                         k += 1
-                    if k == 0:
-                        expected *= distance_means[0]
-                    elif k < num_distance_bins:
-                        frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
-                        expected *= exp(distance_mean_logs[k] * frac + distance_mean_logs[k - 1] * (1.0 - frac))
-                    else:
-                        expected *= distance_means[num_distance_bins - 1]
+                    expected *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                 signal[mapping[i], mapping[j] - mapping[i] - 1, 0] += observed
                 signal[mapping[i], mapping[j] - mapping[i] - 1, 1] += expected
     return None
@@ -368,23 +331,21 @@ def binned_signal_upper(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mids not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_means not None,
-        np.ndarray[DTYPE_t, ndim=1] distance_mean_logs not None,
+        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
+        np.ndarray[DTYPE_t, ndim=2] parameters not None,
+        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         int datatype,
         int num_bins):
-    cdef long long int i, j, k, l, distance, index
-    cdef double frac, expected, observed
+    cdef long long int i, j, k, l, index
+    cdef double distance, chrom_mean, expected, observed
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_distance_bins = distance_mids.shape[0]
     with nogil:
         for i in range(num_fends - 1):
             if filter[i] == 0 or mapping[i] == -1:
                 continue
+            chrom_mean = chromosome_means[chroms[i]]
             index = mapping[i] * num_bins - mapping[i] * (mapping[i] + 1) / 2 - mapping[i] - 1
             k = 0
             l = indices[i]
@@ -410,15 +371,9 @@ def binned_signal_upper(
                 # if finding distance, enrichment, or expected, correct for distance
                 if datatype > 1:
                     distance = mids[j] - mids[i]
-                    while k < num_distance_bins and distance_mids[k] < distance:
+                    while distance > parameters[k, 0]:
                         k += 1
-                    if k == 0:
-                        expected *= distance_means[0]
-                    elif k < num_distance_bins:
-                        frac = (log(distance) - distance_mid_logs[k - 1]) / distance_log_spaces[k - 1]
-                        expected *= exp(distance_mean_logs[k] * frac + distance_mean_logs[k - 1] * (1.0 - frac))
-                    else:
-                        expected *= distance_means[num_distance_bins - 1]
+                    expected *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                 signal[index + mapping[j], 0] += observed
                 signal[index + mapping[j], 1] += expected
     return None
@@ -1305,22 +1260,16 @@ def dynamically_bin_trans(
 def remap_counts(
         np.ndarray[DTYPE_int_t, ndim=1] indices0,
         np.ndarray[DTYPE_int_t, ndim=1] indices1,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping,
         np.ndarray[DTYPE_int_t, ndim=1] data,
-        np.ndarray[DTYPE_int_t, ndim=2] temp_data,
-        int start_fend):
+        np.ndarray[DTYPE_int_t, ndim=2] temp_data):
     cdef int i, j, fend0, fend1
     cdef int num_pairs = indices0.shape[0]
     cdef int num_data = temp_data.shape[0]
     with nogil:
         i = 0
         for j in range(num_data):
-            fend0 = mapping[temp_data[j, 0] - start_fend]
-            if fend0 == -1:
-                continue
-            fend1 = mapping[temp_data[j, 1] - start_fend]
-            if fend1 == -1:
-                continue
+            fend0 = temp_data[j, 0]
+            fend1 = temp_data[j, 1]
             while i < num_pairs and indices0[i] < fend0:
                 i += 1
             while i < num_pairs and indices1[i] < fend1:

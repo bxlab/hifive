@@ -111,6 +111,7 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
         return None
     max_fend = numpy.zeros(num_bins, dtype=numpy.int32)
     mids = hic.fends['fends']['mid'][mapping]
+    chroms = hic.fends['fends']['chr'][mapping]
     find_max_fend(max_fend, mids, hic.fends['fends']['chr'][mapping],
                   hic.fends['chr_indices'][...], startfend, maxdistance)
     max_fend = numpy.minimum(max_fend, num_bins)
@@ -123,19 +124,15 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
         data_array = numpy.zeros((num_bins, max_bin, 2), dtype=numpy.float32)
     else:
         data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
-    distance_mid_logs = numpy.log(hic.distance_mids).astype(numpy.float32)
-    distance_mean_logs = numpy.log(hic.distance_means).astype(numpy.float32)
     # Fill in data values
     if arraytype == 'compact':
         _hic_binning.unbinned_signal_compact(data, data_indices, hic.filter, mapping,
-                                         hic.corrections, mids, hic.distance_mids, distance_mid_logs,
-                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
-                                         distance_mean_logs, max_fend, data_array, datatype_int, startfend)
+                                         hic.corrections, mids, chroms, hic.distance_parameters,
+                                         hic.chromosome_means, max_fend, data_array, datatype_int, startfend)
     else:
         _hic_binning.unbinned_signal_upper(data, data_indices, hic.filter, mapping,
-                                       hic.corrections, mids, hic.distance_mids, distance_mid_logs,
-                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
-                                         distance_mean_logs, max_fend, data_array, datatype_int, startfend)
+                                       hic.corrections, mids, chroms, hic.distance_parameters,
+                                       hic.chromosome_means, max_fend, data_array, datatype_int, startfend)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -244,6 +241,7 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
         data = None
     # Find fend ranges for each bin
     mids = hic.fends['fends']['mid'][startfend:stopfend]
+    chroms = hic.fends['fends']['chr'][startfend:stopfend]
     if binbounds is None:
         mapping = numpy.searchsorted(numpy.arange(1, num_bins + 1) * binsize + start, mids).astype(numpy.int32)
     else:
@@ -269,19 +267,15 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
         data_array = numpy.zeros((num_bins, max_bin, 2), dtype=numpy.float32)
     else:
         data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
-    distance_mid_logs = numpy.log(hic.distance_mids).astype(numpy.float32)
-    distance_mean_logs = numpy.log(hic.distance_means).astype(numpy.float32)
     # Fill in data values
     if arraytype == 'compact':
         _hic_binning.binned_signal_compact(data, data_indices, hic.filter[startfend:stopfend], mapping,
-                                       hic.corrections[startfend:stopfend], mids, hic.distance_mids, distance_mid_logs,
-                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
-                                         distance_mean_logs, max_fend, data_array, datatype_int)
+                                       hic.corrections[startfend:stopfend], mids, chroms, hic.distance_parameters,
+                                         hic.chromosome_means, max_fend, data_array, datatype_int)
     else:
         _hic_binning.binned_signal_upper(data, data_indices, hic.filter[startfend:stopfend], mapping,
-                                     hic.corrections[startfend:stopfend], mids, hic.distance_mids, distance_mid_logs,
-                                         distance_mid_logs[1:] - distance_mid_logs[:-1], hic.distance_means,
-                                         distance_mean_logs, max_fend, data_array, datatype_int, num_bins)
+                                     hic.corrections[startfend:stopfend], mids, chroms, hic.distance_parameters,
+                                         hic.chromosome_means, max_fend, data_array, datatype_int, num_bins)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -625,12 +619,14 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
         stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
     # If trans mean not already in hic and 'distance', 'enrichment', or 'expected' is requested, calculate
     if datatype in ['raw', 'fend']:
-        trans_mean = 0.0
-    elif 'trans_mean' not in hic.__dict__.keys():
-        hic.find_trans_mean()
-        trans_mean = hic.trans_mean
+        trans_mean = 1.0
+    elif 'trans_means' not in hic.__dict__.keys():
+        hic.find_trans_means()
+        index = chrint1 * hic.fends['chromosomes'].shape[0] - chrint1 * (chrint1 + 1) / 2 + chrint2
+        trans_mean = hic.trans_means[index]
     else:
-        trans_mean = hic.trans_mean
+        index = chrint1 * hic.fends['chromosomes'].shape[0] - chrint1 * (chrint1 + 1) / 2 + chrint2
+        trans_mean = hic.trans_means[index]
     print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
                          (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
     # Copy needed data from h5dict for faster access
@@ -734,7 +730,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
         num_procs = 1
     # Check if trans mean is needed and calculate if not already done
     if includetrans and remove_distance and 'trans_mean' not in hic.__dict__.keys():
-        hic.find_trans_mean()
+        hic.find_trans_means()
     # Check if filename already exists, and remove if it does
     if rank == 0:
         if os.path.exists(filename):
@@ -748,8 +744,14 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
             chroms = list(hic.fends['chromosomes'][...])
         # Assemble list of requested arrays
         needed = []
-        for chrom in chroms:
-            needed.append((chrom,))
+        chr_indices = hic.fends['chr_indices'][...]
+        for i in range(len(chroms))[::-1]:
+            chrom = chroms[i]
+            chrint = hic.chr2int[chrom]
+            if numpy.sum(hic.filter[chr_indices[chrint]:chr_indices[chrint + 1]]) > 0:
+                needed.append((chrom,))
+            else:
+                del chroms[i]
         if includetrans:
             for i in range(len(chroms)-1):
                 for j in range(i + 1, len(chroms)):
@@ -757,10 +759,10 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
         if num_procs == 1:
             node_needed = needed
         else:
-            worker_size = int(ceil(len(needed) / float(num_procs)))
+            node_ranges = numpy.round(numpy.linspace(0, len(needed), num_procs + 1)).astype(numpy.int32)
             for i in range(1, num_procs):
-                comm.send(needed[(worker_size * (i - 1)):(worker_size * i)], dest=i, tag=11)
-            node_needed = needed[(worker_size * (num_procs - 1)):]
+                comm.send(needed[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+            node_needed = needed[node_ranges[0]:node_ranges[1]]
     else:
         node_needed = comm.recv(source=0, tag=11)
     # Determine the requested data type
@@ -785,8 +787,9 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
     if rank == 0:
         if num_procs > 1:
             for i in range(1, num_procs):
-                temp = comm.recv(source=i, tag=11)
-                heatmaps.update(temp)
+                if node_ranges[i + 1] - node_ranges[i] > 0:
+                    temp = comm.recv(source=i, tag=11)
+                    heatmaps.update(temp)
             del temp
         for chrom in heatmaps.keys():
             if len(chrom) == 1:
@@ -800,6 +803,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
         output.close()
         print >> sys.stderr, ("Creating binned heatmap...Done\n"),
     else:
-        comm.send(heatmaps, dest=0, tag=11)
+        if len(heatmaps) > 0:
+            comm.send(heatmaps, dest=0, tag=11)
         del heatmaps
     return None
