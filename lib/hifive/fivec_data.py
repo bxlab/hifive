@@ -29,15 +29,18 @@ class FiveCData(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :param silent: Indicates whether to print information about function execution for this object.
+    :type silent: bool.
     :returns: :class:`FiveCData` class object.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename, mode='r', silent=False):
         """
         Create a :class:`FiveCData` object.
         """
         self.filename = os.path.abspath(filename)
         self.data = h5py.File(filename, mode)
+        self.silent = silent
         return None
 
     def save(self):
@@ -61,8 +64,9 @@ class FiveCData(object):
         """
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
-            print >> sys.stderr, \
-              ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
+            if not self.silent:
+                print >> sys.stderr, \
+                ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
             return None
         self.frags = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
                                 os.path.dirname(self.filename)), os.path.basename(fragfilename))
@@ -83,9 +87,11 @@ class FiveCData(object):
         for fname in filelist:
             reads = 0
             if not os.path.exists(fname):
-                print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
+                if not self.silent:
+                    print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
                 continue
-            print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
+            if not self.silent:
+                print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
             input = open(fname, 'r')
             for line in input:
                 temp = line.strip('\n').split('\t')
@@ -102,12 +108,15 @@ class FiveCData(object):
                 data[pair] = int(temp[2])
                 reads += int(temp[2])
             input.close()
-            print >> sys.stderr, ("%i validly-mapped reads loaded.\n") % (reads),
+            if not self.silent:
+                print >> sys.stderr, ("%i validly-mapped reads loaded.\n") % (reads),
             total_reads += reads
         if len(data) == 0:
-            print >> sys.stderr, ("No valid data was loaded.\n"),
+            if not self.silent:
+                print >> sys.stderr, ("No valid data was loaded.\n"),
             return None
-        print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
+        if not self.silent:
+            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
                              (total_reads,len(data)),
         # write fragment pairs to h5dict
         self._write_fragment_pairs(frags, data)
@@ -124,11 +133,13 @@ class FiveCData(object):
         :returns: None
         """
         if 'pysam' not in sys.modules.keys():
-            print >> sys.stderr, ("The pysam module must be installed to use this function.")
+            if not self.silent:
+                print >> sys.stderr, ("The pysam module must be installed to use this function.")
             return None
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
-            print >> sys.stderr, ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
+            if not self.silent:
+                print >> sys.stderr, ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
             return None
         self.frags = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
                                 os.path.dirname(self.filename)), os.path.basename(fragfilename))
@@ -151,16 +162,19 @@ class FiveCData(object):
             # determine which files have both mapped ends present
             fnames = glob("%s*_1.bam*" % prefix)
             if len(fnames) == 0:
-                print >> sys.stderr, ("No files found for prefix %s") % (prefix.split('/')[-1]),
+                if not self.silent:
+                    print >> sys.stderr, ("No files found for prefix %s") % (prefix.split('/')[-1]),
                 continue
             for fname in fnames:
                 if not os.path.exists(fname.replace('_1.bam', '_2.bam')):
-                    print >> sys.stderr, ("%s does not have a paired end.") % (fname.split('/')[-1]),
+                    if not self.silent:
+                        print >> sys.stderr, ("%s does not have a paired end.") % (fname.split('/')[-1]),
                     del fnames[fnames.index(fname)]
             unpaired = {}
             # load first half of paired ends
             for fname in fnames:
-                print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
+                if not self.silent:
+                    print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
                 input = pysam.Samfile(fname, 'rb')
                 for read in input.fetch(until_eof=True):
                     # Only consider reads with an alignment
@@ -177,11 +191,13 @@ class FiveCData(object):
                     else:
                         unpaired[read.qname] = names[seq_name]
                 input.close()
-                print >> sys.stderr, ("Done\n"),
+                if not self.silent:
+                    print >> sys.stderr, ("Done\n"),
             # load second half of paired ends
             for fname1 in fnames:
                 fname = fname1.replace('_1.bam', '_2.bam')
-                print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
+                if not self.silent:
+                    print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
                 input = pysam.Samfile(fname, 'rb')
                 for read in input.fetch(until_eof=True):
                     # Only consinder reads whose paired end was valid
@@ -209,13 +225,17 @@ class FiveCData(object):
                             reads += 1
                         del unpaired[read.qname]
                 input.close()
-                print >> sys.stderr, ("Done\n"),
-            print >> sys.stderr, ("Read %i validly_mapped read paired.\n") % (reads),
+                if not self.silent:
+                    print >> sys.stderr, ("Done\n"),
+            if not self.silent:
+                print >> sys.stderr, ("Read %i validly_mapped read paired.\n") % (reads),
             total_reads += reads           
         if len(data) == 0:
-            print >> sys.stderr, ("No valid data was loaded.\n"),
+            if not self.silent:
+                print >> sys.stderr, ("No valid data was loaded.\n"),
             return None
-        print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
+        if not self.silent:
+            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
                              (total_reads,len(data)),
         self._write_fragment_pairs(frags, data)
         return None
@@ -223,7 +243,8 @@ class FiveCData(object):
     def _write_fragment_pairs(self, frags, frag_pairs):
         """Separate frag pairs into cis (within region) and trans (between region) interactions and write to
         h5dict with index arrays."""
-        print >> sys.stderr, ("Writing fragment pair data to file..."),
+        if not self.silent:
+            print >> sys.stderr, ("Writing fragment pair data to file..."),
         cis = {}
         trans = {}
         for i in range(frags['regions'].shape[0]):
@@ -271,5 +292,6 @@ class FiveCData(object):
         if trans_data.shape[0] > 0:
             self.data.create_dataset('trans_data', data=trans_data)
             self.data.create_dataset('trans_indices', data=trans_indices)
-        print >> sys.stderr, ("Done\n"),
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return None

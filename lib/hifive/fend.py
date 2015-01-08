@@ -22,14 +22,17 @@ class Fend(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :param silent: Indicates whether to print information about function execution for this object.
+    :type silent: bool.
     :returns: :class:`Fend <hifive.fend.Fend>` class object
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename, mode='r', silent=False):
         """
         Create a Fend object.
         """
         self.fends = h5py.File(filename, mode)
+        self.silent = silent
         return None
 
     def save(self):
@@ -54,7 +57,8 @@ class Fend(object):
         :returns: None
         """
         if not os.path.exists(filename):
-            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
+            if not self.silent:
+                print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
             return None
         # if no genome name given, determine from filename
         if genome_name is None:
@@ -79,7 +83,7 @@ class Fend(object):
         self.fends.create_dataset(name='chromosomes', data=chromosomes)
         return None
 
-    def _load_from_fend(fname):
+    def _load_from_fend(self, fname):
         chromosomes = []
         chr2int = {}
         data = {}
@@ -131,11 +135,11 @@ class Fend(object):
         chromosomes = numpy.array(chromosomes)
         return [fends, chromosomes]
 
-    def _load_from_bed(fname):
+    def _load_from_bed(self, fname):
         chromosomes = []
         chr2int = {}
         data = {}
-        input = open(filename, 'r')
+        input = open(fname, 'r')
         for line in input:
             temp = line[:-1].split('\t')
             if temp[0] == 'chr':
@@ -143,8 +147,7 @@ class Fend(object):
             chrom = temp[0].strip('chr')
             if chrom not in data:
                 data[chrom] = []
-            data[chrom].append(int(temp[1]))
-            data[chrom].append(int(temp[2]))
+            data[chrom].append([int(temp[1]), int(temp[2])])
         input.close()
         chromosomes = data.keys()
         chromosomes.sort()
@@ -153,8 +156,9 @@ class Fend(object):
             if numpy.mean(data[chrom][:, 1] - data[chrom][:, 0]) < 10.0:
                 data[chrom] = (data[chrom][:, 0] + data[chrom][:, 1]) / 2
             else:
-                data[chrom] = numpy._r[data[chrom][0, 0], data[chrom][:, 1]].astype(numpy.int32)
-        indices = numpy.zeros(len(chromosomes + 1), dtype=numpy.int32)
+                data[chrom] = numpy.r_[data[chrom][0, 0], data[chrom][:, 1]].astype(numpy.int32)
+            data[chrom] = data[chrom][numpy.argsort(data[chrom])]
+        indices = numpy.zeros(len(chromosomes) + 1, dtype=numpy.int32)
         for i, chrom in enumerate(chromosomes):
             indices[i + 1] = indices[i] + (data[chrom].shape[0] - 1) * 2
         fends = numpy.empty(indices[-1], dtype=numpy.dtype([('chr', numpy.int32), ('start', numpy.int32),

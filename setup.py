@@ -1,20 +1,33 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
+import sys
+import multiprocessing
+
+import ez_setup
+ez_setup.use_setuptools()
+from setuptools import setup, find_packages
 from distutils.extension import Extension
-from Cython.Distutils import build_ext
 import numpy
 
 
+if 'setuptools.extension' in sys.modules:
+    m = sys.modules['setuptools.extension']
+    m.Extension.__dict__ = m._Extension.__dict__
+
 def main():
     setup(name = "hifive",
-          version = "2.0.0",
+          version = "2.1.0",
           description = 'Python library for normalizing and analyzing HiC and 5C data',
+          zip_safe = False,
+          include_package_data = True,
           package_dir = {'':'lib'},
-          packages = ['hifive','hifive.libraries'],
+          packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py']),
+          install_requires = ['numpy', 'scipy', 'h5py'],
+          setup_requires = ['setuptools_cython'],
           ext_modules = get_extension_modules(),
-          cmdclass = {'build_ext': build_ext},
-          requires = ['numpy', 'scipy', 'h5py'],
+          test_suite = 'nose.collector',
+          tests_require = 'nose',
+          #extras_require = {'pyx':[], 'PIL':[], 'mlpy':[]},
           author = "Michael Sauria",
           author_email = "mike.sauria@gmail.com",
           url='https://bitbucket.org/bxlab/hifive')

@@ -22,14 +22,17 @@ class Fragment(object):
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
     :type mode: str.
+    :param silent: Indicates whether to print information about function execution for this object.
+    :type silent: bool.
     :returns: :class:`Fragment <hifive.fragment.Fragment>` class object.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename, mode='r', silent=False):
         """
         Create a Fragment object.
         """
         self.fragments = h5py.File(filename, mode)
+        self.silent = silent
         return None
 
     def save(self):
@@ -58,7 +61,8 @@ class Fragment(object):
         :returns: None
         """
         if not os.path.exists(filename):
-            print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
+            if not self.silent:
+                print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
             return None
         chromosomes = []
         chr2int = {}
@@ -137,11 +141,11 @@ class Fragment(object):
             regions['start'][i] = region_array[i][3]
             regions['stop'][i] = region_array[i][4]
         # write all data to h5dict
-        dset = self.fragments.create_dataset(name='fragments', data=fragments)
+        self.fragments.create_dataset(name='fragments', data=fragments)
         if not re_name is None:
-            dset.attrs['re_name'] = re_name
+            self.fragments.attrs['re_name'] = re_name
         if not genome_name is None:
-            dset.attrs['genome_name'] = genome_name
+            self.fragments.attrs['genome_name'] = genome_name
         self.fragments.create_dataset(name='chr_indices', data=chr_indices)
         self.fragments.create_dataset(name='chromosomes', data=chromosomes)
         self.fragments.create_dataset(name='regions', data=regions)

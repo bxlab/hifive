@@ -31,7 +31,7 @@ import libraries._hic_binning as _hic_binning
 
 
 def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=None, datatype='enrichment',
-                        arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False):
+                        arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.
 
@@ -59,15 +59,21 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
     if datatype not in datatypes:
-        print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
         return None
     else:
         datatype_int = datatypes[datatype]
     if arraytype not in ['full', 'compact', 'upper']:
-        print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     # Determine start, stop, startfend, and stopfend
     chrint = hic.chr2int[chrom.strip('chr')]
@@ -85,13 +91,15 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
         stop = hic.fends['fends']['mid'][stopfend - 1] + 1
     else:
         stopfend = _find_fend_from_coord(hic, chrint, stop)
-    print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
+    if not silent:
+        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         start_index = hic.data['cis_indices'][startfend]
         stop_index = hic.data['cis_indices'][stopfend]
         if start_index == stop_index:
-            print >> sys.stderr, ("Insufficient data\n"),
+            if not silent:
+                print >> sys.stderr, ("Insufficient data\n"),
             return None
         data_indices = hic.data['cis_indices'][startfend:(stopfend + 1)]
         data_indices -= data_indices[0]
@@ -107,16 +115,19 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
     # Find maximum interaction partner for each fend
     num_bins = mapping.shape[0]
     if num_bins < 2:
-        print >> sys.stderr, ("Insufficient data\n"),
+        if not silent:
+            print >> sys.stderr, ("Insufficient data\n"),
         return None
     max_fend = numpy.zeros(num_bins, dtype=numpy.int32)
     mids = hic.fends['fends']['mid'][mapping]
+    chroms = hic.fends['fends']['chr'][mapping]
     find_max_fend(max_fend, mids, hic.fends['fends']['chr'][mapping],
                   hic.fends['chr_indices'][...], startfend, maxdistance)
     max_fend = numpy.minimum(max_fend, num_bins)
     max_bin = numpy.amax(max_fend - numpy.arange(num_bins))
     if max_bin <= 0:
-        print >> sys.stderr, ("Insufficient data.\n"),
+        if not silent:
+            print >> sys.stderr, ("Insufficient data.\n"),
         return None
     # Create requested array
     if arraytype == 'compact':
@@ -126,12 +137,12 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
     # Fill in data values
     if arraytype == 'compact':
         _hic_binning.unbinned_signal_compact(data, data_indices, hic.filter, mapping,
-                                         hic.corrections, mids, hic.distance_mids,
-                                         hic.distance_means, max_fend, data_array, datatype_int, startfend)
+                                         hic.corrections, mids, chroms, hic.distance_parameters,
+                                         hic.chromosome_means, max_fend, data_array, datatype_int, startfend)
     else:
         _hic_binning.unbinned_signal_upper(data, data_indices, hic.filter, mapping,
-                                       hic.corrections, mids, hic.distance_mids,
-                                       hic.distance_means, max_fend, data_array, datatype_int, startfend)
+                                       hic.corrections, mids, chroms, hic.distance_parameters,
+                                       hic.chromosome_means, max_fend, data_array, datatype_int, startfend)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -141,10 +152,12 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
         del data_array
         data_array = full_data_array
     if returnmapping:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return [data_array, mapping]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return data_array
 
 
@@ -156,7 +169,8 @@ def _find_fend_from_coord(hic, chrint, coord):
 
 
 def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=None, binsize=10000,
-                   binbounds=None, datatype='enrichment', arraytype='full', maxdistance=0, returnmapping=False):
+                   binbounds=None, datatype='enrichment', arraytype='full', maxdistance=0, returnmapping=False,
+                   **kwargs):
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype' aggregated in bins.
 
@@ -188,15 +202,21 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
     if datatype not in datatypes:
-        print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
         return None
     else:
         datatype_int = datatypes[datatype]
     if arraytype not in ['full', 'compact', 'upper']:
-        print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     # Determine start, stop, startfend, and stopfend
     chrint = hic.chr2int[chrom.strip('chr')]
@@ -205,7 +225,8 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
         while startfend < hic.fends['chr_indices'][chrint + 1] and hic.filter[startfend] == 0:
             startfend += 1
         if startfend == hic.fends['chr_indices'][chrint + 1]:
-            print >> sys.stderr, ("Insufficient data.\n"),
+            if not silent:
+                print >> sys.stderr, ("Insufficient data.\n"),
             return None
         start = (hic.fends['fends']['mid'][startfend] / binsize) * binsize
     elif start is None:
@@ -226,7 +247,8 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
     else:
         num_bins = binbounds.shape[0]
     num_fends = stopfend - startfend
-    print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
+    if not silent:
+        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         start_index = hic.data['cis_indices'][startfend]
@@ -240,6 +262,7 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
         data = None
     # Find fend ranges for each bin
     mids = hic.fends['fends']['mid'][startfend:stopfend]
+    chroms = hic.fends['fends']['chr'][startfend:stopfend]
     if binbounds is None:
         mapping = numpy.searchsorted(numpy.arange(1, num_bins + 1) * binsize + start, mids).astype(numpy.int32)
     else:
@@ -258,7 +281,8 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
     else:
         max_bin = int(ceil(maxdistance / float(binsize)))
     if max_bin <= 0:
-        print >> sys.stderr, ("Insufficient data.\n"),
+        if not silent:
+            print >> sys.stderr, ("Insufficient data.\n"),
         return None
     # Create requested array
     if arraytype == 'compact':
@@ -268,12 +292,12 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
     # Fill in data values
     if arraytype == 'compact':
         _hic_binning.binned_signal_compact(data, data_indices, hic.filter[startfend:stopfend], mapping,
-                                       hic.corrections[startfend:stopfend], mids, hic.distance_mids,
-                                       hic.distance_means, max_fend, data_array, datatype_int)
+                                       hic.corrections[startfend:stopfend], mids, chroms, hic.distance_parameters,
+                                         hic.chromosome_means, max_fend, data_array, datatype_int)
     else:
         _hic_binning.binned_signal_upper(data, data_indices, hic.filter[startfend:stopfend], mapping,
-                                     hic.corrections[startfend:stopfend], mids, hic.distance_mids,
-                                     hic.distance_means, max_fend, data_array, datatype_int, num_bins)
+                                     hic.corrections[startfend:stopfend], mids, chroms, hic.distance_parameters,
+                                         hic.chromosome_means, max_fend, data_array, datatype_int, num_bins)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -289,15 +313,17 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
         mapping[:, 3] = mapping[:, 2] + binsize
         mapping[:, 0] = numpy.searchsorted(mids, mapping[:, 2]) + startfend
         mapping[:, 1] = numpy.searchsorted(mids, mapping[:, 3]) + startfend
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return [data_array, mapping]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return data_array
 
 
 def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, binbounds=None, arraytype='full',
-                  returnmapping=False):
+                  returnmapping=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill 'binsize' bins or bins defined by 'binbounds' with data provided in the array passed by 'unbinned'.
 
@@ -327,9 +353,14 @@ def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, bi
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype' pulled from 'unbinned'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that arraytype value is acceptable
     if arraytype not in ['full', 'compact', 'upper']:
-        print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     # Determine input array type
     if len(unbinned.shape) == 2 and fends.shape[0] * (fends.shape[0] - 1) / 2 == unbinned.shape[0]:
@@ -337,7 +368,8 @@ def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, bi
     elif len(unbinned.shape) == 3 and unbinned.shape[0] == fends.shape[0]:
         input_type = 'compact'
     else:
-        print >> sys.stderr, ("Unrecognized input array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized input array type. No data returned.\n"),
         return None
     # Determine start and stop, if necessary
     if binbounds is None:
@@ -355,7 +387,8 @@ def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, bi
         num_bins = binbounds.shape[0]
         start = binbounds[0, 0]
         stop = binbounds[0, 1]
-    print >> sys.stderr, ("Finding binned %s array...") % (arraytype),
+    if not silent:
+        print >> sys.stderr, ("Finding binned %s array...") % (arraytype),
     # Find bin mapping for each fend
     mapping = numpy.zeros(fends.shape[0], dtype=numpy.int32) - 1
     mids = hic.fends['fends']['mid'][fends]
@@ -398,15 +431,17 @@ def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, bi
         mapping[:, 3] = binbounds[:, 1]
         mapping[:, 0] = numpy.r_[fends, fends[-1] + 1][numpy.searchsorted(mids, mapping[:, 2])]
         mapping[:, 1] = numpy.r_[fends, fends[-1] + 1][numpy.searchsorted(mids, mapping[:, 3])]
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return [binned_array, mapping]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return binned_array
 
 
 def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, minobservations=10,
-                              searchdistance=0, removefailed=True):
+                              searchdistance=0, removefailed=True, **kwargs):
     """
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
     or 'searchdistance' criteria.
@@ -427,6 +462,10 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     :type removefailed: bool.
     :returns: None
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # Determine unbinned array type
     if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) / 2 ==
                                      unbinned.shape[0]):
@@ -434,7 +473,8 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     elif len(unbinned.shape) == 3 and unbinned.shape[0] == unbinnedpositions.shape[0]:
         unbinned_type = 'compact'
     else:
-        print >> sys.stderr, ("Unrecognized unbinned array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized unbinned array type. No data returned.\n"),
         return None
     # Determine binned array type
     if len(binned.shape) == 2 and binbounds.shape[0] * (binbounds.shape[0] - 1) / 2 == binned.shape[0]:
@@ -442,9 +482,11 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     elif len(binned.shape) == 3 and binned.shape[0] == binbounds.shape[0]:
         binned_type = 'compact'
     else:
-        print >> sys.stderr, ("Unrecognized binned array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized binned array type. No data returned.\n"),
         return None
-    print >> sys.stderr, ("Dynamically binning data..."),
+    if not silent:
+        print >> sys.stderr, ("Dynamically binning data..."),
     # Determine bin edges relative to unbinned positions
     binedges = numpy.zeros(binbounds.shape, dtype=numpy.int32)
     binedges[:, 0] = numpy.searchsorted(unbinnedpositions, binbounds[:, 0])
@@ -466,12 +508,13 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
         else:
             _hic_binning.dynamically_bin_compact_from_compact(unbinned, unbinnedpositions, binned, binedges,
                                                           mids, minobservations, searchdistance, int(removefailed))
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return None
 
 
 def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binbounds1, binbounds2,
-                                minobservations=10, searchdistance=0, removefailed=False):
+                                minobservations=10, searchdistance=0, removefailed=False, **kwargs):
     """
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
     or 'searchdistance' criteria.
@@ -496,7 +539,12 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     :type removefailed: bool.
     :returns: None
     """
-    print >> sys.stderr, ("Dynamically binning data..."),
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
+    if not silent:
+        print >> sys.stderr, ("Dynamically binning data..."),
     # Determine bin edges relative to unbinned positions
     binedges1 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
     binedges1[:, 0] = numpy.searchsorted(unbinnedpositions1, binbounds1[:, 0])
@@ -510,13 +558,14 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     # Dynamically bin using appropriate array type combination
     _hic_binning.dynamically_bin_trans(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binedges1,
                                    binedges2, mids1, mids2, minobservations, searchdistance, int(removefailed))
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return None
 
 
 def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=None, stopfend1=None, binbounds1=None,
                      start2=None, stop2=None, startfend2=None, stopfend2=None, binbounds2=None, binsize=1000000,
-                     datatype='enrichment', returnmapping=False):
+                     datatype='enrichment', returnmapping=False, **kwargs):
     """
     Create a rectangular array and fill with trans data requested in 'datatype' aggregated in bins.
 
@@ -553,10 +602,15 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing trans data requested with 'datatype'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
     if datatype not in datatypes:
-        print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
         return None
     else:
         datatype_int = datatypes[datatype]
@@ -617,14 +671,17 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
         stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
     # If trans mean not already in hic and 'distance', 'enrichment', or 'expected' is requested, calculate
     if datatype in ['raw', 'fend']:
-        trans_mean = 0.0
-    elif 'trans_mean' not in hic.__dict__.keys():
-        hic.find_trans_mean()
-        trans_mean = hic.trans_mean
+        trans_mean = 1.0
+    elif 'trans_means' not in hic.__dict__.keys():
+        hic.find_trans_means()
+        index = chrint1 * hic.fends['chromosomes'].shape[0] - chrint1 * (chrint1 + 1) / 2 + chrint2
+        trans_mean = hic.trans_means[index]
     else:
-        trans_mean = hic.trans_mean
-    print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
-                         (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
+        index = chrint1 * hic.fends['chromosomes'].shape[0] - chrint1 * (chrint1 + 1) / 2 + chrint2
+        trans_mean = hic.trans_means[index]
+    if not silent:
+        print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
+                             (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         if startfend1 < startfend2:
@@ -690,14 +747,16 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
             mapping2[:, 2:4] = binbounds2[:, :]
         mapping2[:, 0] = numpy.searchsorted(mids2, mapping2[:, 2]) + startfend2
         mapping2[:, 1] = numpy.searchsorted(mids2, mapping2[:, 3]) + startfend2
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return [data_array, mapping1, mapping2]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return data_array
 
 
-def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distance=False, chroms=[]):
+def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distance=False, chroms=[], **kwargs):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
@@ -724,15 +783,21 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
         comm = None
         rank = 0
         num_procs = 1
+    if ('silent' in kwargs and kwargs['silent']) or rank > 0:
+        silent = True
+    else:
+        silent = False
     # Check if trans mean is needed and calculate if not already done
     if includetrans and remove_distance and 'trans_mean' not in hic.__dict__.keys():
-        hic.find_trans_mean()
+        hic.find_trans_means()
     # Check if filename already exists, and remove if it does
     if rank == 0:
         if os.path.exists(filename):
-            print >> sys.stderr, ("%s already exists, overwriting.") % filename
+            if not silent:
+                print >> sys.stderr, ("%s already exists, overwriting.") % filename
             subprocess.call('rm %s' % filename, shell=True)
-        print >> sys.stderr, ("Creating binned heatmap...\n"),
+        if not silent:
+            print >> sys.stderr, ("Creating binned heatmap...\n"),
         output = h5py.File(filename, 'w')
         output['resolution'] = binsize
         # If chromosomes not specified, fill list
@@ -740,8 +805,14 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
             chroms = list(hic.fends['chromosomes'][...])
         # Assemble list of requested arrays
         needed = []
-        for chrom in chroms:
-            needed.append((chrom,))
+        chr_indices = hic.fends['chr_indices'][...]
+        for i in range(len(chroms))[::-1]:
+            chrom = chroms[i]
+            chrint = hic.chr2int[chrom]
+            if numpy.sum(hic.filter[chr_indices[chrint]:chr_indices[chrint + 1]]) > 0:
+                needed.append((chrom,))
+            else:
+                del chroms[i]
         if includetrans:
             for i in range(len(chroms)-1):
                 for j in range(i + 1, len(chroms)):
@@ -749,10 +820,10 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
         if num_procs == 1:
             node_needed = needed
         else:
-            worker_size = int(ceil(len(needed) / float(num_procs)))
+            node_ranges = numpy.round(numpy.linspace(0, len(needed), num_procs + 1)).astype(numpy.int32)
             for i in range(1, num_procs):
-                comm.send(needed[(worker_size * (i - 1)):(worker_size * i)], dest=i, tag=11)
-            node_needed = needed[(worker_size * (num_procs - 1)):]
+                comm.send(needed[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+            node_needed = needed[node_ranges[0]:node_ranges[1]]
     else:
         node_needed = comm.recv(source=0, tag=11)
     # Determine the requested data type
@@ -766,19 +837,21 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
         if len(chrom) == 1:
             # Find cis heatmap
             heatmaps[chrom] = bin_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype, arraytype='upper',
-                                             returnmapping=True)
+                                             returnmapping=True, silent=silent)
             # Check if array contains data
             if heatmaps[chrom] is None or heatmaps[chrom][0].shape[0] == 0:
                 del heatmaps[chrom]
         else:
             # Find trans heatmap
-                heatmaps[chrom] = bin_trans_signal(hic, chrom[0], chrom[1], binsize=binsize, datatype=datatype)
+                heatmaps[chrom] = bin_trans_signal(hic, chrom[0], chrom[1], binsize=binsize, datatype=datatype,
+                                                   silent=silent)
     # Collect heatmaps at node 0 and write to h5dict
     if rank == 0:
         if num_procs > 1:
             for i in range(1, num_procs):
-                temp = comm.recv(source=i, tag=11)
-                heatmaps.update(temp)
+                if node_ranges[i + 1] - node_ranges[i] > 0:
+                    temp = comm.recv(source=i, tag=11)
+                    heatmaps.update(temp)
             del temp
         for chrom in heatmaps.keys():
             if len(chrom) == 1:
@@ -790,8 +863,10 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
                 output.create_dataset('%s_by_%s.expected' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 1])
         output.create_dataset('chromosomes', data=numpy.array(chroms))
         output.close()
-        print >> sys.stderr, ("Creating binned heatmap...Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Creating binned heatmap...Done\n"),
     else:
-        comm.send(heatmaps, dest=0, tag=11)
+        if len(heatmaps) > 0:
+            comm.send(heatmaps, dest=0, tag=11)
         del heatmaps
     return None

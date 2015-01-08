@@ -37,10 +37,12 @@ class BI(object):
     :type window: int.
     :param mincount: The minimum number of valid pairs of bins needed to calculate the boundary index for a given location.
     :type mincount: int.
+    :param silent: Indicates whether to print information about function execution for this object.
+    :type silent: bool.
     :returns: :class:`BI` class object
     """
 
-    def __init__(self, width=10000, window=1000000, height=0, mincount=10):
+    def __init__(self, width=10000, window=1000000, height=0, mincount=10, silent=False):
         """
         Initialize :class:`BI` object.
         """
@@ -48,6 +50,18 @@ class BI(object):
         self.window = int(window)
         self.height = int(height)
         self.mincount = int(mincount)
+        if 'mpi4py' in sys.modules.keys():
+            self.comm = MPI.COMM_WORLD
+            self.rank = self.comm.Get_rank()
+            self.num_procs = self.comm.Get_size()
+        else:
+            self.comm = None
+            self.rank = 0
+            self.num_procs = 1
+        if self.rank == 0:
+            self.silent = silent
+        else:
+            self.silent = True
         return None
 
     def __getitem__(self, key):
@@ -70,9 +84,11 @@ class BI(object):
         """
         # ensure data h5dict exists
         if not os.path.exists(filename):
-            print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
+            if not self.silent:
+                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
             return None
-        print >> sys.stderr, ("Loading data..."),
+        if not self.silent:
+            print >> sys.stderr, ("Loading data..."),
         input = h5py.File(filename, 'r')
         for key in input.keys():
             self[key] = input[key][...]
@@ -83,7 +99,8 @@ class BI(object):
             self.chr2int = {}
             for i in range(self.chromosomes.shape[0]):
                 self.chr2int[self.chromosomes[i]] = i
-        print >> sys.stderr, ("Done\n"),
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return None
 
     def save(self, filename):
@@ -95,17 +112,21 @@ class BI(object):
         :returns: None
         """
         # see if h5dict exists
-        if os.path.exists(filename):
+        if os.path.exists(filename) and not self.silent:
             print >> sys.stderr, ("%s already exists. Overwriting.\n") % (filename),
-        print >> sys.stderr, ("Saving data..."),
+        if not self.silent:
+            print >> sys.stderr, ("Saving data..."),
         output = h5py.File(filename, 'w')
         for key in self.__dict__.keys():
+            if key == 'silent':
+                continue
             if isinstance(self[key], (basestring, int, float)):
                 output.attrs[key] = self[key]
             elif not isinstance(self[key], dict):
                 output.create_dataset(name=key, data=self[key])
         output.close()
-        print >> sys.stderr, ("Done\n"),
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return None
 
     def find_bi_from_hic(self, hic, datatype='fend', chroms=[]):
@@ -118,15 +139,7 @@ class BI(object):
         :type chroms: list
         :returns: None
         """
-        if 'mpi4py' in sys.modules.keys():
-            comm = MPI.COMM_WORLD
-            rank = comm.Get_rank()
-            num_procs = comm.Get_size()
-        else:
-            comm = None
-            rank = 0
-            num_procs = 1
-        if rank == 0:
+        if not self.silent:
             print >> sys.stderr, ("Calculating BI..."),
         # save relevant parameters from hic object
         self.chromosomes = numpy.zeros(len(hic.chr2int), dtype=numpy.dtype('S20'))
@@ -139,15 +152,15 @@ class BI(object):
             chroms = list(hic.fends['chromosomes'])
         if len(chroms) == 0:
             chroms = numpy.copy(self.chromosomes)
-        if rank == 0:
-            worker_size = max(1, int(ceil(len(chroms) / float(num_procs))))
-            for i in range(1, min(num_procs, len(chroms))):
-                comm.send(chroms[(worker_size * (i - 1)):(worker_size * i)], dest=i, tag=11)
-            for i in range(min(num_procs, len(chroms)), num_procs):
-                comm.send([], dest=i, tag=11)
-            worker_chroms = chroms[(min(num_procs - 1, len(chroms) - 1) * worker_size):]
+        if self.rank == 0:
+            worker_size = max(1, int(ceil(len(chroms) / float(self.num_procs))))
+            for i in range(1, min(self.num_procs, len(chroms))):
+                self.comm.send(chroms[(worker_size * (i - 1)):(worker_size * i)], dest=i, tag=11)
+            for i in range(min(self.num_procs, len(chroms)), self.num_procs):
+                self.comm.send([], dest=i, tag=11)
+            worker_chroms = chroms[(min(self.num_procs - 1, len(chroms) - 1) * worker_size):]
         else:
-            worker_chroms = comm.recv(source=0, tag=11)
+            worker_chroms = self.comm.recv(source=0, tag=11)
         # for each chromosome, find BI
         BI = numpy.zeros(0, dtype=numpy.dtype([('chromosome', numpy.int32), ('start', numpy.int32),
                                                ('stop', numpy.int32), ('mid', numpy.int32), ('score', numpy.float32)]))
@@ -156,7 +169,7 @@ class BI(object):
             # pull relevant data from hic object
             temp = h_binning.unbinned_cis_signal(hic, chrom, datatype=datatype, arraytype='compact',
                                                    maxdistance=(self.window + self.width), skipfiltered=True,
-                                                   returnmapping=True)
+                                                   returnmapping=True, silent=self.silent)
             if temp is None or temp[1].shape[0] < 3:
                 continue
             data, mapping = temp
@@ -182,25 +195,25 @@ class BI(object):
             temp_BI[chrom]['score'][:] = scores
             valid = numpy.where(scores != numpy.inf)[0]
             temp_BI[chrom] = temp_BI[chrom][valid]
-        if rank == 0:
-            for i in range(1, num_procs):
-                temp_BI.update(comm.recv(source=i, tag=11))
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                temp_BI.update(self.comm.recv(source=i, tag=11))
             for chrom in chroms:
                 BI = numpy.hstack((BI, temp_BI[chrom]))
             order = numpy.lexsort((BI['mid'], BI['chromosome']))
             BI = BI[order]
-            for i in range(1, num_procs):
-                comm.send(BI, dest=i, tag=11)
+            for i in range(1, self.num_procs):
+                self.comm.send(BI, dest=i, tag=11)
         else:
-            comm.send(temp_BI, dest=0, tag=11)
-            BI = comm.recv(source=0, tag=11)
+            self.comm.send(temp_BI, dest=0, tag=11)
+            BI = self.comm.recv(source=0, tag=11)
         self.BI = BI
         # create an array containing the first index for each chromosome
         self.chr_indices = numpy.zeros(self.chromosomes.shape[0] + 1, dtype=numpy.int32)
         self.chr_indices[1:] = numpy.bincount(self.BI['chromosome'][:], minlength=self.chromosomes.shape[0])
         for i in range(1, self.chr_indices.shape[0]):
             self.chr_indices[i] += self.chr_indices[i - 1]
-        if rank == 0:
+        if not self.silent:
             print >> sys.stderr, ("Done\n"),
         return None
 
@@ -214,7 +227,8 @@ class BI(object):
         :type regions: list
         :returns: None
         """
-        print >> sys.stderr, ("Calculating BI..."),
+        if not self.silent:
+            print >> sys.stderr, ("Calculating BI..."),
         # save relevant parameters from hic object
         self.chromosomes = numpy.zeros(len(fivec.chr2int), dtype=numpy.dtype('S20'))
         for chrom, chrint in fivec.chr2int.iteritems():
@@ -279,7 +293,8 @@ class BI(object):
         self.chr_indices[1:] = numpy.bincount(self.BI['chromosome'][:], minlength=self.chromosomes.shape[0])
         for i in range(1, self.chr_indices.shape[0]):
             self.chr_indices[i] += self.chr_indices[i - 1]
-        print >> sys.stderr, ("Done\n"),
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return None
 
     def smooth_bi(self, width):
@@ -290,31 +305,23 @@ class BI(object):
         :type width: int.
         :returns: None
         """
-        if 'mpi4py' in sys.modules.keys():
-            comm = MPI.COMM_WORLD
-            rank = comm.Get_rank()
-            num_procs = comm.Get_size()
-        else:
-            comm = None
-            rank = 0
-            num_procs = 1
-            self.smoothing = width
-        if rank == 0:
+        self.smoothing = width
+        if not self.silent:
             print >> sys.stderr, ("Finding smoothed BIs..."),
         chroms = list(self.chromosomes)
         # if needed, get list of chromosomes
         if len(chroms) == 0:
             chroms = numpy.copy(self.chromosomes)
         adjusted = {}
-        if rank == 0:
-            worker_size = max(1, int(ceil(len(chroms) / float(num_procs))))
-            for i in range(1, min(num_procs, len(chroms))):
-                comm.send(chroms[(worker_size * (i - 1)):(worker_size * i)], dest=i, tag=11)
-            for i in range(min(num_procs, len(chroms)), num_procs):
-                comm.send([], dest=i, tag=11)
-            worker_chroms = chroms[(min(num_procs - 1, len(chroms) - 1) * worker_size):]
+        if self.rank == 0:
+            worker_size = max(1, int(ceil(len(chroms) / float(self.num_procs))))
+            for i in range(1, min(self.num_procs, len(chroms))):
+                self.comm.send(chroms[(worker_size * (i - 1)):(worker_size * i)], dest=i, tag=11)
+            for i in range(min(self.num_procs, len(chroms)), self.num_procs):
+                self.comm.send([], dest=i, tag=11)
+            worker_chroms = chroms[(min(self.num_procs - 1, len(chroms) - 1) * worker_size):]
         else:
-            worker_chroms = comm.recv(source=0, tag=11)
+            worker_chroms = self.comm.recv(source=0, tag=11)
         for chrom in worker_chroms:
             chrint = self.chr2int[chrom]
             if self.chr_indices[chrint] + 3 >= self.chr_indices[chrint + 1]:
@@ -324,9 +331,9 @@ class BI(object):
             smoothed = numpy.copy(original)
             _bi.gaussian_smoothing(mids, original, smoothed, width)
             adjusted[chrom] = smoothed
-        if rank == 0:
-            for i in range(1, num_procs):
-                adjusted.update(comm.recv(source=i, tag=11))
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                adjusted.update(self.comm.recv(source=i, tag=11))
             BI = numpy.zeros(self.BI.shape[0], dtype=numpy.dtype([('chromosome', numpy.int32), ('start', numpy.int32),
                  ('stop', numpy.int32), ('mid', numpy.int32), ('score', numpy.float32), ('original', numpy.float32)]))
             BI['chromosome'] = self.BI['chromosome'][:]
@@ -337,13 +344,13 @@ class BI(object):
             for chrom in adjusted:
                 chrint = self.chr2int[chrom]
                 BI['score'][self.chr_indices[chrint]:self.chr_indices[chrint + 1]] = adjusted[chrom][:]
-            for i in range(1, num_procs):
-                comm.send(BI, dest=i, tag=11)
+            for i in range(1, self.num_procs):
+                self.comm.send(BI, dest=i, tag=11)
         else:
-            comm.send(adjusted, dest=0, tag=11)
+            self.comm.send(adjusted, dest=0, tag=11)
             BI = comm.recv(source=0, tag=11)
         self.BI = BI
-        if rank == 0:
+        if not self.silent:
             print >> sys.stderr, ("Done\n"),
         return None
 
@@ -364,20 +371,24 @@ class BI(object):
         :returns: :mod:`Pyx` format canvas with line plot of bi scores.
         """
         if 'pyx' not in sys.modules.keys():
-            print >> sys.stderr, ("The pyx module must be installed to use this function.")
+            if not self.silent:
+                print >> sys.stderr, ("The pyx module must be installed to use this function.")
             return None
         if 'BI' not in self.__dict__:
-            print >> sys.stderr, ("No BI scores present, no plot generated.\n"),
+            if not self.silent:
+                print >> sys.stderr, ("No BI scores present, no plot generated.\n"),
             return None
         if chromosome not in self.chr2int:
-            print >> sys.stderr, ("Unrecognized chromosome name, no plot generated.\n"),
+            if not self.silent:
+                print >> sys.stderr, ("Unrecognized chromosome name, no plot generated.\n"),
             return None
         chrint = self.chr2int[chromosome]
         if start == None:
             start = self.BI['mid'][self.chr_indices[chrint]]
         if stop == None:
             stop = self.BI['mid'][self.chr_indices[chrint + 1] - 1]
-        print >> sys.stderr, ("Plotting BIs for %s:%i-%i...") % (chromosome, start, stop),
+        if not self.silent:
+            print >> sys.stderr, ("Plotting BIs for %s:%i-%i...") % (chromosome, start, stop),
         c = pyx.canvas.canvas()
         start_index = numpy.searchsorted(self.BI['mid'][self.chr_indices[chrint]:self.chr_indices[chrint + 1]], start)
         start_index += self.chr_indices[chrint]
@@ -392,7 +403,8 @@ class BI(object):
             line_path.append(pyx.path.lineto(X[i], Y[i]))
         line_path.append(pyx.path.lineto(width, height / 2.0))
         c.fill(line_path)
-        print >> sys.stderr, ("Done\n"),
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return c
 
     def find_bi_profile(self, coordinates, binsize=2000, numbins=51):
@@ -407,7 +419,8 @@ class BI(object):
         :type numbins: int.
         :returns: An array of mean aggregate BI signal centered around 'coordinates'.
         """
-        print >> sys.stderr, ("Finding BI profile..."),
+        if not self.silent:
+            print >> sys.stderr, ("Finding BI profile..."),
         signal = numpy.zeros((numbins, 2), dtype=numpy.float32)
         for chrom in coordinates:
             if chrom not in self.chr2int:
@@ -419,7 +432,8 @@ class BI(object):
                                 sorted_coords, signal, binsize, chrint)
         where = numpy.where(signal[:, 1] > 0.0)
         signal[where, 0] /= signal[where, 1]
-        print >> sys.stderr, ("Done\n"),
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return signal[:, 0]
 
     def find_bi_bounds(self, cutoff=2.0, chroms=[]):
@@ -432,7 +446,8 @@ class BI(object):
         :type chroms: list
         :returns: Array containing a row for each valid BI score and columns contianing chromosome index, sequence coordinate, and BI score.
         """
-        print >> sys.stderr, ("Finding BI bounds..."),
+        if not self.silent:
+            print >> sys.stderr, ("Finding BI bounds..."),
         # if needed, get list of chromosomes
         if len(chroms) == 0:
             chroms = numpy.copy(self.chromosomes)
@@ -471,7 +486,9 @@ class BI(object):
                 new_bounds['chr'][:] = chrint
                 new_bounds['coord'][:] = self.BI['mid'][self.chr_indices[chrint] + peaks]
                 new_bounds['score'][:] = scores[peaks]
-            print "Chr %s   %i out of %i" % (chrom, new_bounds.shape[0], scores.shape[0])
+            if not self.silent:
+                print "Chr %s   %i out of %i" % (chrom, new_bounds.shape[0], scores.shape[0])
             bounds = numpy.hstack((bounds, new_bounds))
-        print >> sys.stderr, ("Done\n"),
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return bounds

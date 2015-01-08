@@ -19,20 +19,19 @@ def main():
         comm = None
         rank = 0
         num_procs = 1
-    if len(sys.argv) < 8 and rank == 0:
-        print "Usage python learn_hic_normalization_express.py HIC_FILE ITERATIONS MIN_INT MIN_DIST USE_READS REMOVE_DISTANCE RECALC"
+    if len(sys.argv) < 7 and rank == 0:
+        print "Usage python learn_hic_normalization_express.py HIC_FILE ITERATIONS MIN_INT MIN_DIST USE_READS REMOVE_DISTANCE"
         print "HIC_FILE         File name of HiC h5dict to analyze."
         print "ITERATIONS       Number of iterations to run learning for."
         print "MIN_INT          Minimum number of interactions for fend filtering, if refiltering is required."
         print "MIN_DIST         Minimum interaction distance to include for learning."
         print "USE_READS        Which set of reads, 'cis', 'trans', or 'both', to use for learning."
         print "REMOVE_DISTANCE  Specifies whether to remove distance-dependent portion of the signal prior to learning."
-        print "RECALC           Number of iterations to wait between recalculating distance function parameters."
         print "This function is MPI compatible."
         return None
-    elif len(sys.argv) < 8:
+    elif len(sys.argv) < 7:
         return None
-    hic_fname, iterations, mininteractions, mindistance, usereads, remove_distance, recalc = sys.argv[1:8]
+    hic_fname, iterations, mininteractions, mindistance, usereads, remove_distance = sys.argv[1:7]
     if remove_distance in ['1', 'true', 'True', 'TRUE']:
         remove_distance = True
     else:
@@ -40,7 +39,7 @@ def main():
     hic = hifive.HiC(hic_fname, 'r')
     hic.find_express_fend_corrections(iterations=int(iterations), mindistance=int(mindistance),
                                       mininteractions=int(mininteractions), usereads=usereads,
-                                      remove_distance=remove_distance, recalculate_distance=int(recalc))
+                                      remove_distance=remove_distance)
     if rank == 0:
         hic.save()
 

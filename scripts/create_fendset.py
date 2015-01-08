@@ -22,7 +22,7 @@ def main():
         genome_name = None
         re_name = None
     fends = hifive.Fend(out_fname, mode='w')
-    fends.load_fends(fend_fname, genome_name=genome_name, re_name=RE_name)
+    fends.load_fends(fend_fname, genome_name=genome_name, re_name=re_name)
     fends.fends.close()
 
 
