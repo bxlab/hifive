@@ -32,7 +32,8 @@ except:
 
 
 def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                       min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
+                       min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
+                       **kwargs):
     """
     Fill in and rescale bitmap from a HiC compact array.
 
@@ -54,8 +55,13 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
     :type max_color: tuple
     :returns: :mod:`PIL` bitmap object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
     print >> sys.stderr, ("Plotting compact array..."),
     if mid_color is None:
@@ -104,12 +110,14 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
         img[i, where + i + 1] = gradient1[-scaled[i, where, 0]]
         img[where + i + 1, i] = img[i, where + i + 1]
     pilImage = Image.frombuffer('RGBA', (dim, dim), img, 'raw', 'RGBA', 0, 1)
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return pilImage
 
 
 def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                    min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
+                    min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
+                    **kwargs):
     """
     Fill in and rescale bitmap from a 5C or HiC full array.
 
@@ -131,10 +139,16 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
     :type max_color: tuple
     :returns: :mod:`PIL` bitmap object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
-    print >> sys.stderr, ("Plotting full array..."),
+    if not silent:
+        print >> sys.stderr, ("Plotting full array..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
                      (min_color[2] + max_color[2]) / 2.0)
@@ -177,12 +191,14 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
     where = numpy.where((scaled[:, :, 1] > 0) * (scaled[:, :, 0] < 0))
     img[where[1], where[0]] = gradient1[-scaled[where[0], where[1], 0]]
     pilImage = Image.frombuffer('RGBA', (xdim, ydim), img, 'raw', 'RGBA', 0, 1)
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return pilImage
 
 
 def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                     min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
+                     min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
+                     **kwargs):
     """
     Fill in and rescale bitmap from a 5C or HiC upper array.
 
@@ -204,10 +220,16 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
     :type max_color: tuple
     :returns: :mod:`PIL` bitmap object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
-    print >> sys.stderr, ("Plotting upper array..."),
+    if not silent:
+        print >> sys.stderr, ("Plotting upper array..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
                      (min_color[2] + max_color[2]) / 2.0)
@@ -255,12 +277,14 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
         img[i, where + i + 1] = gradient1[-scaled[where + index, 0]]
         img[where + i + 1, i] = img[i, where + i + 1]
     pilImage = Image.frombuffer('RGBA', (dim, dim), img, 'raw', 'RGBA', 0, 1)
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return pilImage
 
 
 def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True, chroms=[],
-                          min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
+                          min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
+                          **kwargs):
     """
     Fill in and rescale bitmap from a HiC heatmap h5dict file.
 
@@ -284,10 +308,16 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
     :type max_color: tuple
     :returns: :mod:`PIL` bitmap object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
-    print >> sys.stderr, ("Plotting heatmap dict..."),
+    if not silent:
+        print >> sys.stderr, ("Plotting heatmap dict..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
                      (min_color[2] + max_color[2]) / 2.0)
@@ -358,13 +388,14 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
     img[where] = gradient1[-data[where[0], where[1], 0]]
     img[where[1], where[0]] = img[where]
     pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[0]), img, 'raw', 'RGBA', 0, 1)
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return pilImage
 
 
 def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                                  regions=[], min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0),
-                                 max_color=(1.0, 0.0, 0.0)):
+                                 max_color=(1.0, 0.0, 0.0), **kwargs):
     """
     Fill in and rescale bitmap in a full format from a 5C heatmap h5dict file.
 
@@ -390,10 +421,16 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
     :type max_color: tuple
     :returns: :mod:`PIL` bitmap object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
-    print >> sys.stderr, ("Plotting heatmap dict..."),
+    if not silent:
+        print >> sys.stderr, ("Plotting heatmap dict..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
                      (min_color[2] + max_color[2]) / 2.0)
@@ -474,13 +511,14 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
         img[starts[i] - 1, :] = black
         img[:, starts[i] - 1] = black
     pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[0]), img, 'raw', 'RGBA', 0, 1)
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return pilImage
 
 
 def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                                     regions=[], min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0),
-                                    max_color=(1.0, 0.0, 0.0)):
+                                    max_color=(1.0, 0.0, 0.0), **kwargs):
     """
     Fill in and rescale bitmap in a compact from a 5C heatmap h5dict file.
 
@@ -506,10 +544,16 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
     :type max_color: tuple
     :returns: :mod:`PIL` bitmap object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
-    print >> sys.stderr, ("Plotting heatmap dict..."),
+    if not silent:
+        print >> sys.stderr, ("Plotting heatmap dict..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
                      (min_color[2] + max_color[2]) / 2.0)
@@ -587,12 +631,14 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
     for i in range(1, len(ystarts) - 1):
         img[ystarts[i] - 1, :] = black
     pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[1]), img, 'raw', 'RGBA', 0, 1)
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return pilImage
 
 
 def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                                     min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0)):
+                                     min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
+                                     **kwargs):
     """
     Fill in and rescale bitmap from a HiC compact array, plotting only the upper triangle rotated 45 degrees counter-clockwise.
 
@@ -614,10 +660,16 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
     :type max_color: tuple
     :returns: :mod:`PIL` bitmap object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
-    print >> sys.stderr, ("Plotting rotated compact array..."),
+    if not silent:
+        print >> sys.stderr, ("Plotting rotated compact array..."),
     if mid_color is None:
         mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
                      (min_color[2] + max_color[2]) / 2.0)
@@ -666,13 +718,14 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
     where = numpy.where((rotated[:, :, 0] < 0) * (rotated[:, :, 1] > 0))
     img[where[1], where[0]] = gradient1[-rotated[where[0], where[1], 0]]
     pilImage = Image.frombuffer('RGBA', (xdim, ydim), img, 'raw', 'RGBA', 0, 1)
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return pilImage
 
 
 def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientation='left', num_ticks=5,
              min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0), labelattr=None,
-             log_display=True):
+             log_display=True, **kwargs):
     """
     Create a key including color gradient and labels indicating associated values, returning a :mod:`pyx` canvas.
 
@@ -702,8 +755,13 @@ def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientati
     :type log_display: bool.
     :returns: :mod:`Pxy` canvas object.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     if 'PIL' not in sys.modules.keys() or 'pyx' not in sys.modules.keys():
-        print >> sys.stderr, ("The PIL and pyx modules must be installed to use this function.")
+        if not silent:
+            print >> sys.stderr, ("The PIL and pyx modules must be installed to use this function.")
         return None
     height = float(height)
     width = float(width)

@@ -24,7 +24,7 @@ import libraries._fivec_binning as _fivec_binning
 
 
 def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfrag=None, datatype='enrichment',
-                        arraytype='compact', skipfiltered=False, returnmapping=False):
+                        arraytype='compact', skipfiltered=False, returnmapping=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.
 
@@ -50,15 +50,21 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
     if datatype not in datatypes:
-        print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
         return None
     else:
         datatype_int = datatypes[datatype]
     if arraytype not in ['full', 'compact', 'upper']:
-        print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     # if parameters are no already found, calculate now
     if 'gamma' not in fivec.__dict__.keys():
@@ -80,7 +86,8 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
         stop = fivec.frags['fragments']['mid'][stopfrag - 1] + 1
     else:
         stopfrag = _find_frag_from_coord(fivec, chrint, stop)
-    print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
+    if not silent:
+        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         start_index = fivec.data['cis_indices'][startfrag]
@@ -111,7 +118,8 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
                 mapping[i] = reverse - 1
                 reverse -= 1
         if forward == 0 or reverse == 0:
-            print >> sys.stderr, ("Insufficient data.\n"),
+            if not silent:
+                print >> sys.stderr, ("Insufficient data.\n"),
             return None
         data_array = numpy.zeros((forward, -reverse, 2), dtype=numpy.float32)
     else:
@@ -120,7 +128,8 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
         else:
             num_bins = stopfrag - startfrag
         if num_bins < 2:
-            print >> sys.stderr, ("Insufficient data.\n"),
+            if not silent:
+                print >> sys.stderr, ("Insufficient data.\n"),
             return None
         mapping = numpy.zeros(stopfrag - startfrag, dtype=numpy.int32) - 1
         i = 0
@@ -152,7 +161,8 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
         del data_array
         data_array = full_data_array
     if returnmapping:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         if arraytype == 'compact':
             xmapping = numpy.where(mapping > 0)[0] + startfrag
             ymapping = numpy.where(mapping < 0)[0] + startfrag
@@ -160,7 +170,8 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
         else:
             return [data_array, numpy.where(mapping >= 0)[0] + startfrag]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return data_array
 
 
@@ -172,7 +183,7 @@ def _find_frag_from_coord(fivec, chrint, coord):
 
 
 def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfrag=None, binsize=10000,
-                   datatype='enrichment', arraytype='full', returnmapping=False):
+                   datatype='enrichment', arraytype='full', returnmapping=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill 'binsize' bins with data requested in 'datatype'.
 
@@ -198,15 +209,21 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
     if datatype not in datatypes:
-        print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
         return None
     else:
         datatype_int = datatypes[datatype]
     if arraytype not in ['full', 'upper']:
-        print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     # if parameters are no already found, calculate now
     if 'gamma' not in fivec.__dict__.keys():
@@ -219,7 +236,8 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
         while startfrag < fivec.frags['regions']['stop_frag'][region] and fivec.filter[startfrag] == 0:
             startfrag += 1
         if startfrag == fivec.frags['regions']['stop_frag'][region]:
-            print >> sys.stderr, ("Insufficient data.\n"),
+            if not silent:
+                print >> sys.stderr, ("Insufficient data.\n"),
             return None
         start = (fivec.frags['fragments']['mid'][startfrag] / binsize) * binsize
     elif start is None:
@@ -239,7 +257,8 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
         stopfrag = _find_frag_from_coord(fivec, chrint, stop)
     num_bins = (stop - start) / binsize
     num_frags = stopfrag - startfrag
-    print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
+    if not silent:
+        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         start_index = fivec.data['cis_indices'][startfrag]
@@ -276,15 +295,17 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
         mapping[:, 3] = mapping[:, 2] + binsize
         mapping[:, 0] = numpy.searchsorted(mids, mapping[:, 2]) + startfrag
         mapping[:, 1] = numpy.searchsorted(mids, mapping[:, 3]) + startfrag
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return [data_array, mapping]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return data_array
 
 
 def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=10000, binbounds=None, arraytype='full',
-                  returnmapping=False):
+                  returnmapping=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill 'binsize' bins or bins defined by 'binbounds' with data provided in
     'unbinned'.
@@ -307,9 +328,14 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype' pulled from 'unbinned'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that arraytype value is acceptable
     if arraytype not in ['full', 'upper']:
-        print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     # Determine input array type
     if len(unbinned.shape) == 2 and fragments.shape[0] * (fragments.shape[0] - 1) / 2 == unbinned.shape[0]:
@@ -322,7 +348,8 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
         ub_signal[:, 0] = unbinned[indices[0], indices[1], 0]
         ub_signal[:, 1] = unbinned[indices[0], indices[1], 1]
     else:
-        print >> sys.stderr, ("Unrecognized input array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized input array type. No data returned.\n"),
         return None
     # Determine start and stop, if necessary
     if binbounds is None:
@@ -341,7 +368,8 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
         num_bins = binbounds.shape[0]
         start = binbounds[0, 0]
         stop = binbounds[0, 1]
-    print >> sys.stderr, ("Finding binned %s array...") % (arraytype),
+    if not silent:
+        print >> sys.stderr, ("Finding binned %s array...") % (arraytype),
     # Find bin mapping for each fragment
     mapping = numpy.zeros(fragments.shape[0], dtype=numpy.int32) - 1
     mids = fivec.frags['fragments']['mid'][fragments]
@@ -368,15 +396,17 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
         mapping[:, 3] = binbounds[:, 1]
         mapping[:, 0] = numpy.r_[fragments, fragments[-1] + 1][numpy.searchsorted(mids, mapping[:, 2])]
         mapping[:, 1] = numpy.r_[fragments, fragments[-1] + 1][numpy.searchsorted(mids, mapping[:, 3])]
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return [binned_array, mapping]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return binned_array
 
 
 def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, minobservations=50,
-                              searchdistance=0, removefailed=True):
+                              searchdistance=0, removefailed=True, **kwargs):
     """
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
     or 'searchdistance' criteria.
@@ -397,6 +427,10 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     :type removefailed: bool.
     :returns: None
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # Determine unbinned array type
     if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) / 2 ==
                                      unbinned.shape[0]):
@@ -409,7 +443,8 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
         ub_signal[:, 0] = unbinned[indices[0], indices[1], 0]
         ub_signal[:, 1] = unbinned[indices[0], indices[1], 1]
     else:
-        print >> sys.stderr, ("Unrecognized unbinned array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized unbinned array type. No data returned.\n"),
         return None
     # Determine binned array type
     if len(binned.shape) == 2 and binbounds.shape[0] * (binbounds.shape[0] - 1) / 2 == binned.shape[0]:
@@ -422,9 +457,11 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
         b_signal[:, 0] = binned[indices[0], indices[1], 0]
         b_signal[:, 1] = binned[indices[0], indices[1], 1]
     else:
-        print >> sys.stderr, ("Unrecognized binned array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized binned array type. No data returned.\n"),
         return None
-    print >> sys.stderr, ("Dynamically binning data..."),
+    if not silent:
+        print >> sys.stderr, ("Dynamically binning data..."),
     # Determine bin edges relative to unbinned positions
     binedges = numpy.zeros(binbounds.shape, dtype=numpy.int32)
     binedges[:, 0] = numpy.searchsorted(unbinnedpositions, binbounds[:, 0])
@@ -439,13 +476,14 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
         binned[indices[0], indices[1], 1] = b_signal[:, 1]
         binned[indices[1], indices[0], 0] = b_signal[:, 0]
         binned[indices[1], indices[0], 1] = b_signal[:, 1]
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return None
 
 
 def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag1=None, stopfrag1=None,
                           start2=None, stop2=None, startfrag2=None, stopfrag2=None, datatype='enrichment',
-                          arraytype='full', skipfiltered=False, returnmapping=False):
+                          arraytype='full', skipfiltered=False, returnmapping=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill 'binsize' bins with data requested in 'datatype'.
 
@@ -481,15 +519,21 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing inter-region data requested with 'datatype'. If 'returnmapping' is True, a list is returned with mapping information. If 'arraytype' is 'full', a single data array and a 1d array of fragments corresponding to rows and columns is returned. If 'arraytype' is 'compact', two data arrays are returned (forward1 by reverse2 and forward2 by reverse1) along with forward and reverse fragment positions for each array for a total of 5 arrays.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
     if datatype not in datatypes:
-        print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
         return None
     else:
         datatype_int = datatypes[datatype]
     if arraytype not in ['full', 'compact']:
-        print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     # if parameters are no already found, calculate now
     if 'gamma' not in fivec.__dict__.keys():
@@ -535,8 +579,9 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
         trans_mean = fivec.trans_mean
     else:
         trans_mean = fivec.trans_mean
-    print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
-                         (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
+    if not silent:
+        print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
+                             (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         if startfrag1 < startfrag2:
@@ -576,7 +621,8 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
                 mapping2[i] = reverse2 - 1
                 reverse2 -= 1
         if forward1 == 0 or reverse1 == 0 or forward2 == 0 or reverse2 == 0:
-            print >> sys.stderr, ("Insufficient data.\n"),
+            if not silent:
+                print >> sys.stderr, ("Insufficient data.\n"),
             return None
         data_array1 = numpy.zeros((forward1, -reverse2, 2), dtype=numpy.float32)
         data_array2 = numpy.zeros((forward2, -reverse1, 2), dtype=numpy.float32)
@@ -588,7 +634,8 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
             num_bins1 = stopfrag1 - startfrag1
             num_bins2 = stopfrag2 - startfrag2
         if num_bins1 < 1 or num_bins2 < 1:
-            print >> sys.stderr, ("Insufficient data.\n"),
+            if not silent:
+                print >> sys.stderr, ("Insufficient data.\n"),
             return None
         mapping1 = numpy.zeros(stopfrag1 - startfrag1, dtype=numpy.int32) - 1
         mapping2 = numpy.zeros(stopfrag2 - startfrag2, dtype=numpy.int32) - 1
@@ -629,7 +676,8 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
                                                    data_array2, data_array1, trans_mean, fivec.sigma, startfrag2,
                                                    startfrag1, datatype_int)
     # If mapping requested, calculate bin bounds
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     if returnmapping:
         if arraytype == 'full':
             if startfrag1 < startfrag2:
@@ -658,7 +706,7 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
 
 def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag1=None, stopfrag1=None, start2=None,
                      stop2=None, startfrag2=None, stopfrag2=None, binsize=1000000, datatype='enrichment',
-                     returnmapping=False):
+                     returnmapping=False, **kwargs):
     """
     Create an array and fill 'binsize' bins with trans (inter-region) data requested in 'datatype'.
 
@@ -692,16 +740,21 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
     :type returnmapping: bool.
     :returns: Array in format requested with 'arraytype' containing binned inter-region data requested with 'datatype'.
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # check that all values are acceptable
     datatypes = {'raw': 0, 'fragment': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
     if datatype not in datatypes:
-        print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
         return None
     else:
         datatype_int = datatypes[datatype]
-    # if parameters are no already found, calculate now
+    # if parameters are not already found, calculate now
     if 'gamma' not in fivec.__dict__.keys():
-        fivec.find_distance_parameters()
+        fivec.find_distance_parameters(silent=silent)
     # Determine start, stop, startfend, and stopfend
     chrint1 = fivec.frags['regions']['chromosome'][region1]
     chrom1 = fivec.frags['chromosomes'][chrint1]
@@ -757,8 +810,9 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
         trans_mean = fivec.trans_mean
     else:
         trans_mean = fivec.trans_mean
-    print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
-                         (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
+    if not silent:
+        print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
+                             (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         if startfrag1 < startfrag2:
@@ -801,15 +855,17 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
         mapping2[:, 3] = mapping2[:, 2] + binsize
         mapping2[:, 0] = numpy.searchsorted(mids2, mapping2[:, 2]) + startfrag2
         mapping2[:, 1] = numpy.searchsorted(mids2, mapping2[:, 3]) + startfrag2
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return [data_array, mapping1, mapping2]
     else:
-        print >> sys.stderr, ("Done\n"),
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
         return data_array
 
 
 def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binbounds1, binbounds2,
-                                minobservations=50, searchdistance=0, removefailed=True):
+                                minobservations=50, searchdistance=0, removefailed=True, **kwargs):
     """
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
     or 'searchdistance' criteria.
@@ -834,7 +890,12 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     :type removefailed: bool.
     :returns: None
     """
-    print >> sys.stderr, ("Dynamically binning data..."),
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
+    if not silent:
+        print >> sys.stderr, ("Dynamically binning data..."),
     # Determine bin edges relative to unbinned positions
     binedges1 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
     binedges1[:, 0] = numpy.searchsorted(unbinnedpositions1, binbounds1[:, 0])
@@ -848,12 +909,13 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     # Dynamically bin using appropriate array type combination
     _fivec_binning.dynamically_bin_trans(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binedges1,
                                          binedges2, mids1, mids2, minobservations, searchdistance, int(removefailed))
-    print >> sys.stderr, ("Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
     return None
 
 
 def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_distance=False, arraytype='full',
-                       regions=[]):
+                       regions=[], **kwargs):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
@@ -873,14 +935,20 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_dista
     :type regions: list.
     :returns: None
     """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
     # Check if trans mean is needed and calculate if not already done
     if includetrans and remove_distance and 'trans_mean' not in fivec.__dict__.keys():
         fivec.find_trans_mean()
     # Check if filename already exists, and remove if it does
     if os.path.exists(filename):
-        print >> sys.stderr, ("%s already exists, overwriting.") % filename
+        if not silent:
+            print >> sys.stderr, ("%s already exists, overwriting.") % filename
         subprocess.call('rm %s' % filename, shell=True)
-    print >> sys.stderr, ("Creating binned heatmap...\n"),
+    if not silent:
+        print >> sys.stderr, ("Creating binned heatmap...\n"),
     output = h5py.File(filename, 'w')
     # Determine the requested data type
     if remove_distance:
@@ -898,9 +966,11 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_dista
     remove = []
     for region in regions:
         if binsize == 0:
-            results = unbinned_cis_signal(fivec, region, datatype=datatype, arraytype=arraytype, returnmapping=True)
+            results = unbinned_cis_signal(fivec, region, datatype=datatype, arraytype=arraytype, returnmapping=True,
+                                          silent=silent)
         else:
-            results = bin_cis_signal(fivec, region, binsize=binsize, datatype=datatype, returnmapping=True)
+            results = bin_cis_signal(fivec, region, binsize=binsize, datatype=datatype, returnmapping=True,
+                                     silent=silent)
         # Check if array contains data
         if results is None or results[0].shape[0] == 0:
             remove.append(region)
@@ -930,9 +1000,10 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_dista
             for j in range(i + 1, len(regions)):
                 if binsize == 0:
                     results = unbinned_trans_signal(fivec, regions[i], regions[j], datatype=datatype,
-                                                    arraytype=arraytype)
+                                                    arraytype=arraytype, silent=silent)
                 else:
-                    results = bin_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype)
+                    results = bin_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
+                                               silent=silent)
                 if binsize > 0 or arraytype == 'full':
                     output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
                     output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
@@ -942,5 +1013,6 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_dista
                     output.create_dataset('%s_by_%s.counts' % (regions[j], regions[i]), data=results[1][:, :, 0])
                     output.create_dataset('%s_by_%s.expected' % (regions[j], regions[i]), data=results[1][:, :, 1])
     output.close
-    print >> sys.stderr, ("Creating binned heatmap...Done\n"),
+    if not silent:
+        print >> sys.stderr, ("Creating binned heatmap...Done\n"),
     return None

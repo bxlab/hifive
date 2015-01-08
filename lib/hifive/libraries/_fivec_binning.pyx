@@ -166,10 +166,11 @@ def unbinned_signal_upper(
                 index = i * num_bins - i * (i + 1) / 2 - i - 1
                 for k in range(indices[frag1], indices[frag1 + 1]):
                     frag2 = data[k, 1]
-                    if filter[frag2] == 0:
+                    if frag2 >= num_frags or filter[frag2] == 0:
                         continue
                     j = mapping[frag2]
                     signal[index + j, 0] = data[k, 2]
+                    signal[index + mapping[frag2], 0] = data[i, 2]
         # fill in expected signal
         for frag1 in range(num_frags - 1):
             if filter[frag1] == 0:

@@ -22,7 +22,7 @@ def main():
         rank = 0
         num_procs = 1
     if len(sys.argv) < 8:
-        print "Usage python create_hic_set.py DATA_FILE HIC_FILE MIN_INTERACTIONS MINDIST MAX_DIST MIN_SIZE NUM_BINS SMOOTHED"
+        print "Usage python create_hic_set.py DATA_FILE HIC_FILE MIN_INTERACTIONS MINDIST MAX_DIST MIN_SIZE NUM_BINS"
         print "DATA_FILE         File name of HiCData h5dict to link with analysis."
         print "OUT_FILE          File name to write HiC h5dict to."
         print "MIN_INTERACTIONS  Minimum number of interactions needed for valid fends."

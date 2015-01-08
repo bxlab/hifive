@@ -15,6 +15,7 @@ def main():
         print "MAX_INSERT                    Integer specifying the maximum distance sum from each mapped end to restriction site."
         return None
     fend_fname, data_fnames, out_fname, maxinsert = sys.argv[1:5]
+    maxinsert = int(maxinsert)
     data = hifive.HiCData(out_fname, 'w')
     if data_fnames.endswith('mat'):
         data.load_data_from_mat(fend_fname, data_fnames, maxinsert)

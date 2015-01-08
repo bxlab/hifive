@@ -143,7 +143,8 @@ def find_mindistance_interactions(
         np.ndarray[DTYPE_int_t, ndim=1] chr_indices not None,
         np.ndarray[DTYPE_int_t, ndim=2] min_fend not None,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        int useread_int):
+        int useread_int,
+        int binned):
     cdef int i, j, k, chr_total, temp, all_total
     cdef int num_chroms = chr_indices.shape[0] - 1
     cdef int num_fends = filter.shape[0]
@@ -168,20 +169,21 @@ def find_mindistance_interactions(
                     temp = chr_total
                     for k in range(min_fend[j, 0], min_fend[j, 1]):
                         temp -= filter[k]
-                    if j % 2 == 0:
-                        if filter[j + 1] == 1 and min_fend[j, 1] <= j + 1:
-                            temp -= 1
-                        if j - 1 >= chr_indices[i] and filter[j - 1] == 1 and min_fend[j, 0] > j - 1:
-                            temp -= 1
-                        if j + 3 < chr_indices[i + 1] and filter[j + 3] == 1 and min_fend[j, 1] <= j + 3:
-                            temp -= 1
-                    else:
-                        if filter[j - 1] == 1 and min_fend[j, 0] > j - 1:
-                            temp -= 1
-                        if j - 3 >= chr_indices[i] and filter[j - 3] == 1 and min_fend[j, 0] > j - 3:
-                            temp -= 1
-                        if j + 1 < chr_indices[i + 1] and filter[j + 1] == 1 and min_fend[j, 1] <= j + 1:
-                            temp -= 1
+                    if binned == 0:
+                        if j % 2 == 0:
+                            if filter[j + 1] == 1 and min_fend[j, 1] <= j + 1:
+                                temp -= 1
+                            if j - 1 >= chr_indices[i] and filter[j - 1] == 1 and min_fend[j, 0] > j - 1:
+                                temp -= 1
+                            if j + 3 < chr_indices[i + 1] and filter[j + 3] == 1 and min_fend[j, 1] <= j + 3:
+                                temp -= 1
+                        else:
+                            if filter[j - 1] == 1 and min_fend[j, 0] > j - 1:
+                                temp -= 1
+                            if j - 3 >= chr_indices[i] and filter[j - 3] == 1 and min_fend[j, 0] > j - 3:
+                                temp -= 1
+                            if j + 1 < chr_indices[i + 1] and filter[j + 1] == 1 and min_fend[j, 1] <= j + 1:
+                                temp -= 1
                     interactions[j] += temp
     return None
 
@@ -405,7 +407,8 @@ def find_fend_ranges(
         int mindistance,
         int maxdistance,
         long long int start,
-        long long int stop):
+        long long int stop,
+        int binned):
     cdef long long int i, j, pos, total
     cdef long long int total_fends = mapping.shape[0]
     with nogil:
@@ -420,15 +423,16 @@ def find_fend_ranges(
                 j -= 1
             ranges[i, 2] = j
             total = ranges[i, 2] - ranges[i, 1]
-            if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 1:
-                total -= 1
-            if mapping[i] % 2 == 0:
-                if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 3:
+            if binned == 0:
+                if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 1:
                     total -= 1
-                if ranges[i, 1] + 1 < total_fends and mapping[ranges[i, 1] + 1] - mapping[i] == 3:
-                    total -= 1
-                if ranges[i, 1] + 2 < total_fends and mapping[ranges[i, 1] + 2] - mapping[i] == 3:
-                    total -= 1
+                if mapping[i] % 2 == 0:
+                    if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 3:
+                        total -= 1
+                    if ranges[i, 1] + 1 < total_fends and mapping[ranges[i, 1] + 1] - mapping[i] == 3:
+                        total -= 1
+                    if ranges[i, 1] + 2 < total_fends and mapping[ranges[i, 1] + 2] - mapping[i] == 3:
+                        total -= 1
             ranges[i, 0] = total
     return None
 
@@ -442,7 +446,8 @@ def find_node_indices(
         np.ndarray[DTYPE_int_t, ndim=1] indices1,
         np.ndarray[DTYPE_int64_t, ndim=2] ranges,
         long long int start,
-        long long int stop):
+        long long int stop,
+        int binned):
     cdef long long int total, i, j, pos
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
@@ -454,22 +459,23 @@ def find_node_indices(
             i += 1
         while total < stop:
             j = ranges[i, 1]
-            while j < ranges[i, 2] and mapping[j] < mapping[i] + 4:
-                if mapping[j] - mapping[i] == 1:
-                    j += 1
-                elif mapping[j] - mapping[i] == 3 and mapping[i] % 2 == 0:
-                    j += 1
-                elif total < start:
-                    j += 1
-                    total += 1
-                elif total < stop:
-                    indices0[pos] = i
-                    indices1[pos] = j
-                    j += 1
-                    total += 1
-                    pos += 1
-                else:
-                    j += 1
+            if binned == 0:
+                while j < ranges[i, 2] and mapping[j] < mapping[i] + 4:
+                    if mapping[j] - mapping[i] == 1:
+                        j += 1
+                    elif mapping[j] - mapping[i] == 3 and mapping[i] % 2 == 0:
+                        j += 1
+                    elif total < start:
+                        j += 1
+                        total += 1
+                    elif total < stop:
+                        indices0[pos] = i
+                        indices1[pos] = j
+                        j += 1
+                        total += 1
+                        pos += 1
+                    else:
+                        j += 1
             while j < ranges[i, 2]:
                 if total < start:
                     j += 1
@@ -594,7 +600,8 @@ def find_distance_bin_sums(
         np.ndarray[DTYPE_64_t, ndim=2] logdistance_sum not None,
         int start,
         int stop,
-        int index):
+        int index,
+        int binned):
     cdef int i, j, temp, fend1, fend2, previous_fend
     cdef double log_dist
     cdef int num_data = indices.shape[0]
@@ -616,19 +623,27 @@ def find_distance_bin_sums(
             count_sum[index, j] += counts[i]
         for fend1 in range(start, stop):
             j = 0
-            for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
-                if rev_mapping[fend1] % 2 == 0:
-                    temp = rev_mapping[fend2] - rev_mapping[fend1]
-                    if temp == 1 or temp == 3:
-                        continue
-                else:
-                    if rev_mapping[fend2] - rev_mapping[fend1] == 1:
-                        continue
-                log_dist = log(mids[fend2] - mids[fend1])
-                while log_dist > cutoffs[j]:
-                    j += 1
-                bin_size[index, j] += 1
-                logdistance_sum[index, j] += log_dist
+            if binned == 0:
+                for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
+                    if rev_mapping[fend1] % 2 == 0:
+                        temp = rev_mapping[fend2] - rev_mapping[fend1]
+                        if temp == 1 or temp == 3:
+                            continue
+                    else:
+                        if rev_mapping[fend2] - rev_mapping[fend1] == 1:
+                            continue
+                    log_dist = log(mids[fend2] - mids[fend1])
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    bin_size[index, j] += 1
+                    logdistance_sum[index, j] += log_dist
+            else:
+                for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
+                    log_dist = log(mids[fend2] - mids[fend1])
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    bin_size[index, j] += 1
+                    logdistance_sum[index, j] += log_dist
             for fend2 in range(fend1 + 4, num_fends):
                 log_dist = log(mids[fend2] - mids[fend1])
                 while log_dist > cutoffs[j]:
