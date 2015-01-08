@@ -21,7 +21,7 @@ def main():
           zip_safe = False,
           include_package_data = True,
           package_dir = {'':'lib'},
-          packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py']),
+          packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py'], where='lib/'),
           install_requires = ['numpy', 'scipy', 'h5py'],
           setup_requires = ['setuptools_cython'],
           ext_modules = get_extension_modules(),
