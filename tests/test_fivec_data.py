@@ -23,11 +23,13 @@ class FiveCData(unittest.TestCase):
         self.data2 = h5py.File('%s/tests/data/test_import.fcd' % self.basedir, 'r')
         self.frag_fname = '%s/tests/data/test.frags' % self.basedir
         self.count_fname = '%s/tests/data/test.counts' % self.basedir
-        self.bam_fname = '%s/tests/data/test_fivec' % self.basedir
+        self.bam_fname1 = '%s/tests/data/test_fivec_1.bam' % self.basedir
+        self.bam_fname2 = '%s/tests/data/test_fivec_2.bam' % self.basedir
 
     def test_fivec_counts_data_creation(self):
         data = fivec_data.FiveCData('%s/tests/data/test_temp.fcd' % self.basedir, 'w', silent=True)
         data.load_data_from_counts(self.frag_fname, self.count_fname)
+        data.save()
         data = h5py.File('%s/tests/data/test_temp.fcd' % self.basedir, 'r')
         for name in self.data1['/'].attrs.keys():
             self.assertTrue(name in data['/'].attrs,
@@ -44,7 +46,8 @@ class FiveCData(unittest.TestCase):
             print >> sys.stderr, "pysam required for bam import"
             return None
         data = fivec_data.FiveCData('%s/tests/data/test_temp.fcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_bam(self.frag_fname, self.bam_fname)
+        data.load_data_from_bam(self.frag_fname, [self.bam_fname1, self.bam_fname2])
+        data.save()
         data = h5py.File('%s/tests/data/test_temp.fcd' % self.basedir, 'r')
         for name in self.data2['/'].attrs.keys():
             self.assertTrue(name in data['/'].attrs,

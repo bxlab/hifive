@@ -64,7 +64,7 @@ def find_distance_mapping(
 @cython.cdivision(True)
 def find_fend_coverage(
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] data_indices not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] data_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] min_fend not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
@@ -98,7 +98,7 @@ def find_fend_coverage(
 @cython.cdivision(True)
 def unbinned_signal_compact(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] indices,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
@@ -154,6 +154,9 @@ def unbinned_signal_compact(
                         while distance > parameters[k, 0]:
                             k += 1
                         signal[i, j - i - 1, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                        # if finding expected only, fill in filter values for observed signal
+                        if datatype == 4:
+                            signal[i, j - i - 1, 0] = 1.0
                 j += 1
                 if j < num_fends:
                     fend2 = mapping[j]
@@ -171,9 +174,9 @@ def unbinned_signal_compact(
                         while distance > parameters[k, 0]:
                             k += 1
                         signal[i, j - i - 1, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                    # if finding expected only, fill in filter values for observed signal
-                    if datatype == 4:
-                        signal[i, j - i - 1, 0] = 1.0
+                        # if finding expected only, fill in filter values for observed signal
+                        if datatype == 4:
+                            signal[i, j - i - 1, 0] = 1.0
                 j += 1
     return None
 
@@ -183,7 +186,7 @@ def unbinned_signal_compact(
 @cython.cdivision(True)
 def unbinned_signal_upper(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] indices,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
@@ -241,6 +244,9 @@ def unbinned_signal_upper(
                         while distance > parameters[k, 0]:
                             k += 1
                         signal[index + j, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                        # if finding expected only, fill in filter values for observed signal
+                        if datatype == 4:
+                            signal[index + j, 0] = 1.0
                 j += 1
                 if j < num_fends:
                     fend2 = mapping[j]
@@ -254,13 +260,13 @@ def unbinned_signal_upper(
                         signal[index + j, 1] *= corrections[fend1] * corrections[fend2]
                     # if finding distance, enrichment, or expected, correct for distance
                     if datatype > 1:
-                        distance = mids[j] - mids[i]
+                        distance = log(mids[j] - mids[i])
                         while distance > parameters[k, 0]:
                             k += 1
                         signal[index + j, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                    # if finding expected only, fill in filter values for observed signal
-                    if datatype == 4:
-                        signal[index + j, 0] = 1.0
+                        # if finding expected only, fill in filter values for observed signal
+                        if datatype == 4:
+                            signal[index + j, 0] = 1.0
                 j += 1
     return None
 
@@ -270,7 +276,7 @@ def unbinned_signal_upper(
 @cython.cdivision(True)
 def binned_signal_compact(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] indices,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
@@ -326,7 +332,7 @@ def binned_signal_compact(
 @cython.cdivision(True)
 def binned_signal_upper(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] indices,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
@@ -370,7 +376,7 @@ def binned_signal_upper(
                     expected *= corrections[i] * corrections[j]
                 # if finding distance, enrichment, or expected, correct for distance
                 if datatype > 1:
-                    distance = mids[j] - mids[i]
+                    distance = log(mids[j] - mids[i])
                     while distance > parameters[k, 0]:
                         k += 1
                     expected *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
@@ -1101,7 +1107,7 @@ def dynamically_bin_compact_from_compact(
 @cython.cdivision(True)
 def binned_signal_trans(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] indices,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
@@ -1262,17 +1268,19 @@ def remap_counts(
         np.ndarray[DTYPE_int_t, ndim=1] indices1,
         np.ndarray[DTYPE_int_t, ndim=1] data,
         np.ndarray[DTYPE_int_t, ndim=2] temp_data):
-    cdef int i, j, fend0, fend1
-    cdef int num_pairs = indices0.shape[0]
-    cdef int num_data = temp_data.shape[0]
+    cdef long long int i, j, fend0, fend1
+    cdef long long int num_pairs = indices0.shape[0]
+    cdef long long int num_data = temp_data.shape[0]
     with nogil:
         i = 0
         for j in range(num_data):
             fend0 = temp_data[j, 0]
             fend1 = temp_data[j, 1]
+            if fend0 < 0 or fend1 < 0:
+                continue
             while i < num_pairs and indices0[i] < fend0:
                 i += 1
-            while i < num_pairs and indices1[i] < fend1:
+            while i < num_pairs and indices0[i] == fend0 and indices1[i] < fend1:
                 i += 1
             if fend0 == indices0[i] and fend1 == indices1[i]:
                 data[i] = temp_data[j, 2]

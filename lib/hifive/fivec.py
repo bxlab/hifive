@@ -70,7 +70,7 @@ class FiveC(object):
             return None
         self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
                                        os.path.dirname(self.file)), os.path.basename(filename))
-        self.data = FiveCData(filename).data
+        self.data = h5py.File(filename, 'r')
         fragfilename = self.data['/'].attrs['fragfilename']
         if fragfilename[:2] == './':
             fragfilename = fragfilename[2:]
@@ -84,7 +84,7 @@ class FiveC(object):
             if not self.silent:
                 print >> sys.stderr, ("Could not find %s.\n") % (fragfilename),
             return None
-        self.frags = Fragment(fragfilename).fragments
+        self.frags = h5py.File(fragfilename, 'r')
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.frags['chromosomes']):
@@ -94,12 +94,35 @@ class FiveC(object):
         self.corrections = numpy.zeros(self.frags['fragments'].shape[0], dtype=numpy.float32)
         return None
 
-    def save(self):
+    def save(self, out_fname=None):
         """
         Save analysis parameters to h5dict.
-        
+
+        :param filename: Specifies the file name of the :class:`FiveC <hifive.fivec.FiveC>` object to save this analysis to.
+        :type filename: str.
         :returns: None
-        """
+        """ 
+        if not out_fname is None:
+            original_file = os.path.abspath(self.file)
+            self.file = out_fname
+            if 'datafilename' in self.__dict__:
+                datafilename = self.datafilename
+                if datafilename[:2] == './':
+                    datafilename = datafilename[2:]
+                parent_count = datafilename.count('../')
+                datafilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
+                                        datafilename.lstrip('/').split('/')[parent_count:])
+                self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(datafilename)),
+                                               os.path.dirname(self.file)), os.path.basename(datafilename))
+            if 'fragfilename' in self.__dict__:
+                fragfilename = self.fragfilename
+                if fragfilename[:2] == './':
+                    fragfilename = fragfilename[2:]
+                parent_count = fragfilename.count('../')
+                fragfilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
+                                        fragfilename.lstrip('/').split('/')[parent_count:])
+                self.fragfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
+                                               os.path.dirname(self.file)), os.path.basename(fragfilename))
         datafile = h5py.File(self.file, 'w')
         for key in self.__dict__.keys():
             if key in ['data', 'frags', 'file', 'chr2int', 'silent']:
@@ -136,7 +159,7 @@ class FiveC(object):
                 if not self.silent:
                     print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (datafilename),
             else:
-                self.data = FiveCData(datafilename).data
+                self.data = h5py.File(datafilename, 'r')
         # ensure fragment h5dict exists
         if 'fragfilename' in self.__dict__:
             fragfilename = self.fragfilename
@@ -157,14 +180,18 @@ class FiveC(object):
         datafile.close()
         return None
 
-    def filter_fragments(self, mininteractions=20):
+    def filter_fragments(self, mininteractions=20, mindistance=0, maxdistance=0):
         """
-        Iterate over the dataset and remove fragments that do not have 'minobservations' using only unfiltered fragments.
+        Iterate over the dataset and remove fragments that do not have 'minobservations' using only unfiltered fragments and interactions falling with the distance limits specified.
 
         In order to create a set of fragments that all have the necessary number of interactions, after each round of filtering, fragment interactions are retallied using only interactions that have unfiltered fragments at both ends.
 
         :param mininteractions: The required number of interactions for keeping a fragment in analysis.
         :type mininteractions: int.
+        :param mindistance: The minimum inter-fragment distance to be included in filtering.
+        :type mindistance: int.
+        :param maxdistance: The maximum inter-fragment distance to be included in filtering. A value of zero indicates no maximum cutoff.
+        :type maxdistance: int.
         :returns: None
         """
         if not self.silent:
@@ -175,19 +202,21 @@ class FiveC(object):
         coverage = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
          # copy needed arrays
         data = self.data['cis_data'][...]
-        indices = self.data['cis_indices'][...]
-        regions = self.frags['regions'][...]
+        distances = self.frags['fragments']['mid'][data[:, 1]] - self.frags['fragments']['mid'][data[:, 0]]
+        if maxdistance == 0:
+            maxdistance = numpy.amax(distances) + 1
+        valid = numpy.where((self.filter[data[:, 0]] * self.filter[data[:, 1]]) *
+                            (distances >= mindistance) * (distances < maxdistance))[0]
+        data = data[valid, :]
         # repeat until all remaining fragments have minobservation valid observations
         while current_valid < previous_valid:
             previous_valid = current_valid
-            coverage.fill(0)
-            find_fragment_coverage(data,
-                                   indices,
-                                   self.filter,
-                                   regions['start_frag'],
-                                   regions['stop_frag'],
-                                   coverage,
-                                   mininteractions)
+            coverage = numpy.bincount(data[:, 0], minlength=self.filter.shape[0])
+            coverage += numpy.bincount(data[:, 1], minlength=self.filter.shape[0])
+            invalid = numpy.where(coverage < mininteractions)[0]
+            self.filter[invalid] = 0
+            valid = numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0]
+            data = data[valid, :]
             current_valid = numpy.sum(self.filter)
         if not self.silent:
             print >> sys.stderr, ("Removed %i of %i fragments\n") % (original_count - current_valid, original_count),
@@ -218,11 +247,14 @@ class FiveC(object):
             print >> sys.stderr, ("Done\n"),
         return None
 
-    def find_fragment_corrections(self, maxdistance=0, burnin_iterations=5000, annealing_iterations=10000,
-                                  learningrate=0.01, precalculate=True, recalculate_distance=100, display=10):
+    def find_fragment_corrections(self, mindistance=0, maxdistance=0, burnin_iterations=5000,
+                                  annealing_iterations=10000, learningrate=0.01, precalculate=True,
+                                  display=10):
         """
          Using gradient descent, learn correction values for each valid fragment based on a Log-Normal distribution of observations.
 
+        :param mindistance: The minimum inter-fragment distance to be included in modeling.
+        :type mindistance: int.
         :param maxdistance: The maximum inter-fragment distance to be included in modeling.
         :type maxdistance: int.
         :param burnin_iterations: The number of iterations to use with constant learning rate in gradient descent for learning fragment corrections.
@@ -233,8 +265,6 @@ class FiveC(object):
         :type learningrate: float
         :param precalculate: Specifies whether the correction values should be initialized at the fragment means.
         :type precalculate: bool.
-        :param recalculate_distance: Number of iterations that should pass before recalculating the distance function parameters to account for the updated fragment corrections. If set to zero, no recalculation is performed.
-        :type recalculate_distance: int.
         :param display: Specifies how many iterations between when cost is calculated and displayed as model is learned. If 'display' is zero, the cost is not calculated of displayed.
         :type display: int.
         :returns: None
@@ -246,31 +276,23 @@ class FiveC(object):
             print >> sys.stderr, ("Learning corrections..."),
         # copy and calculate needed arrays
         data = self.data['cis_data'][...]
-        valid = numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0]
+        distances = self.frags['fragments']['mid'][data[:, 1]] - self.frags['fragments']['mid'][data[:, 0]]
+        if maxdistance == 0:
+            maxdistance = numpy.amax(distances) + 1
+        valid = numpy.where((self.filter[data[:, 0]] * self.filter[data[:, 1]]) *
+                            (distances >= mindistance) * (distances < maxdistance))[0]
+        data = data[valid, :]
+        distances = numpy.log(distances[valid])
         log_counts_n = numpy.log(data[:, 2] - 0.5).astype(numpy.float32)
         log_counts = numpy.log(data[:, 2]).astype(numpy.float32)
         log_counts_p = numpy.log(data[:, 2] + 0.5).astype(numpy.float32)
-        indices = self.data['cis_indices'][...]
-        distances = numpy.log(self.frags['fragments']['mid'][data[:, 1]] - self.frags['fragments']['mid'][data[:, 0]])
         distance_signal = (self.mu - self.gamma * distances).astype(numpy.float32)
-        valid_distances = distances[valid]
         # create empty arrays
         gradients = numpy.zeros(self.filter.shape[0], dtype=numpy.float32)
         sigma_gradient = numpy.zeros(1, dtype=numpy.float32)
-        # find maximum valid fragment for specified maxdistance
-        max_fragment = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
-        _distance.find_max_frag(max_fragment,
-                                      self.frags['fragments']['mid'][...],
-                                      self.frags['regions']['start_frag'][...],
-                                      self.frags['regions']['stop_frag'][...],
-                                      maxdistance)
         # find number of interactions for each fragment
-        interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
-        _distance.find_fragment_interactions(self.filter,
-                                                   data,
-                                                   indices,
-                                                   interactions,
-                                                   max_fragment)
+        interactions = numpy.bincount(data[:, 0], minlength=self.filter.shape[0]).astype(numpy.int32)
+        interactions += numpy.bincount(data[:, 1], minlength=self.filter.shape[0]).astype(numpy.int32)
         all_interactions = numpy.sum(interactions) / 2
         # if precalculation requested, find fragment means
         if precalculate:
@@ -281,19 +303,14 @@ class FiveC(object):
         # cycle through learning phases
         find_variance = 0
         for phase in ['burnin', 'annealing']:
-            if phase == 'burnin':
-                iterations = burnin_iterations
+            learningstep = learningrate / max(1, annealing_iterations)
+            if (phase == 'burnin' and burnin_iterations == 0) or (phase == 'annealing' and annealing_iterations == 0):
+                cont = False
             else:
-                iterations = annealing_iterations
-                learningstep = learningrate / max(1, annealing_iterations)
-            for iteration in range(iterations):
-                # if necessary, recalculate distance parameters
-                if recalculate_distance > 0 and (iteration + 1) % recalculate_distance == 0:
-                    valid_counts = (log_counts[valid] - self.corrections[data[valid, 0]] -
-                                    self.corrections[data[valid, 1]])
-                    self.gamma = -linregress(distances, valid_counts)[0]
-                    distance_signal = (self.mu - self.gamma * distances).astype(numpy.float32)
-                    self.sigma = float(numpy.std(valid_counts - distance_signal[valid]))
+                cont = True
+            iteration = 0
+            while cont:
+                iteration += 1
                 # if requested and correct iteration, indicate cost is to be calculated
                 if display > 0 and iteration%display == 0:
                     find_cost = 1
@@ -305,12 +322,9 @@ class FiveC(object):
                                                      log_counts_n,
                                                      log_counts,
                                                      log_counts_p,
-                                                     indices,
-                                                     self.filter,
                                                      distance_signal,
                                                      self.corrections,
                                                      gradients,
-                                                     max_fragment,
                                                      self.sigma,
                                                      find_cost)
                 # update gradients
@@ -319,40 +333,49 @@ class FiveC(object):
                                              gradients,
                                              interactions,
                                              learningrate)
-                # if not burnin phase, update sigma
-                if phase != 'burnin':
-                    learningrate -= learningstep
                 # if appropriate iteration and requested, update display
                 if find_cost and not self.silent:
-                    print >> sys.stderr, ("\rLearning corrections... phase:%s iteration:%i  cost:%f ") %\
-                                         (phase, iteration, cost),
+                    print >> sys.stderr, ("\rLearning corrections... phase:%s iteration:%i cost:%06f%s\r") %\
+                                         (phase, iteration, cost,' ' * 5),
+                if phase == 'annealing':
+                    learningrate -= learningstep
+                    if iteration >= annealing_iterations:
+                        cont = False
+                elif iteration >= burnin_iterations:
+                    cont = False
         if not self.silent:
             print >> sys.stderr, ("\rLearning corrections... Done %f %s\n") % (cost, ' ' * 60),
         return None
 
-    def find_express_fragment_corrections(self, iterations=1000, remove_distance=False, recalculate_distance=100):
+    def find_express_fragment_corrections(self, mindistance=0, maxdistance=0, iterations=1000, remove_distance=False):
         """
         Using iterative approximation, learn correction values for each valid fragment.
 
+        :param mindistance: The minimum inter-fragment distance to be included in modeling.
+        :type mindistance: int.
+        :param maxdistance: The maximum inter-fragment distance to be included in modeling.
+        :type maxdistance: int.
         :param iterations: The number of iterations to use for learning fragment corrections.
         :type iterations: int.
         :param remove_distance: Specifies whether the estimated distance-dependent portion of the signal is removed prior to learning fragment corrections.
         :type remove_distance: bool.
-        :param recalculate_distance: Number of iterations that should pass before recalculating the distance bin means to account for the updated fragment corrections. If set to zero, no recalculation is performed.
-        :type recalculate_distance: int.
         :returns: None
         """
         if not self.silent:
             print >> sys.stderr, ("Learning corrections..."),
         # copy and calculate needed arrays
         data = self.data['cis_data'][...]
-        valid = numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0]
+        distances = (self.frags['fragments']['mid'][data[:, 1]] -
+                     self.frags['fragments']['mid'][data[:, 0]]).astype(numpy.float32)
+        if maxdistance == 0:
+            maxdistance = numpy.amax(distances) + 1
+        valid = numpy.where((self.filter[data[:, 0]] * self.filter[data[:, 1]]) *
+                            (distances >= mindistance) * (distances < maxdistance))[0]
         data = data[valid, :]
         log_counts = numpy.log(data[:, 2]).astype(numpy.float32)
         corrections = numpy.copy(self.corrections)
         if remove_distance:
-            distances = numpy.log(self.frags['fragments']['mid'][data[:, 1]] -
-                                  self.frags['fragments']['mid'][data[:, 0]]).astype(numpy.float32)
+            distances = numpy.log(distances[valid])
             corrected_counts = log_counts - corrections[data[:, 0]] - corrections[data[:, 1]]
             self.gamma = -linregress(distances, corrected_counts)[0]
             distance_signal = -self.gamma * distances
@@ -368,11 +391,6 @@ class FiveC(object):
                             numpy.bincount(data[:, 1], minlength=interactions.shape[0])).astype(numpy.int32)
         # learn corrections
         for iteration in range(iterations):
-            # if necessary, recalculate distance parameters
-            if not remove_distance and recalculate_distance > 0 and (iteration + 1) % recalculate_distance == 0:
-                corrected_counts = log_counts - corrections[data[:, 0]] - corrections[data[:, 1]]
-                self.gamma = -linregress(distances, corrected_counts)[0]
-                distance_signal = -self.gamma * distances
             # update corrections
             cost = _distance.find_fragment_means(distance_signal,
                                                  interactions,
@@ -413,7 +431,7 @@ class FiveC(object):
     def cis_heatmap(self, region, start=None, stop=None, startfrag=None, stopfrag=None, binsize=0,
                     datatype='enrichment', arraytype='full', skipfiltered=False, returnmapping=False,
                     dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
-                    removefailed=False):
+                    removefailed=False, image_file=None, **kwargs):
         """
         Return a heatmap of cis data of the type and shape specified by the passed arguments.
 
@@ -449,6 +467,8 @@ class FiveC(object):
         :type expansion_binsize: int.
         :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
         :type removefailed: bool.
+        :param image_file: If a filename is specified, a PNG image file is written containing the heatmap data. Arguments for the appearance of the image can be passed as additional keyword arguments.
+        :type image_file: str.
         :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
         """
         # check that all values are acceptable
@@ -506,12 +526,28 @@ class FiveC(object):
                 data = [binned, mapping]
             else:
                 data = binned
+        if not image_file is None:
+            if 'symmetricscaling' not in kwargs:
+                if datatype == 'enrichment':
+                    kwargs['symmetricscaling'] = True
+                else:
+                    kwargs['symmetricscaling'] = False
+            if isinstance(data, list):
+                binned = data[0]
+            else:
+                binned = data
+            if arraytype == 'upper':
+                img = plotting.plot_upper_array(binned, silent=self.silent, **kwargs)
+            else:
+                img = plotting.plot_full_array(binned, silent=self.silent, **kwargs)
+            img.save(image_file, format='png')
         return data
 
-    def trans_heatmap(self, region1, region2, start1=0, stop1=None, startfrag1=None, stopfrag1=None, start2=0,
+    def trans_heatmap(self, region1, region2, start1=None, stop1=None, startfrag1=None, stopfrag1=None, start2=None,
                       stop2=None, startfrag2=None, stopfrag2=None, binsize=1000000, datatype='enrichment',
                       arraytype='full', returnmapping=False, dynamically_binned=False, minobservations=0,
-                      searchdistance=0, expansion_binsize=0, removefailed=False):
+                      searchdistance=0, expansion_binsize=0, removefailed=False, skipfiltered=False,
+                      image_file=None, **kwargs):
         """
         Return a heatmap of trans data of the type and shape specified by the passed arguments.
 
@@ -555,6 +591,10 @@ class FiveC(object):
         :type expansion_binsize: int.
         :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
         :type removefailed: bool.
+        :param skipfiltered: If 'True', all interaction bins for filtered out fragments are removed and a reduced-size array is returned.
+        :type skipfiltered: bool.
+        :param image_file: If a filename is specified, a PNG image file is written containing the heatmap data. Arguments for the appearance of the image can be passed as additional keyword arguments.
+        :type image_file: str.
         :returns: Array in format requested with 'arraytype' containing inter-region data requested with 'datatype'. If 'returnmapping' is True, a list is returned with mapping information. If 'arraytype' is 'full', a single data array and two 1d arrays of fragments corresponding to rows and columns, respectively is returned. If 'arraytype' is 'compact', two data arrays are returned (forward1 by reverse2 and forward2 by reverse1) along with forward and reverse fragment positions for each array for a total of 5 arrays.
         """
         # check that all values are acceptable
@@ -639,9 +679,21 @@ class FiveC(object):
                 data = [binned, mapping1, mapping2]
             else:
                 data = binned
+        if not image_file is None:
+            if 'symmetricscaling' not in kwargs:
+                if datatype == 'enrichment':
+                    kwargs['symmetricscaling'] = True
+                else:
+                    kwargs['symmetricscaling'] = False
+            if isinstance(data, list):
+                binned = data[0]
+            else:
+                binned = data
+            img = plotting.plot_full_array(binned, silent=self.silent, **kwargs)
+            img.save(image_file, format='png')
         return data
 
-    def write_heatmap_dict(self, filename, binsize, includetrans=True, remove_distance=False, arraytype='full',
+    def write_heatmap_dict(self, filename, binsize, includetrans=True, datatype='enrichment', arraytype='full',
                            regions=[]):
         """
         Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
@@ -652,15 +704,24 @@ class FiveC(object):
         :type binsize: int.
         :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
         :type includetrans: bool.
-        :param remove_distance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fragment corrections are used.
-        :type remove_distance: bool.
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-filtered bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+        :type datatype: str.
         :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'. 'compact' means data are arranged in a N x M x 2 array where N is the number of bins, M is the maximum number of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2.
         :type arraytype: str.
         :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
         :type regions: list.
         :returns: None
         """
+        if (regions is None or
+                (isinstance(regions, list) and
+                (len(regions) == 0 or
+                (len(regions) == 1 and regions[0] == ''))) or
+                regions == ''):
+            regions = list(numpy.arange(self.frags['regions'].shape[0]))
+        else:
+            for i in range(len(regions)):
+                regions[i] = int(regions[i])
         fivec_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
-                                         remove_distance=remove_distance, arraytype=arraytype,
+                                         datatype=datatype, arraytype=arraytype,
                                          regions=regions, silent=self.silent)
         return None

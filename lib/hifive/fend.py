@@ -44,7 +44,7 @@ class Fend(object):
         self.fends.close()
         return None
 
-    def load_fends(self, filename, genome_name=None, re_name=None):
+    def load_fends(self, filename, genome_name=None, re_name=None, format=None):
         """
         Parse and store fend data in h5dict.
 
@@ -54,6 +54,8 @@ class Fend(object):
         :type genome_name: str.
         :param re_name: The name of the restriction enzyme used to produce the fragment set. Optional.
         :type re_name: str.
+        :param format: Format of the input file. If not specified, it will be inferred from the file extension. Optional.
+        :type format: str.
         :returns: None
         """
         if not os.path.exists(filename):
@@ -66,10 +68,14 @@ class Fend(object):
         # if no re name given, determine from filename
         if re_name is None:
             re_name = filename.split('_')[-1].split('.')[0]
-        if filename.split('.')[-1] == 'bed':
+        if format == 'bed' or (format is None and filename.split('.')[-1] == 'bed'):
             fends, chromosomes = self._load_from_bed(filename)
-        else:
+        elif format == "fend" or (format is None and filename.split('.')[-1] == 'fend'):
             fends, chromosomes = self._load_from_fend(filename)
+        else:
+            if not self.silent:
+                print >> sys.stderr, ("Unrecognized format.")
+            return None
         # make note of chromosome positions in fend array
         chr_indices = numpy.zeros(chromosomes.shape[0] + 1, dtype=numpy.int32)
         chr_indices[1:] = numpy.bincount(fends['chr'])
@@ -87,7 +93,7 @@ class Fend(object):
         chromosomes = []
         chr2int = {}
         data = {}
-        input = open(filename, 'r')
+        input = open(fname, 'r')
         fragment_index = 1
         chromosome_index = 2
         coordinate_index = 3

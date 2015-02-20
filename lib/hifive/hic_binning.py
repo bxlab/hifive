@@ -84,10 +84,10 @@ def unbinned_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopf
         start = hic.fends['fends']['mid'][startfend]
     else:
         startfend = _find_fend_from_coord(hic, chrint, start)
-    if stop is None and stopfend is None:
+    if (stop is None or stop == 0) and stopfend is None:
         stopfend = hic.fends['chr_indices'][chrint + 1]
         stop = hic.fends['fends']['mid'][stopfend - 1] + 1
-    elif stop is None:
+    elif stop is None or stop == 0:
         stop = hic.fends['fends']['mid'][stopfend - 1] + 1
     else:
         stopfend = _find_fend_from_coord(hic, chrint, stop)
@@ -233,14 +233,15 @@ def bin_cis_signal(hic, chrom, start=None, stop=None, startfend=None, stopfend=N
         start = (hic.fends['fends']['mid'][startfend] / binsize) * binsize
     else:
         startfend = _find_fend_from_coord(hic, chrint, start)
-    if stop is None and stopfend is None:
+    if (stop is None or stop == 0) and stopfend is None:
         stopfend = hic.fends['chr_indices'][chrint + 1]
         while stopfend > hic.fends['chr_indices'][chrint] and hic.filter[stopfend - 1] == 0:
             stopfend -= 1
-        stop = int(ceil((hic.fends['fends']['mid'][stopfend - 1] + 1 - start) / float(binsize))) * binsize + start
-    elif stop is None:
-        stop = int(ceil((hic.fends['fends']['mid'][stopfend - 1] + 1 - start) / float(binsize))) * binsize + start
+        stop = ((hic.fends['fends']['mid'][stopfend - 1] - start) / binsize + 1) * binsize + start
+    elif stop is None or stop == 0:
+        stop = ((hic.fends['fends']['mid'][stopfend - 1] - start) / binsize + 1) * binsize + start
     else:
+        stop = ((stop - 1 - start) / binsize + 1) * binsize + start
         stopfend = _find_fend_from_coord(hic, chrint, stop)
     if binbounds is None:
         num_bins = (stop - start) / binsize
@@ -376,9 +377,9 @@ def bin_cis_array(hic, unbinned, fends, start=None, stop=None, binsize=10000, bi
         if start is None:
             start = (hic.fends['fends']['mid'][fends[0]] / binsize) * binsize
         if stop is None:
-            stop = int(ceil((hic.fends['fends']['mid'][fends[-1]] + 1 - start) / float(binsize))) * binsize + start
+            stop = (hic.fends['fends']['mid'][fends[-1] - 1] / binsize + 1) * binsize
         else:
-            stop = int(ceil((stop - start) / float(binsize))) * binsize + start
+            stop = ((stop - 1 - start) / binsize + 1) * binsize + start
         num_bins = (stop - start) / binsize
         binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32)
         binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
@@ -563,6 +564,163 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     return None
 
 
+def unbinned_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=None, stopfend1=None,
+                     start2=None, stop2=None, startfend2=None, stopfend2=None, datatype='enrichment',
+                     returnmapping=False, skipfiltered=True, **kwargs):
+    """
+    Create a rectangular array and fill with trans data requested in 'datatype' aggregated in bins.
+
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
+    :param chrom1: The name of the first chromosome to use.
+    :type chrom1: str.
+    :param chrom2: The name of the second chromosome to use.
+    :type chrom2: str.
+    :param start1: The smallest coordinate to include in the array for 'chrom1', measured from fend midpoints. If both 'start1' and 'startfend1' are given, 'start1' will override 'startfend1'. If unspecified, this will be set to the midpoint of the first fend for 'chrom1'. Optional.
+    :type start1: int.
+    :param stop1: The largest coordinate to include in the array for 'chrom1', measured from fend midpoints. If both 'stop1' and 'stopfend1' are given, 'stop1' will override 'stopfend1'. If unspecified, this will be set to the midpoint of the last fend plus one for 'chrom1'. Optional.
+    :type stop1: int.
+    :param startfend1: The first fend to include in the array from 'chrom1'. If unspecified and 'start1' is not given, this is set to the first fend in 'chrom1'. In cases where 'start1' is specified and conflicts with 'startfend1', 'start1' is given preference. Optional
+    :type startfend1: int.
+    :param stopfend1: The first fend not to include in the array from 'chrom1'. If unspecified and 'stop1' is not given, this is set to the last fend in 'chrom1' plus one. In cases where 'stop1' is specified and conflicts with 'stopfend1', 'stop1' is given preference. Optional.
+    :type stopfend1: str.
+    :param start2: The smallest coordinate to include in the array for 'chrom2', measured from fend midpoints. If both 'start2' and 'startfend1' are given, 'start2' will override 'startfend2'. If unspecified, this will be set to the midpoint of the first fend for 'chrom2'. Optional.
+    :type start2: int.
+    :param stop2: The largest coordinate to include in the array for 'chrom2', measured from fend midpoints. If both 'stop2' and 'stopfend2' are given, 'stop2' will override 'stopfend2'. If unspecified, this will be set to the midpoint of the last fend plus one for 'chrom2'. Optional.
+    :type stop2: int.
+    :param startfend2: The first fend to include in the array from 'chrom2'. If unspecified and 'start2' is not given, this is set to the first fend in 'chrom2'. In cases where 'start2' is specified and conflicts with 'startfend2', 'start2' is given preference. Optional
+    :type startfend2: int.
+    :param stopfend2: The first fend not to include in the array from 'chrom2'. If unspecified and 'stop2' is not given, this is set to the last fend in 'chrom2' plus one. In cases where 'stop2' is specified and conflicts with 'stopfend2', 'stop2' is given preference. Optional.
+    :type stopfend2: str.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+    :type datatype: str.
+    :param returnmapping: If 'True', a list containing the data array and two 1d arrays containing fend numbers included in the data array for 'chrom1' and chrom2, respectively, is return. Otherwise only the data array is returned.
+    :type returnmapping: bool.
+    :param skipfiltered: If 'True', all interaction bins for filtered out fends are removed and a reduced-size array is returned.
+    :type skipfiltered: bool.
+    :returns: Array in format requested with 'arraytype' containing trans data requested with 'datatype'.
+    """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
+    # check that all values are acceptable
+    datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
+    if datatype not in datatypes:
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        return None
+    else:
+        datatype_int = datatypes[datatype]
+    # Determine start, stop, startfend, and stopfend
+    chrint1 = hic.chr2int[chrom1.strip('chr')]
+    chrint2 = hic.chr2int[chrom2.strip('chr')]
+    if start1 is None and startfend1 is None:
+        startfend1 = hic.fends['chr_indices'][chrint1]
+        while startfend1 < hic.fends['chr_indices'][chrint1 + 1] and hic.filter[startfend1] == 0:
+            startfend1 += 1
+        start1 = hic.fends['fends']['mid'][startfend1]
+    elif start1 is None:
+        start1 = hic.fends['fends']['mid'][startfend1]
+    else:
+        startfend1 = _find_fend_from_coord(hic, chrint1, start1)
+    if (stop1 is None or stop1 == 0) and stopfend1 is None:
+        stopfend1 = hic.fends['chr_indices'][chrint1 + 1]
+        while stopfend1 > hic.fends['chr_indices'][chrint1] and hic.filter[stopfend1 - 1] == 0:
+            stopfend1 -= 1
+        stop1 = hic.fends['fends']['mid'][stopfend1 - 1] + 1
+    elif stop1 is None or stop1 == 0:
+        stop1 = hic.fends['fends']['mid'][stopfend1 - 1] + 1
+    else:
+        stopfend1 = _find_fend_from_coord(hic, chrint1, stop1)
+    num_bins1 = stopfend1 - startfend1
+    if start2 is None and startfend2 is None:
+        startfend2 = hic.fends['chr_indices'][chrint2]
+        while startfend2 < hic.fends['chr_indices'][chrint2 + 1] and hic.filter[startfend2] == 0:
+            startfend2 += 1
+        start2 = hic.fends['fends']['mid'][startfend2]
+    elif start2 is None:
+        start2 = hic.fends['fends']['mid'][startfend2]
+        startfend2 = _find_fend_from_coord(hic, chrint2, start2)
+    if (stop2 is None or stop2 == 0) and stopfend2 is None:
+        stopfend2 = hic.fends['chr_indices'][chrint2 + 1]
+        while stopfend2 > hic.fends['chr_indices'][chrint2] and hic.filter[stopfend2 - 1] == 0:
+            stopfend2 -= 1
+        stop2 = hic.fends['fends']['mid'][stopfend2 - 1] + 1
+    elif stop2 is None or stop2 == 0:
+        stop2 = hic.fends['fends']['mid'][stopfend2 - 1] + 1
+    else:
+        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
+    num_bins2 = stopfend2 - startfend2
+    # If trans mean not already in hic and 'distance', 'enrichment', or 'expected' is requested, calculate
+    if datatype in ['raw', 'fend']:
+        trans_mean = 1.0
+    else:
+        if 'trans_means' not in hic.__dict__.keys():
+            hic.find_trans_means()
+        if chrint1 < chrint2:
+            index = chrint1 * (hic.fends['chromosomes'].shape[0] - 1) - chrint1 * (chrint1 + 1) / 2 - 1 + chrint2
+        else:
+            index = chrint2 * (hic.fends['chromosomes'].shape[0] - 1) - chrint2 * (chrint2 + 1) / 2 - 1 + chrint1
+        trans_mean = hic.trans_means[index]
+    if not silent:
+        print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
+                             (datatype, chrom1, start1, stop1, chrom2, start2, stop2),
+    # Copy needed data from h5dict for faster access
+    if datatype != 'expected':
+        if startfend1 < startfend2:
+            start_index = hic.data['trans_indices'][startfend1]
+            stop_index = hic.data['trans_indices'][stopfend1]
+            data_indices = hic.data['trans_indices'][startfend1:(stopfend1 + 1)]
+        else:
+            start_index = hic.data['trans_indices'][startfend2]
+            stop_index = hic.data['trans_indices'][stopfend2]
+            data_indices = hic.data['trans_indices'][startfend2:(stopfend2 + 1)]
+        data_indices -= data_indices[0]
+        data = hic.data['trans_data'][start_index:stop_index, :]
+    else:
+        data_indices = None
+        data = None
+    # Find fend ranges for each bin
+    mapping1 = numpy.zeros(stopfend1 - startfend1, dtype=numpy.int32) - 1
+    if skipfiltered:
+        mapping1[numpy.where(hic.filter[startfend1:stopfend1])[0]] = numpy.arange(num_bins1)
+    else:
+        mapping1[numpy.where(hic.filter[startfend1:stopfend1])[0]] = numpy.where(hic.filter[startfend1:stopfend1])
+    mapping2 = numpy.zeros(stopfend2 - startfend2, dtype=numpy.int32) - 1
+    if skipfiltered:
+        mapping2[numpy.where(hic.filter[startfend2:stopfend2])[0]] = numpy.arange(num_bins2)
+    else:
+        mapping2[numpy.where(hic.filter[startfend2:stopfend2])[0]] = numpy.where(hic.filter[startfend2:stopfend2])
+    # Create requested array
+    if startfend1 < startfend2:
+        data_array = numpy.zeros((num_bins1, num_bins2, 2), dtype=numpy.float32)
+    else:
+        data_array = numpy.zeros((num_bins2, num_bins1, 2), dtype=numpy.float32)
+    # Fill in data values
+    if startfend1 < startfend2:
+        _hic_binning.binned_signal_trans(data, data_indices, hic.filter, mapping1, mapping2, hic.corrections,
+                                         data_array, trans_mean, startfend1, startfend2, datatype_int)
+    else:
+        _hic_binning.binned_signal_trans(data, data_indices, hic.filter, mapping2, mapping1, hic.corrections,
+                                         data_array, trans_mean, startfend2, startfend1, datatype_int)
+        data_array = numpy.transpose(data_array, axes=[1, 0, 2])
+    # If mapping requested, calculate bin bounds
+    if returnmapping:
+        if skipfiltered:
+            mapping1 = (numpy.where(hic.filter[startfend1:stopfend1])[0] + startfend1).astype(numpy.int32)
+            mapping2 = (numpy.where(hic.filter[startfend2:stopfend2])[0] + startfend2).astype(numpy.int32)
+        else:
+            mapping1 = numpy.arange(startfend1, stopfend1, dtype=numpy.int32)
+            mapping2 = numpy.arange(startfend2, stopfend2, dtype=numpy.int32)
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
+        return [data_array, mapping1, mapping2]
+    else:
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
+        return data_array
+
 def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=None, stopfend1=None, binbounds1=None,
                      start2=None, stop2=None, startfend2=None, stopfend2=None, binbounds2=None, binsize=1000000,
                      datatype='enrichment', returnmapping=False, **kwargs):
@@ -627,14 +785,15 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
             start1 = (hic.fends['fends']['mid'][startfend1] / binsize) * binsize
         else:
             startfend1 = _find_fend_from_coord(hic, chrint1, start1)
-        if stop1 is None and stopfend1 is None:
+        if (stop1 is None or stop1 == 0) and stopfend1 is None:
             stopfend1 = hic.fends['chr_indices'][chrint1 + 1]
             while stopfend1 > hic.fends['chr_indices'][chrint1] and hic.filter[stopfend1 - 1] == 0:
                 stopfend1 -= 1
-            stop1 = int(ceil((hic.fends['fends']['mid'][stopfend1 - 1] + 1 - start1) / float(binsize))) * binsize + start1
-        elif stop1 is None:
-            stop1 = int(ceil((hic.fends['fends']['mid'][stopfend1 - 1] + 1 - start1) / float(binsize))) * binsize + start1
+            stop1 = ((hic.fends['fends']['mid'][stopfend1 - 1] - start1) / binsize + 1) * binsize + start1
+        elif stop1 is None or stop1 == 0:
+            stop1 = ((hic.fends['fends']['mid'][stopfend1 - 1] - start1) / binsize + 1) * binsize + start1
         else:
+            stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
             stopfend1 = _find_fend_from_coord(hic, chrint1, stop1)
         num_bins1 = (stop1 - start1) / binsize
     else:
@@ -653,14 +812,15 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
             start2 = (hic.fends['fends']['mid'][startfend2] / binsize) * binsize
         else:
             startfend2 = _find_fend_from_coord(hic, chrint2, start2)
-        if stop2 is None and stopfend2 is None:
+        if (stop2 is None or stop2 == 0) and stopfend2 is None:
             stopfend2 = hic.fends['chr_indices'][chrint2 + 1]
             while stopfend2 > hic.fends['chr_indices'][chrint2] and hic.filter[stopfend2 - 1] == 0:
                 stopfend2 -= 1
-            stop2 = int(ceil((hic.fends['fends']['mid'][stopfend2 - 1] + 1 - start2) / float(binsize))) * binsize + start2
-        elif stop2 is None:
-            stop2 = int(ceil((hic.fends['fends']['mid'][stopfend2 - 1] + 1 - start2) / float(binsize))) * binsize + start2
+            stop2 = ((hic.fends['fends']['mid'][stopfend2 - 1] - start2) / binsize + 1) * binsize + start2
+        elif stop2 is None or stop2 == 0:
+            stop2 = ((hic.fends['fends']['mid'][stopfend2 - 1] - start2) / binsize + 1) * binsize + start2
         else:
+            stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
             stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
         num_bins2 = (stop2 - start2) / binsize
     else:
@@ -672,12 +832,13 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
     # If trans mean not already in hic and 'distance', 'enrichment', or 'expected' is requested, calculate
     if datatype in ['raw', 'fend']:
         trans_mean = 1.0
-    elif 'trans_means' not in hic.__dict__.keys():
-        hic.find_trans_means()
-        index = chrint1 * hic.fends['chromosomes'].shape[0] - chrint1 * (chrint1 + 1) / 2 + chrint2
-        trans_mean = hic.trans_means[index]
     else:
-        index = chrint1 * hic.fends['chromosomes'].shape[0] - chrint1 * (chrint1 + 1) / 2 + chrint2
+        if 'trans_means' not in hic.__dict__.keys():
+            hic.find_trans_means()
+        if chrint1 < chrint2:
+            index = chrint1 * (hic.fends['chromosomes'].shape[0] - 1) - chrint1 * (chrint1 + 1) / 2 - 1 + chrint2
+        else:
+            index = chrint2 * (hic.fends['chromosomes'].shape[0] - 1) - chrint2 * (chrint2 + 1) / 2 - 1 + chrint1
         trans_mean = hic.trans_means[index]
     if not silent:
         print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") %\
@@ -755,8 +916,7 @@ def bin_trans_signal(hic, chrom1, chrom2, start1=None, stop1=None, startfend1=No
             print >> sys.stderr, ("Done\n"),
         return data_array
 
-
-def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distance=False, chroms=[], **kwargs):
+def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enrichment', chroms=[], **kwargs):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
@@ -768,8 +928,8 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
     :type binsize: int.
     :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
     :type includetrans: bool.
-    :param remove_distance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fend corrections are used.
-    :type remove_distance: bool.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+    :type datatype: str.
     :param chroms: A list of chromosome names indicating which chromosomes should be included. If left empty, all chromosomes are included. Optional.
     :type chroms: list
     :returns: None
@@ -788,7 +948,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
     else:
         silent = False
     # Check if trans mean is needed and calculate if not already done
-    if includetrans and remove_distance and 'trans_mean' not in hic.__dict__.keys():
+    if includetrans and datatype in ['distance', 'enrichment'] and 'trans_mean' not in hic.__dict__.keys():
         hic.find_trans_means()
     # Check if filename already exists, and remove if it does
     if rank == 0:
@@ -826,23 +986,30 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, remove_distanc
             node_needed = needed[node_ranges[0]:node_ranges[1]]
     else:
         node_needed = comm.recv(source=0, tag=11)
-    # Determine the requested data type
-    if remove_distance:
-        datatype = 'enrichment'
-    else:
-        datatype = 'fend'
     heatmaps = {}
     # Find heatmaps
     for chrom in node_needed:
         if len(chrom) == 1:
             # Find cis heatmap
-            heatmaps[chrom] = bin_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype, arraytype='upper',
-                                             returnmapping=True, silent=silent)
+            if binsize == 0:
+                heatmaps[chrom] = unbinned_cis_signal(hic, chrom[0], datatype=datatype, arraytype='upper',
+                                                      returnmapping=True, silent=silent, skipfiltered=True)
+                heatmaps[chrom][1] = numpy.hstack((heatmaps[chrom][1].reshape(-1, 1),
+                                                   heatmaps[chrom][1].reshape(-1, 1) + 1,
+                                                   hic.fends['fends']['start'][heatmaps[chrom][1]].reshape(-1, 1),
+                                                   hic.fends['fends']['stop'][heatmaps[chrom][1]].reshape(-1, 1)))
+            else:
+                heatmaps[chrom] = bin_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype, arraytype='upper',
+                                                 returnmapping=True, silent=silent)
             # Check if array contains data
             if heatmaps[chrom] is None or heatmaps[chrom][0].shape[0] == 0:
                 del heatmaps[chrom]
         else:
             # Find trans heatmap
+            if binsize == 0:
+                heatmaps[chrom] = unbinned_trans_signal(hic, chrom[0], chrom[1], datatype=datatype,
+                                                        skiptfiltered=True, silent=silent)
+            else:
                 heatmaps[chrom] = bin_trans_signal(hic, chrom[0], chrom[1], binsize=binsize, datatype=datatype,
                                                    silent=silent)
     # Collect heatmaps at node 0 and write to h5dict

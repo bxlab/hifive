@@ -38,8 +38,8 @@ def find_possible_interactions(
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] chr_indices not None,
         int maxdistance):
-    cdef int h, i, j, chrom_sum
-    cdef int num_chromosomes = chr_indices.shape[0] - 1
+    cdef long long int h, i, j, chrom_sum
+    cdef long long int num_chromosomes = chr_indices.shape[0] - 1
     with nogil:
         # cycle through each chromosome
         for h in range(num_chromosomes):
@@ -88,7 +88,7 @@ def find_fend_distance_bin_values(
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] data_indices not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] data_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] distance_bins not None,
         np.ndarray[DTYPE_64_t, ndim=1] bin_sums not None,
@@ -96,8 +96,8 @@ def find_fend_distance_bin_values(
         int fend,
         int stopfend,
         int corrected):
-    cdef int i, j, distance, fend2
-    cdef int num_bins = distance_bins.shape[0]
+    cdef long long int i, j, distance, fend2
+    cdef long long int num_bins = distance_bins.shape[0]
     with nogil:
         j = 0
         if corrected == 0:
@@ -138,53 +138,117 @@ def find_fend_distance_bin_values(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_mindistance_interactions(
+def find_distancebound_interactions(
         np.ndarray[DTYPE_int64_t, ndim=1] interactions not None,
         np.ndarray[DTYPE_int_t, ndim=1] chr_indices not None,
-        np.ndarray[DTYPE_int_t, ndim=2] min_fend not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         int useread_int,
-        int binned):
-    cdef int i, j, k, chr_total, temp, all_total
-    cdef int num_chroms = chr_indices.shape[0] - 1
-    cdef int num_fends = filter.shape[0]
+        int binned,
+        int mindistance,
+        int maxdistance):
+    cdef long long int i, j, k, chr_total, all_total, total, stop
+    cdef long long int num_chroms = chr_indices.shape[0] - 1
+    cdef long long int num_fends = filter.shape[0]
     with nogil:
         all_total = 0
         chr_total = 0
+        # if trans interactions are included, find total valid fends
         if useread_int != 0:
             for i in range(num_fends):
                 all_total += filter[i]
         for i in range(num_chroms):
+            # for each chrom, find valid number of fends
             chr_total = 0
             for j in range(chr_indices[i], chr_indices[i + 1]):
                 chr_total += filter[j]
+            # if using trans, for each valid fend add on all possible trans interactions tot total
             if useread_int > 0:
                 for j in range(chr_indices[i], chr_indices[i + 1]):
                     if filter[j] > 0:
                         interactions[j] += all_total - chr_total
+            # if using cis, find number of interactions within distance range and
+            # not adjacent fends or opposite strand adjacent fragment fends
             if useread_int < 2:
                 for j in range(chr_indices[i], chr_indices[i + 1]):
                     if filter[j] == 0:
                         continue
-                    temp = chr_total
-                    for k in range(min_fend[j, 0], min_fend[j, 1]):
-                        temp -= filter[k]
+                    total = chr_total - 1
                     if binned == 0:
+                        # remove upstream interactions outside of maxdistance
+                        k = chr_indices[i]
+                        stop = (j / 2) * 2 - 2
+                        while k < stop and mids[j] - mids[k] >= maxdistance:
+                            total -= filter[k]
+                            k += 1
+                        stop = k - 1
+                        # remove upstream interactions inside of mindistance
+                        k = (j / 2) * 2 - 3
+                        while k > stop and mids[j] - mids[k] < mindistance:
+                            total -= filter[k]
+                            k -= 1
+                        # remove downstream interactions outside of maxdistance
+                        k = chr_indices[i + 1] - 1
+                        stop = (j / 2) * 2 + 3
+                        while k > stop and mids[k] - mids[j] >= maxdistance:
+                            total -= filter[k]
+                            k -= 1
+                        stop = k + 1
+                        # remove downstream interactions inside of mindistance
+                        k = (j / 2) * 2 + 4
+                        while k < stop and mids[k] - mids[j] < mindistance:
+                            total -= filter[k]
+                            k += 1
                         if j % 2 == 0:
-                            if filter[j + 1] == 1 and min_fend[j, 1] <= j + 1:
-                                temp -= 1
-                            if j - 1 >= chr_indices[i] and filter[j - 1] == 1 and min_fend[j, 0] > j - 1:
-                                temp -= 1
-                            if j + 3 < chr_indices[i + 1] and filter[j + 3] == 1 and min_fend[j, 1] <= j + 3:
-                                temp -= 1
+                            # remove same fragment fend
+                            total -= filter[j + 1]
+                            # remove previous fragment fends if necessary
+                            if j > 1:
+                                total -= filter[j - 1]
+                                if mids[j] - mids[j - 2] < mindistance:
+                                    total -= filter[j - 2]
+                            # remove next fragment fends if necessary
+                            if j < chr_indices[i + 1] - 2:
+                                total -= filter[j + 3]
+                                if mids[j + 2] - mids[j] < mindistance:
+                                    total -= filter[j + 2]
                         else:
-                            if filter[j - 1] == 1 and min_fend[j, 0] > j - 1:
-                                temp -= 1
-                            if j - 3 >= chr_indices[i] and filter[j - 3] == 1 and min_fend[j, 0] > j - 3:
-                                temp -= 1
-                            if j + 1 < chr_indices[i + 1] and filter[j + 1] == 1 and min_fend[j, 1] <= j + 1:
-                                temp -= 1
-                    interactions[j] += temp
+                            # remove same fragment fend
+                            total -= filter[j - 1]
+                            # remove previous fragment fends if necessary
+                            if j > 1:
+                                total -= filter[j - 3]
+                                if mids[j] - mids[j - 2] < mindistance:
+                                    total -= filter[j - 2]
+                            # remove next fragment fends if necessary
+                            if j < chr_indices[i + 1] - 2:
+                                total -= filter[j + 1]
+                                if mids[j + 2] - mids[j] < mindistance:
+                                    total -= filter[j + 2]
+                    else:
+                        # remove upstream interactions outside of maxdistance
+                        k = chr_indices[i]
+                        while k < j and mids[j] - mids[k] >= maxdistance:
+                            total -= filter[k]
+                            k += 1
+                        stop = k - 1
+                        # remove upstream interactions inside of mindistance
+                        k = j - 1
+                        while k > stop and mids[j] - mids[k] < mindistance:
+                            total -= filter[k]
+                            k -= 1
+                        # remove downstream interactions outside of maxdistance
+                        k = chr_indices[i + 1] - 1
+                        while k > j and mids[k] - mids[j] >= maxdistance:
+                            total -= filter[k]
+                            k -= 1
+                        stop = k + 1
+                        # remove downstream interactions inside of mindistance
+                        k = j + 1
+                        while k < stop and mids[k] - mids[j] < mindistance:
+                            total -= filter[k]
+                            k += 1
+                    interactions[j] += total
     return None
 
 
@@ -198,9 +262,9 @@ def find_max_fend(
         np.ndarray[DTYPE_int_t, ndim=1] chr_indices not None,
         int start,
         int maxdistance):
-    cdef int h, i, j, chr_max
-    cdef int num_fends = max_fend.shape[0]
-    cdef int max_num_fends = mids.shape[0]
+    cdef long long int h, i, j, chr_max
+    cdef long long int num_fends = max_fend.shape[0]
+    cdef long long int max_num_fends = mids.shape[0]
     with nogil:
         j = 1
         for i in range(num_fends):
@@ -223,9 +287,9 @@ def find_min_fend(
         np.ndarray[DTYPE_int_t, ndim=1] chromosomes not None,
         np.ndarray[DTYPE_int_t, ndim=1] chr_indices not None,
         int mindistance):
-    cdef int h, i, j, chr_max
-    cdef int num_fends = min_fend.shape[0]
-    cdef int max_num_fends = mids.shape[0]
+    cdef long long int h, i, j, chr_max
+    cdef long long int num_fends = min_fend.shape[0]
+    cdef long long int max_num_fends = mids.shape[0]
     with nogil:
         j = 2
         for i in range(num_fends):
@@ -252,10 +316,10 @@ def find_interaction_distance_means(
         np.ndarray[DTYPE_t, ndim=1] distance_mid_logs not None,
         np.ndarray[DTYPE_t, ndim=1] distance_log_spaces not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None):
-    cdef int i, j, k, distance
+    cdef long long int i, j, k, distance
     cdef double frac
-    cdef int num_bins = distance_mids.shape[0]
-    cdef int num_fends = means.shape[0]
+    cdef long long int num_bins = distance_mids.shape[0]
+    cdef long long int num_fends = means.shape[0]
     with nogil:
         for i in range(num_fends):
             if filter[i] == 0:
@@ -297,14 +361,14 @@ def find_data_distance_means(
         np.ndarray[DTYPE_t, ndim=1] means not None,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] data_indices not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] data_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
         np.ndarray[DTYPE_t, ndim=2] parameters not None,
         np.ndarray[DTYPE_t, ndim=1] chrom_means not None):
-    cdef int i, j, k, fend2
+    cdef long long int i, j, k, fend2
     cdef double distance, chrom_mean
-    cdef int num_fends = filter.shape[0]
+    cdef long long int num_fends = filter.shape[0]
     with nogil:
         for i in range(num_fends - 1):
             if filter[i] == 0:
@@ -330,8 +394,8 @@ def update_corrections(
         np.ndarray[DTYPE_t, ndim=1] gradients not None,
         np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
         double learningrate):
-    cdef int i
-    cdef int num_fends = corrections.shape[0]
+    cdef long long int i
+    cdef long long int num_fends = corrections.shape[0]
     with nogil:
         for i in range(num_fends):
             if interactions[i] > 0:
@@ -352,9 +416,9 @@ def find_fend_means(
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         double mu,
         double trans_mu):
-    cdef int i, fend1, fend2, num_trans_data, num_data
+    cdef long long int i, fend1, fend2, num_trans_data, num_data
     cdef double cost, temp
-    cdef int num_fends = filter.shape[0]
+    cdef long long int num_fends = filter.shape[0]
     if not trans_data is None:
         num_trans_data = trans_data.shape[0]
     else:
@@ -408,7 +472,8 @@ def find_fend_ranges(
         int maxdistance,
         long long int start,
         long long int stop,
-        int binned):
+        int binned,
+        int startfend):
     cdef long long int i, j, pos, total
     cdef long long int total_fends = mapping.shape[0]
     with nogil:
@@ -419,14 +484,14 @@ def find_fend_ranges(
                 j += 1
             ranges[i, 1] = j
             j = total_fends
-            while j > i and mids[j - 1] - pos > maxdistance:
+            while j > ranges[i, 1] and mids[j - 1] - pos > maxdistance:
                 j -= 1
             ranges[i, 2] = j
             total = ranges[i, 2] - ranges[i, 1]
             if binned == 0:
                 if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 1:
                     total -= 1
-                if mapping[i] % 2 == 0:
+                if (mapping[i] + startfend) % 2 == 0:
                     if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 3:
                         total -= 1
                     if ranges[i, 1] + 1 < total_fends and mapping[ranges[i, 1] + 1] - mapping[i] == 3:
@@ -440,55 +505,87 @@ def find_fend_ranges(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_node_indices(
-        np.ndarray[DTYPE_int_t, ndim=1] mapping,
+def find_nonzeros_in_range(
+        np.ndarray[DTYPE_int64_t, ndim=2] ranges not None,
+        np.ndarray[DTYPE_int_t, ndim=2] data not None):
+    cdef long long int i, count
+    cdef long long int num_data = data.shape[0]
+    with nogil:
+        count = 0
+        for i in range(num_data):
+            if data[i, 0] == -1:
+                continue
+            if data[i, 1] >= ranges[data[i, 0], 1] and data[i, 1] < ranges[data[i, 0], 2]:
+                count += 1
+    return count
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_nonzero_node_indices(
+        np.ndarray[DTYPE_int64_t, ndim=2] ranges,
         np.ndarray[DTYPE_int_t, ndim=1] indices0,
         np.ndarray[DTYPE_int_t, ndim=1] indices1,
+        np.ndarray[DTYPE_int_t, ndim=1] counts,
+        np.ndarray[DTYPE_int_t, ndim=2] data):
+    cdef long long int i, j
+    cdef long long int num_data = data.shape[0]
+    with nogil:
+        i = 0
+        for j in range(num_data):
+            if data[j, 0] == -1:
+                continue
+            if data[j, 1] >= ranges[data[j, 0], 1] and data[j, 1] < ranges[data[j, 0], 2]:
+                indices0[i] = data[j, 0]
+                indices1[i] = data[j, 1]
+                counts[i] = data[j, 2]
+                i += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_zero_node_indices(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping,
         np.ndarray[DTYPE_int64_t, ndim=2] ranges,
+        np.ndarray[DTYPE_int_t, ndim=1] nzindices0,
+        np.ndarray[DTYPE_int_t, ndim=1] nzindices1,
+        np.ndarray[DTYPE_int_t, ndim=1] zindices0,
+        np.ndarray[DTYPE_int_t, ndim=1] zindices1,
         long long int start,
         long long int stop,
-        int binned):
-    cdef long long int total, i, j, pos
-    cdef long long int num_fends = mapping.shape[0]
+        int binned,
+        int startfend):
+    cdef long long int i, j, m1, m2, nzpos, zpos
+    cdef long long int num_nz = nzindices0.shape[0]
     with nogil:
-        pos = 0
-        total = 0
-        i = 0
-        while total + ranges[i, 0] < start:
-            total += ranges[i, 0]
-            i += 1
-        while total < stop:
-            j = ranges[i, 1]
+        nzpos = 0
+        zpos = 0
+        for i in range(start, stop):
+            while nzpos < num_nz and nzindices0[nzpos] < i:
+                nzpos += 1
             if binned == 0:
-                while j < ranges[i, 2] and mapping[j] < mapping[i] + 4:
-                    if mapping[j] - mapping[i] == 1:
-                        j += 1
-                    elif mapping[j] - mapping[i] == 3 and mapping[i] % 2 == 0:
-                        j += 1
-                    elif total < start:
-                        j += 1
-                        total += 1
-                    elif total < stop:
-                        indices0[pos] = i
-                        indices1[pos] = j
-                        j += 1
-                        total += 1
-                        pos += 1
-                    else:
-                        j += 1
-            while j < ranges[i, 2]:
-                if total < start:
-                    j += 1
-                    total += 1
-                elif total < stop:
-                    indices0[pos] = i
-                    indices1[pos] = j
-                    j += 1
-                    total += 1
-                    pos += 1
-                else:
-                    j += 1 
-            i += 1
+                for j in range(ranges[i, 1], ranges[i, 2]):
+                    while nzpos < num_nz and nzindices0[nzpos] == i and nzindices1[nzpos] < j:
+                        nzpos += 1
+                    m1 = mapping[i]
+                    m2 = mapping[j]
+                    if m2 - m1 < 4 and (m2 - m1 == 1 or ((m1 + startfend) % 2 == 0 and m2 - m1 == 3)):
+                        continue
+                    elif nzpos == num_nz or nzindices1[nzpos] != j or nzindices0[nzpos] != i:
+                        zindices0[zpos] = i
+                        zindices1[zpos] = j
+                        zpos += 1
+            else:
+                for j in range(ranges[i, 1], ranges[i, 2]):
+                    while nzpos < num_nz and nzindices0[nzpos] == i and nzindices1[nzpos] < j:
+                        nzpos += 1
+                    if nzpos == num_nz or nzindices1[nzpos] != j or nzindices0[nzpos] != i:
+                        zindices0[zpos] = i
+                        zindices1[zpos] = j
+                        zpos += 1
     return None
 
 
@@ -602,10 +699,10 @@ def find_distance_bin_sums(
         int stop,
         int index,
         int binned):
-    cdef int i, j, temp, fend1, fend2, previous_fend
+    cdef long long int i, j, temp, fend1, fend2, previous_fend
     cdef double log_dist
-    cdef int num_data = indices.shape[0]
-    cdef int num_fends = rev_mapping.shape[0]
+    cdef long long int num_data = indices.shape[0]
+    cdef long long int num_fends = rev_mapping.shape[0]
     with nogil:
         previous_fend = -1
         j = 0
@@ -662,9 +759,9 @@ def find_chromosome_sums(
         np.ndarray[DTYPE_t, ndim=2] parameters not None,
         np.ndarray[DTYPE_64_t, ndim=1] sums not None,
         int h):
-    cdef int i, j, fend1, fend2, previous_index
+    cdef long long int i, j, fend1, fend2, previous_index
     cdef double log_dist
-    cdef int num_data = data.shape[0]
+    cdef long long int num_data = data.shape[0]
     with nogil:
         previous_index = -1
         j = 0

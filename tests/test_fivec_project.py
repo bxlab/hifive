@@ -44,6 +44,9 @@ class FiveCProject(unittest.TestCase):
         self.assertTrue(numpy.allclose(self.analyzed.filter, project.filter),
             "filtered fragments don't match target values")
         project.find_distance_parameters()
+        print self.analyzed.mu, project.mu
+        print self.analyzed.gamma, project.gamma
+        print self.analyzed.sigma, project.sigma
         self.assertTrue(self.analyzed.mu == project.mu and self.analyzed.gamma == project.gamma and
                         self.analyzed.sigma == project.sigma,
                         "distance parameters don't match target values")
@@ -52,14 +55,14 @@ class FiveCProject(unittest.TestCase):
         project = fivec.FiveC(self.analyzed_fname, 'r', silent=True)
         project.corrections.fill(0.0)
         project.find_fragment_corrections(maxdistance=0, burnin_iterations=100, annealing_iterations=10,
-                                          learningrate=0.1, recalculate_distance=0, display=0)
+                                          learningrate=0.1, display=0)
         self.assertTrue(numpy.allclose(self.analyzed.corrections, project.corrections),
             "learned correction values don't match target values")
 
     def test_fivec_project_express(self):
         project = fivec.FiveC(self.express_fname, 'r', silent=True)
         project.corrections.fill(0.0)
-        project.find_express_fragment_corrections(iterations=100, remove_distance=True, recalculate_distance=10)
+        project.find_express_fragment_corrections(iterations=100, remove_distance=True)
         self.assertTrue(numpy.allclose(self.express.corrections, project.corrections),
             "learned express correction values don't match target values")
 

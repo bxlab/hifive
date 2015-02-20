@@ -2,27 +2,27 @@
 
 import sys
 import os
+import optparse
 
 import hifive
 
 
 def main():
-    if len(sys.argv) < 3:
-        print "Usage: python create_fragmentset.py BED_FILE OUT_FILE [GENOME RE]"
-        print "BED_FILE  File containing 5C targeted fragments and primer names in BED format."
-        print "OUT_FILE  File name to write Fragment h5dict to."
-        print "GENOME    Name of genome."
-        print "RE        Name of restriction enzyme."
-        return None
-    fragment_fname, out_fname = sys.argv[1:3]
-    if len(sys.argv) > 4:
-        genome_name = sys.argv[3]
-        re_name = sys.argv[4]
-    else:
-        genome_name = None
-        re_name = None
-    fragments = hifive.Fragment(out_fname, mode='w')
-    fragments.load_fragments(fragment_fname, genome_name=genome_name, re_name=re_name)
+    usage = "usage: %prog [options] <bed_file> <out_file>\n\nArguments:"
+    usage += "\n<bed_file>  bed file containined fragment bounds"
+    usage += "\n<out_file>  destination for fragment file"
+    parser = optparse.OptionParser(usage=usage)
+    parser.add_option("-g", "--genome", dest="genome", default="", metavar="GENOME", type="string",
+                      help="name of genome", action="store")
+    parser.add_option("-r", "--re", dest="re", default="", metavar="RE", type="string",
+                      help="name of restriction enzyme", action="store")
+    parser.add_option("-q", "--quiet", dest="silent", action="store_true", default=False,
+                      help="silence output messages [default: %default]")
+    options, args = parser.parse_args()
+    if len(args) < 2:
+        parser.error('incorrect number of arguments')
+    fragments = hifive.Fragment(args[1], mode='w', silent=options.silent)
+    fragments.load_fragments(args[0], genome_name=options.genome, re_name=options.re)
     fragments.fragments.close()
     return None
 

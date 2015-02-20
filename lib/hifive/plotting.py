@@ -32,8 +32,8 @@ except:
 
 
 def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                       min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
-                       **kwargs):
+                       min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                       returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap from a HiC compact array.
 
@@ -45,15 +45,17 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
     :type minscore: float
     :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
     :type symmetricscaling: bool.
-    :param logged: Indicates whether to use log values of scores for color values.
+    :param logged: Indicates whether to use log2 values of scores for color values.
     :type logged: bool.
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
-    :returns: :mod:`PIL` bitmap object.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
@@ -63,61 +65,71 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
         if not silent:
             print >> sys.stderr, ("The PIL module must be installed to use this function.")
         return None
-    print >> sys.stderr, ("Plotting compact array..."),
+    if not silent:
+        print >> sys.stderr, ("Plotting compact array..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * max_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * max_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * max_color[2], 256))
-                 ).astype(numpy.uint32)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
     dim = data.shape[0]
-    scaled = numpy.copy(data)
+    scaled = numpy.copy(data).astype(numpy.float64)
     where = numpy.where(data[:, :, 1] > 0)
     scaled[where[0], where[1], 0] /= scaled[where[0], where[1], 1]
     if logged:
         where = numpy.where(scaled[:, :, 0] <= 0)
         scaled[where[0], where[1], 1] = 0
         where = numpy.where(scaled[:, :, 1] > 0)
-        scaled[where[0], where[1], 0] = numpy.log(scaled[where[0], where[1], 0])
+        scaled[where[0], where[1], 0] = numpy.log2(scaled[where[0], where[1], 0])
     scaled[where[0], where[1], 1] = 1
     if maxscore is None:
         maxscore = numpy.amax(scaled[where[0], where[1], 0])
     if minscore is None:
         minscore = numpy.amin(scaled[where[0], where[1], 0])
     if symmetricscaling:
-        scaled[where[0], where[1], 0] /= max(abs(maxscore), abs(minscore))
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        scaled[where[0], where[1], 0] /= maxscore
     else:
         scaled[where[0], where[1], 0] -= minscore
         scaled[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
         scaled[where[0], where[1], 0] -= 1.0
     scaled = numpy.minimum(1.0, numpy.maximum(-1.0, scaled))
-    scaled[where[0], where[1], 0] *= 255
-    scaled = numpy.round(scaled).astype(numpy.int32)
+    where1 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] >= 0))
+    where2 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] < 0))
+    temp0 = scaled[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    scaled[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -scaled[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    scaled[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    scaled = numpy.round(scaled).astype(numpy.uint32)
     img = numpy.empty((dim, dim), dtype=numpy.uint32)
     img[:, :] = int('ff999999', 16)
     for i in range(dim - 1):
-        where = numpy.where((scaled[i, :min(scaled.shape[1], dim - i - 1), 1] > 0) *
-                            (scaled[i, :min(scaled.shape[1], dim - i - 1), 0] >= 0))[0]
-        img[i, where + i + 1] = gradient2[scaled[i, where, 0]]
-        img[where + i + 1, i] = img[i, where + i + 1]
-        where = numpy.where((scaled[i, :min(scaled.shape[1], dim - i - 1), 1] > 0) *
-                            (scaled[i, :min(scaled.shape[1], dim - i - 1), 0] < 0))[0]
-        img[i, where + i + 1] = gradient1[-scaled[i, where, 0]]
+        where = numpy.where(scaled[i, :min(scaled.shape[1], dim - i - 1), 1] > 0)[0]
+        img[i, where + i + 1] = scaled[i, where, 0]
         img[where + i + 1, i] = img[i, where + i + 1]
     pilImage = Image.frombuffer('RGBA', (dim, dim), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return pilImage
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
 
 
 def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                    min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
-                    **kwargs):
+                    min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                    returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap from a 5C or HiC full array.
 
@@ -129,15 +141,17 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
     :type minscore: float
     :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
     :type symmetricscaling: bool.
-    :param logged: Indicates whether to use log values of scores for color values.
+    :param logged: Indicates whether to use log2 values of scores for color values.
     :type logged: bool.
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
-    :returns: :mod:`PIL` bitmap object.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
@@ -149,56 +163,68 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
         return None
     if not silent:
         print >> sys.stderr, ("Plotting full array..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * max_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * max_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * max_color[2], 256))
-                 ).astype(numpy.uint32)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
     xdim, ydim = data.shape[:2]
-    scaled = numpy.copy(data)
+    scaled = numpy.copy(data).astype(numpy.float64)
     where = numpy.where(data[:, :, 1] > 0)
     scaled[where[0], where[1], 0] /= scaled[where[0], where[1], 1]
     if logged:
         where = numpy.where(scaled[:, :, 0] <= 0)
         scaled[where[0], where[1], 1] = 0
         where = numpy.where(scaled[:, :, 1] > 0)
-        scaled[where[0], where[1], 0] = numpy.log(scaled[where[0], where[1], 0])
+        scaled[where[0], where[1], 0] = numpy.log2(scaled[where[0], where[1], 0])
     scaled[where[0], where[1], 1] = 1
     if maxscore is None:
         maxscore = numpy.amax(scaled[where[0], where[1], 0])
     if minscore is None:
         minscore = numpy.amin(scaled[where[0], where[1], 0])
     if symmetricscaling:
-        scaled[where[0], where[1], 0] /= max(abs(maxscore), abs(minscore))
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        scaled[where[0], where[1], 0] /= maxscore
     else:
         scaled[where[0], where[1], 0] -= minscore
         scaled[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
         scaled[where[0], where[1], 0] -= 1.0
     scaled = numpy.minimum(1.0, numpy.maximum(-1.0, scaled))
-    scaled[where[0], where[1], 0] *= 255
-    scaled = numpy.round(scaled).astype(numpy.int32)
+    where1 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] >= 0))
+    where2 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] < 0))
+    temp0 = scaled[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    scaled[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -scaled[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    scaled[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    scaled = numpy.round(scaled).astype(numpy.uint32)
     img = numpy.empty((xdim, ydim), dtype=numpy.uint32)
     img.shape = (ydim, xdim)
     img[:, :] = int('ff999999', 16)
-    where = numpy.where((scaled[:, :, 1] > 0) * (scaled[:, :, 0] >= 0))
-    img[where[1], where[0]] = gradient2[scaled[where[0], where[1], 0]]
-    where = numpy.where((scaled[:, :, 1] > 0) * (scaled[:, :, 0] < 0))
-    img[where[1], where[0]] = gradient1[-scaled[where[0], where[1], 0]]
+    where = numpy.where(scaled[:, :, 1] > 0)
+    img[where[1], where[0]] = scaled[where[0], where[1], 0]
     pilImage = Image.frombuffer('RGBA', (xdim, ydim), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return pilImage
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
 
 
 def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                     min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
-                     **kwargs):
+                     min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                     returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap from a 5C or HiC upper array.
 
@@ -210,15 +236,17 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
     :type minscore: float
     :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
     :type symmetricscaling: bool.
-    :param logged: Indicates whether to use log values of scores for color values.
+    :param logged: Indicates whether to use log2 values of scores for color values.
     :type logged: bool.
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
-    :returns: :mod:`PIL` bitmap object.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
@@ -230,61 +258,70 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
         return None
     if not silent:
         print >> sys.stderr, ("Plotting upper array..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * max_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * max_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * max_color[2], 256))
-                 ).astype(numpy.uint32)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
     dim = int(0.5 + (0.25 + 2 * data.shape[0]) ** 0.5)
-    scaled = numpy.copy(data)
+    scaled = numpy.copy(data).astype(numpy.float64)
     where = numpy.where(data[:, 1] > 0)[0]
     scaled[where, 0] /= scaled[where, 1]
     if logged:
         where = numpy.where(scaled[:, 0] <= 0)[0]
         scaled[where, 1] = 0
         where = numpy.where(scaled[:, 1] > 0)[0]
-        scaled[where, 0] = numpy.log(scaled[where, 0])
+        scaled[where, 0] = numpy.log2(scaled[where, 0])
     scaled[where, 1] = 1
     if maxscore is None:
         maxscore = numpy.amax(scaled[where, 0])
     if minscore is None:
         minscore = numpy.amin(scaled[where, 0])
     if symmetricscaling:
-        scaled[where, 0] /= max(abs(maxscore), abs(minscore))
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        scaled[where, 0] /= maxscore
     else:
         scaled[where, 0] -= minscore
         scaled[where, 0] /= (maxscore - minscore) * 0.5
         scaled[where, 0] -= 1.0
     scaled = numpy.minimum(1.0, numpy.maximum(-1.0, scaled))
-    scaled[where, 0] *= 255
-    scaled = numpy.round(scaled).astype(numpy.int32)
+    where1 = numpy.where((scaled[:, 1] == 1) * (scaled[:, 0] >= 0))
+    where2 = numpy.where((scaled[:, 1] == 1) * (scaled[:, 0] < 0))
+    temp0 = scaled[where1[0], 0]
+    temp1 = 1.0 - temp0
+    scaled[where1[0], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -scaled[where2[0], 0]
+    temp1 = 1.0 - temp0
+    scaled[where2[0], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    scaled = numpy.round(scaled).astype(numpy.uint32)
     img = numpy.empty((dim, dim), dtype=numpy.uint32)
     img[:, :] = int('ff999999', 16)
     for i in range(dim - 1):
         index = i * dim - i * (i + 1) / 2
-        where = numpy.where((scaled[index:(index + dim - i - 1), 1] > 0) *
-                            (scaled[index:(index + dim - i - 1), 0] >= 0))[0]
-        img[i, where + i + 1] = gradient2[scaled[where + index, 0]]
-        img[where + i + 1, i] = img[i, where + i + 1]
-        where = numpy.where((scaled[index:(index + dim - i - 1), 1] > 0) *
-                            (scaled[index:(index + dim - i - 1), 0] < 0))[0]
-        img[i, where + i + 1] = gradient1[-scaled[where + index, 0]]
+        where = numpy.where(scaled[index:(index + dim - i - 1), 1] > 0)[0]
+        img[i, where + i + 1] = scaled[where + index, 0]
         img[where + i + 1, i] = img[i, where + i + 1]
     pilImage = Image.frombuffer('RGBA', (dim, dim), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return pilImage
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
 
 
 def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True, chroms=[],
-                          min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
-                          **kwargs):
+                          min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                          returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap from a HiC heatmap h5dict file.
 
@@ -296,17 +333,19 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
     :type minscore: float
     :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
     :type symmetricscaling: bool.
-    :param logged: Indicates whether to use log values of scores for color values.
+    :param logged: Indicates whether to use log2 values of scores for color values.
     :type logged: bool.
     :param chroms: A list of chromosome names to include in the plot. If left empty, all chromosomes present in the heatmap file will be plotted.
     :type chroms: list
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
-    :returns: :mod:`PIL` bitmap object.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
@@ -318,17 +357,13 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
         return None
     if not silent:
         print >> sys.stderr, ("Plotting heatmap dict..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * max_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * max_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * max_color[2], 256))
-                 ).astype(numpy.uint32)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
     input = h5py.File(filename, 'r')
     if len(chroms) == 0:
         chroms = list(input['chromosomes'][...])
@@ -337,11 +372,12 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
     for chrom in chroms:
         sizes.append(input['%s.positions' % chrom].shape[0])
         starts.append(starts[-1] + sizes[-1] + 1)
-    data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float32)
+    data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float64)
     for i in range(len(chroms)):
-        indices = numpy.triu_indices(sizes[i], 1)
-        data[indices[0] + starts[i], indices[1] + starts[i], 0] = input['%s.counts' % chroms[i]][:]
-        data[indices[0] + starts[i], indices[1] + starts[i], 1] = input['%s.expected' % chroms[i]][:]
+        if '%s.counts' % chroms[i] in input and '%s.expected' % chroms[i] in input:
+            indices = numpy.triu_indices(sizes[i], 1)
+            data[indices[0] + starts[i], indices[1] + starts[i], 0] = input['%s.counts' % chroms[i]][:]
+            data[indices[0] + starts[i], indices[1] + starts[i], 1] = input['%s.expected' % chroms[i]][:]
     for i in range(len(chroms) - 1):
         for j in range(i + 1, len(chroms)):
             if '%s_by_%s.counts' % (chroms[i], chroms[j]) in input.keys():
@@ -364,38 +400,53 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
         where = numpy.where(data[:, :, 0] <= 0)
         data[where[0], where[1], 1] = 0
         where = numpy.where(data[:, :, 1] > 0)
-        data[where[0], where[1], 0] = numpy.log(data[where[0], where[1], 0])
+        data[where[0], where[1], 0] = numpy.log2(data[where[0], where[1], 0])
     data[where[0], where[1], 1] = 1
     if maxscore is None:
         maxscore = numpy.amax(data[where[0], where[1], 0])
     if minscore is None:
         minscore = numpy.amin(data[where[0], where[1], 0])
     if symmetricscaling:
-        data[where[0], where[1], 0] /= max(abs(maxscore), abs(minscore))
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        data[where[0], where[1], 0] /= maxscore
     else:
         data[where[0], where[1], 0] -= minscore
         data[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
         data[where[0], where[1], 0] -= 1.0
     data = numpy.minimum(1.0, numpy.maximum(-1.0, data))
-    data[where[0], where[1], 0] *= 255
-    data = numpy.round(data).astype(numpy.int32)
+    where1 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] >= 0))
+    where2 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] < 0))
+    temp0 = data[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    data[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -data[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    data[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    data = numpy.round(data).astype(numpy.uint32)
     img = numpy.empty((data.shape[0], data.shape[0]), dtype=numpy.uint32)
     img[:, :] = int('ff999999', 16)
-    where = numpy.where((data[:, :, 1] > 0) * (data[:, :, 0] >= 0))
-    img[where] = gradient2[data[where[0], where[1], 0]]
-    img[where[1], where[0]] = img[where]
-    where = numpy.where((data[:, :, 1] > 0) * (data[:, :, 0] < 0))
-    img[where] = gradient1[-data[where[0], where[1], 0]]
+    where = numpy.where(data[:, :, 1] > 0)
+    img[where] = data[where[0], where[1], 0]
     img[where[1], where[0]] = img[where]
     pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[0]), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return pilImage
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
 
 
 def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                                 regions=[], min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0),
-                                 max_color=(1.0, 0.0, 0.0), **kwargs):
+                                 regions=[], min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                                 returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap in a full format from a 5C heatmap h5dict file.
 
@@ -409,17 +460,19 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
     :type minscore: float
     :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
     :type symmetricscaling: bool.
-    :param logged: Indicates whether to use log values of scores for color values.
+    :param logged: Indicates whether to use log2 values of scores for color values.
     :type logged: bool.
     :param regions: If specified, only the indicated regions are plotted. Otherwise all regions present in the h5dict are plotted.
     :type regions: list
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
-    :returns: :mod:`PIL` bitmap object.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
@@ -431,17 +484,13 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
         return None
     if not silent:
         print >> sys.stderr, ("Plotting heatmap dict..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * max_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * max_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * max_color[2], 256))
-                 ).astype(numpy.uint32)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
     input = h5py.File(filename, 'r')
     if len(regions) == 0:
         regions = []
@@ -457,10 +506,13 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
         else:
             sizes.append(input['%i.fragments' % region].shape[0])
         starts.append(starts[-1] + sizes[-1] + 1)
-    data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float32)
+    data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float64)
     for i in range(len(regions)):
-        data[starts[i]:(starts[i + 1] - 1), starts[i]:(starts[i + 1]  - 1), 0] = input['%i.counts' % regions[i]][...]
-        data[starts[i]:(starts[i + 1] - 1), starts[i]:(starts[i + 1]  - 1), 1] = input['%i.expected' % regions[i]][...]
+        if '%i.counts' % regions[i] in input and '%i.expected' % regions[i] in input:
+            data[starts[i]:(starts[i + 1] - 1), starts[i]:(starts[i + 1]  - 1), 0] = input['%i.counts' % \
+                regions[i]][...]
+            data[starts[i]:(starts[i + 1] - 1), starts[i]:(starts[i + 1]  - 1), 1] = input['%i.expected' % \
+                regions[i]][...]
     for i in range(len(regions) - 1):
         for j in range(i + 1, len(regions)):
             if '%i_by_%i.counts' % (regions[i], regions[j]) in input.keys():
@@ -483,28 +535,40 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
         where = numpy.where(data[:, :, 0] <= 0)
         data[where[0], where[1], 1] = 0
         where = numpy.where(data[:, :, 1] > 0)
-        data[where[0], where[1], 0] = numpy.log(data[where[0], where[1], 0])
+        data[where[0], where[1], 0] = numpy.log2(data[where[0], where[1], 0])
     data[where[0], where[1], 1] = 1
     if maxscore is None:
         maxscore = numpy.amax(data[where[0], where[1], 0])
     if minscore is None:
         minscore = numpy.amin(data[where[0], where[1], 0])
     if symmetricscaling:
-        data[where[0], where[1], 0] /= max(abs(maxscore), abs(minscore))
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        data[where[0], where[1], 0] /= maxscore
     else:
         data[where[0], where[1], 0] -= minscore
         data[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
         data[where[0], where[1], 0] -= 1.0
     data = numpy.minimum(1.0, numpy.maximum(-1.0, data))
-    data[where[0], where[1], 0] *= 255
-    data = numpy.round(data).astype(numpy.int32)
+    where1 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] >= 0))
+    where2 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] < 0))
+    temp0 = data[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    data[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -data[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    data[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    data = numpy.round(data).astype(numpy.uint32)
     img = numpy.empty((data.shape[0], data.shape[0]), dtype=numpy.uint32)
     img[:, :] = int('ff999999', 16)
-    where = numpy.where((data[:, :, 1] > 0) * (data[:, :, 0] >= 0))
-    img[where] = gradient2[data[where[0], where[1], 0]]
-    img[where[1], where[0]] = img[where]
-    where = numpy.where((data[:, :, 1] > 0) * (data[:, :, 0] < 0))
-    img[where] = gradient1[-data[where[0], where[1], 0]]
+    where = numpy.where(data[:, :, 1] > 0)
+    img[where] = data[where[0], where[1], 0]
     img[where[1], where[0]] = img[where]
     black = int('ff000000', 16)
     for i in range(1, len(starts) - 1):
@@ -513,12 +577,15 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
     pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[0]), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return pilImage
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
 
 
 def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                                    regions=[], min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0),
-                                    max_color=(1.0, 0.0, 0.0), **kwargs):
+                                    regions=[], min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                                    returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap in a compact from a 5C heatmap h5dict file.
 
@@ -532,17 +599,19 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
     :type minscore: float
     :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
     :type symmetricscaling: bool.
-    :param logged: Indicates whether to use log values of scores for color values.
+    :param logged: Indicates whether to use log2 values of scores for color values.
     :type logged: bool.
     :param regions: If specified, only the indicated regions are plotted. Otherwise all regions present in the h5dict are plotted.
     :type regions: list
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
-    :returns: :mod:`PIL` bitmap object.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
@@ -554,17 +623,13 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
         return None
     if not silent:
         print >> sys.stderr, ("Plotting heatmap dict..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * max_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * max_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * max_color[2], 256))
-                 ).astype(numpy.uint32)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
     input = h5py.File(filename, 'r')
     if len(regions) == 0:
         regions = []
@@ -581,50 +646,68 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
         xstarts.append(xstarts[-1] + xsizes[-1] + 1)
         ysizes.append(input['%i.reverse_fragments' % region].shape[0])
         ystarts.append(ystarts[-1] + ysizes[-1] + 1)
-    data = numpy.zeros((xstarts[-1] - 1, ystarts[-1] - 1, 2), dtype=numpy.float32)
+    data = numpy.zeros((xstarts[-1] - 1, ystarts[-1] - 1, 2), dtype=numpy.float64)
     for i in range(len(regions)):
-        data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[i]:(ystarts[i + 1]  - 1), 0] = (
-                input['%i.counts' % regions[i]][...])
-        data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[i]:(ystarts[i + 1]  - 1), 1] = (
-                input['%i.expected' % regions[i]][...])
+        if '%i.counts' % regions[i] in input and '%i.expected' % regions[i] in input:
+            data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[i]:(ystarts[i + 1]  - 1), 0] = (
+                    input['%i.counts' % regions[i]][...])
+            data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[i]:(ystarts[i + 1]  - 1), 1] = (
+                    input['%i.expected' % regions[i]][...])
     for i in range(len(regions) - 1):
         for j in range(i + 1, len(regions)):
-            data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[j]:(ystarts[j + 1] - 1), 0] = (
-                input['%i_by_%i.counts' % (regions[i], regions[j])][:, :])
-            data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[j]:(ystarts[j + 1] - 1), 1] = (
-                input['%i_by_%i.expected' % (regions[i], regions[j])][:, :])
-            data[xstarts[j]:(xstarts[j + 1] - 1), ystarts[i]:(ystarts[i + 1] - 1), 0] = (
-                input['%i_by_%i.counts' % (regions[j], regions[i])][:, :])
-            data[xstarts[j]:(xstarts[j + 1] - 1), ystarts[i]:(ystarts[i + 1] - 1), 1] = (
-                input['%i_by_%i.expected' % (regions[j], regions[i])][:, :])
+            if ('%i_by_%i.counts' % (regions[i], regions[j]) in input and
+                '%i_by_%i.expected' % (regions[i], regions[j]) in input):
+                data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[j]:(ystarts[j + 1] - 1), 0] = (
+                    input['%i_by_%i.counts' % (regions[i], regions[j])][:, :])
+                data[xstarts[i]:(xstarts[i + 1] - 1), ystarts[j]:(ystarts[j + 1] - 1), 1] = (
+                    input['%i_by_%i.expected' % (regions[i], regions[j])][:, :])
+            if ('%i_by_%i.counts' % (regions[j], regions[i]) in input and
+                '%i_by_%i.expected' % (regions[j], regions[i]) in input):
+                data[xstarts[j]:(xstarts[j + 1] - 1), ystarts[i]:(ystarts[i + 1] - 1), 0] = (
+                    input['%i_by_%i.counts' % (regions[j], regions[i])][:, :])
+                data[xstarts[j]:(xstarts[j + 1] - 1), ystarts[i]:(ystarts[i + 1] - 1), 1] = (
+                    input['%i_by_%i.expected' % (regions[j], regions[i])][:, :])
     where = numpy.where(data[:, :, 1] > 0)
     data[where[0], where[1], 0] /= data[where[0], where[1], 1]
     if logged:
         where = numpy.where(data[:, :, 0] <= 0)
         data[where[0], where[1], 1] = 0
         where = numpy.where(data[:, :, 1] > 0)
-        data[where[0], where[1], 0] = numpy.log(data[where[0], where[1], 0])
+        data[where[0], where[1], 0] = numpy.log2(data[where[0], where[1], 0])
     data[where[0], where[1], 1] = 1
     if maxscore is None:
         maxscore = numpy.amax(data[where[0], where[1], 0])
     if minscore is None:
         minscore = numpy.amin(data[where[0], where[1], 0])
     if symmetricscaling:
-        data[where[0], where[1], 0] /= max(abs(maxscore), abs(minscore))
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        data[where[0], where[1], 0] /= maxscore
     else:
         data[where[0], where[1], 0] -= minscore
         data[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
         data[where[0], where[1], 0] -= 1.0
     data = numpy.minimum(1.0, numpy.maximum(-1.0, data))
-    data[where[0], where[1], 0] *= 255
-    data = numpy.round(data).astype(numpy.int32)
+    where1 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] >= 0))
+    where2 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] < 0))
+    temp0 = data[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    data[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -data[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    data[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    data = numpy.round(data).astype(numpy.uint32)
     img = numpy.empty((data.shape[0], data.shape[1]), dtype=numpy.uint32)
     img.shape = (data.shape[1], data.shape[0])
     img[:, :] = int('ff999999', 16)
-    where = numpy.where((data[:, :, 1] > 0) * (data[:, :, 0] >= 0))
-    img[where[1], where[0]] = gradient2[data[where[0], where[1], 0]]
-    where = numpy.where((data[:, :, 1] > 0) * (data[:, :, 0] < 0))
-    img[where[1], where[0]] = gradient1[-data[where[0], where[1], 0]]
+    where = numpy.where(data[:, :, 1] > 0)
+    img[where[1], where[0]] = data[where[0], where[1], 0]
     black = int('ff000000', 16)
     for i in range(1, len(xstarts) - 1):
         img[:, xstarts[i] - 1] = black
@@ -633,16 +716,19 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
     pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[1]), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return pilImage
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
 
 
-def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                                     min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0),
-                                     **kwargs):
+def plot_diagonal_from_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
+                                   min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                                   returnscale=False, **kwargs):
     """
-    Fill in and rescale bitmap from a HiC compact array, plotting only the upper triangle rotated 45 degrees counter-clockwise.
+    Fill in and rescale bitmap from a HiC upper array, plotting only the upper triangle rotated 45 degrees counter-clockwise.
 
-    :param data: A three-dimensional compact array of HiC interaction data.
+    :param data: A three-dimensional upper array of HiC interaction data.
     :type data: numpy array
     :param maxscore: A ceiling value to cutoff scores at for plot color.
     :type maxscore: float
@@ -650,15 +736,17 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
     :type minscore: float
     :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
     :type symmetricscaling: bool.
-    :param logged: Indicates whether to use log values of scores for color values.
+    :param logged: Indicates whether to use log2 values of scores for color values.
     :type logged: bool.
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
-    :returns: :mod:`PIL` bitmap object.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
@@ -670,18 +758,142 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
         return None
     if not silent:
         print >> sys.stderr, ("Plotting rotated compact array..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256 ** 2 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * max_color[0], 256)) +
-                 256 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * max_color[1], 256)) +
-                 256 ** 2 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * max_color[2], 256))
-                 ).astype(numpy.uint32)
-    rotated = numpy.zeros((data.shape[0] * 2 - 1, data.shape[1] + 2, 2), dtype=numpy.float32)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
+    dim = int(0.5 + (0.25 + data.shape[0] * 2) ** 0.5)
+    rotated = numpy.zeros((dim * 2 - 1, dim + 1, 2), dtype=numpy.float64)
+    xdim, ydim = rotated.shape[:2]
+    for i in range(dim - 1):
+        start = i * dim - (i * (i + 1) / 2)
+        stop = start + dim - i - 1
+        span = stop - start
+        rotated[numpy.arange(i * 2 + 1, i * 2 + 1 + span), ydim - numpy.arange(2, 2 + span), :] += data[start:stop, :]
+        rotated[numpy.arange(i * 2 + 2, i * 2 + 2 + span),
+                ydim - numpy.arange(2, 2 + span), :] += data[start:stop, :] * 0.25
+        rotated[numpy.arange(i * 2, i * 2 + span), ydim - numpy.arange(2, 2 + span), :] += data[start:stop, :] * 0.25
+        rotated[numpy.arange(i * 2 + 1, i * 2 + 1 + span),
+                ydim - numpy.arange(3, 3 + span), :] += data[start:stop, :] * 0.25
+        rotated[numpy.arange(i * 2 + 1, i * 2 + 1 + span),
+                ydim - numpy.arange(1, 1 + span), :] += data[start:stop, :] * 0.25
+    where = numpy.where(rotated[:, :, 1] > 0)
+    rotated[where[0], where[1], 0] /= rotated[where[0], where[1], 1]
+    for i in range(1, xdim, 2):
+        if rotated[i, -1, 1] > 0:
+            rotated[i, -1, 0] *= 0.25
+            rotated[i, -1, 0] += 0.75
+    for i in range(2, ydim - 1):
+        if rotated[i - 1, ydim - i - 1, 1] > 0:
+            rotated[i - 1, ydim - i - 1, 0] *= 0.5
+            rotated[i - 1, ydim - i - 1, 0] += 0.5
+        if rotated[-i, ydim - i - 1, 1] > 0:
+            rotated[-i, ydim - i - 1, 0] *= 0.5
+            rotated[-i, ydim - i - 1, 0] += 0.5
+    if rotated[0, -2, 1] > 0:
+        rotated[0, -2, 0] *= 0.25
+        rotated[0, -2, 0] += 0.75
+    if rotated[-1, -2, 1] > 0:
+        rotated[-1, -2, 0] *= 0.25
+        rotated[-1, -2, 0] += 0.75
+    if rotated[dim, 0, 1] > 0:
+        rotated[dim, 0, 0] *= 0.25
+        rotated[dim, 0, 0] += 0.75
+    if logged:
+        where = numpy.where(rotated[:, :, 0] <= 0)
+        rotated[where[0], where[1], 1] = 0
+        where = numpy.where(rotated[:, :, 1] > 0)
+        rotated[where[0], where[1], 0] = numpy.log2(rotated[where[0], where[1], 0])
+    rotated[where[0], where[1], 1] = 1
+    if maxscore is None:
+        maxscore = numpy.amax(rotated[where[0], where[1], 0])
+    if minscore is None:
+        minscore = numpy.amin(rotated[where[0], where[1], 0])
+    if symmetricscaling:
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        rotated[where[0], where[1], 0] /= maxscore
+    else:
+        rotated[where[0], where[1], 0] -= minscore
+        rotated[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
+        rotated[where[0], where[1], 0] -= 1.0
+    rotated = numpy.minimum(1.0, numpy.maximum(-1.0, rotated))
+    where1 = numpy.where((rotated[:, :, 1] == 1) * (rotated[:, :, 0] >= 0))
+    where2 = numpy.where((rotated[:, :, 1] == 1) * (rotated[:, :, 0] < 0))
+    temp0 = rotated[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    rotated[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -rotated[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    rotated[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    rotated = numpy.round(rotated).astype(numpy.uint32)
+    img = numpy.empty((xdim, ydim), dtype=numpy.uint32)
+    img.shape = (ydim, xdim)
+    img[:, :] = int('ff999999', 16)
+    where = numpy.where(rotated[:, :, 1] > 0)
+    img[where[1], where[0]] = rotated[where[0], where[1], 0]
+    pilImage = Image.frombuffer('RGBA', (xdim, ydim), img, 'raw', 'RGBA', 0, 1)
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
+
+
+def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
+                                     min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                                     returnscale=False, **kwargs):
+    """
+    Fill in and rescale bitmap from a HiC compact array, plotting only the upper triangle rotated 45 degrees counter-clockwise.
+
+    :param data: A three-dimensional compact array of HiC interaction data.
+    :type data: numpy array
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log2 values of scores for color values.
+    :type logged: bool.
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
+    """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
+    if 'PIL' not in sys.modules.keys():
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
+    if not silent:
+        print >> sys.stderr, ("Plotting rotated compact array..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
+    if mid_color is None:
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
+    rotated = numpy.zeros((data.shape[0] * 2 - 1, data.shape[1] + 2, 2), dtype=numpy.float64)
     xdim, ydim = rotated.shape[:2]
     for i in range(data.shape[1]):
         rotated[(i + 1):(2 * data.shape[0] - i - 1):2, ydim - i - 2, :] += data[:(data.shape[0] - i - 1), i, :]
@@ -691,41 +903,76 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
         rotated[(i + 1):(2 * data.shape[0] - i - 1):2, ydim - i - 3, :] += data[:(data.shape[0] - i - 1), i, :] * 0.25
     where = numpy.where(rotated[:, :, 1] > 0)
     rotated[where[0], where[1], 0] /= rotated[where[0], where[1], 1]
+    for i in range(1, xdim, 2):
+        if rotated[i, -1, 1] > 0:
+            rotated[i, -1, 0] *= 0.25
+            rotated[i, -1, 0] += 0.75
+    for i in range(2, ydim - 1):
+        if rotated[i - 1, ydim - i - 1, 1] > 0:
+            rotated[i - 1, ydim - i - 1, 0] *= 0.5
+            rotated[i - 1, ydim - i - 1, 0] += 0.5
+        if rotated[-i, ydim - i - 1, 1] > 0:
+            rotated[-i, ydim - i - 1, 0] *= 0.5
+            rotated[-i, ydim - i - 1, 0] += 0.5
+    if rotated[0, -2, 1] > 0:
+        rotated[0, -2, 0] *= 0.25
+        rotated[0, -2, 0] += 0.75
+    if rotated[-1, -2, 1] > 0:
+        rotated[-1, -2, 0] *= 0.25
+        rotated[-1, -2, 0] += 0.75
+    if rotated[data.shape[0], 0, 1] > 0:
+        rotated[data.shape[0], 0, 0] *= 0.25
+        rotated[data.shape[0], 0, 0] += 0.75
     if logged:
         where = numpy.where(rotated[:, :, 0] <= 0)
         rotated[where[0], where[1], 1] = 0
         where = numpy.where(rotated[:, :, 1] > 0)
-        rotated[where[0], where[1], 0] = numpy.log(rotated[where[0], where[1], 0])
+        rotated[where[0], where[1], 0] = numpy.log2(rotated[where[0], where[1], 0])
     rotated[where[0], where[1], 1] = 1
     if maxscore is None:
         maxscore = numpy.amax(rotated[where[0], where[1], 0])
     if minscore is None:
         minscore = numpy.amin(rotated[where[0], where[1], 0])
     if symmetricscaling:
-        rotated[where[0], where[1], 0] /= max(abs(maxscore), abs(minscore))
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        rotated[where[0], where[1], 0] /= maxscore
     else:
         rotated[where[0], where[1], 0] -= minscore
         rotated[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
         rotated[where[0], where[1], 0] -= 1.0
     rotated = numpy.minimum(1.0, numpy.maximum(-1.0, rotated))
-    rotated[where[0], where[1], 0] *= 255
-    rotated = numpy.round(rotated).astype(numpy.int32)
+    where1 = numpy.where((rotated[:, :, 1] == 1) * (rotated[:, :, 0] >= 0))
+    where2 = numpy.where((rotated[:, :, 1] == 1) * (rotated[:, :, 0] < 0))
+    temp0 = rotated[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    rotated[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -rotated[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    rotated[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    rotated = numpy.round(rotated).astype(numpy.uint32)
     img = numpy.empty((xdim, ydim), dtype=numpy.uint32)
     img.shape = (ydim, xdim)
     img[:, :] = int('ff999999', 16)
-    where = numpy.where((rotated[:, :, 0] >= 0) * (rotated[:, :, 1] > 0))
-    img[where[1], where[0]] = gradient2[rotated[where[0], where[1], 0]]
-    where = numpy.where((rotated[:, :, 0] < 0) * (rotated[:, :, 1] > 0))
-    img[where[1], where[0]] = gradient1[-rotated[where[0], where[1], 0]]
+    where = numpy.where(rotated[:, :, 1] > 0)
+    img[where[1], where[0]] = rotated[where[0], where[1], 0]
     pilImage = Image.frombuffer('RGBA', (xdim, ydim), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return pilImage
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
 
 
 def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientation='left', num_ticks=5,
-             min_color=(0.0, 0.0, 1.0), mid_color=(1.0, 1.0, 1.0), max_color=(1.0, 0.0, 0.0), labelattr=None,
-             log_display=True, **kwargs):
+             min_color="0000ff", mid_color="ffffff", max_color="ff0000", labelattr=None, log_display=True, **kwargs):
     """
     Create a key including color gradient and labels indicating associated values, returning a :mod:`pyx` canvas.
 
@@ -743,12 +990,12 @@ def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientati
     :type type: str.
     :param num_ticks: Indicates how many evenly-spaced tick marks and associated labels to insert. This can be zero for no labels or greater than one. Labels are inserted at the minimum and maximum values first with remaining ticks occuring evenly distributed between the extremes.
     :type num_ticks: int.
-    :param min_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the minimum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with max_color and optionally mid_color.
-    :type min_color: tuple
-    :param mid_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the middle plot value, respectively. Numbers range from 0.0 to 1.0. This can be set to None to create a gradient ranging from min_color to max_color or to a tuple to create a divergent gradient.
-    :type mid_color: tuple
-    :param max_color: This is a tuple containing three numbers representing the red, green, and blue component of the color associated with the maximum plot value, respectively. Numbers range from 0.0 to 1.0. This variable is used to create a color gradient for plotting along with min_color and optionally mid_color.
-    :type max_color: tuple
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
     :param labelattr: A list of pyx attributes to be passed to the text function.
     :type labelattr: str.
     :param log_display: If True, min_score and max_score are taken to be logged values and so labels are evenly spaced in log space but converted to normal space for display.
@@ -773,19 +1020,23 @@ def plot_key(min_score, max_score, height, width, labelformat='%0.2f', orientati
     else:
         img = numpy.zeros( (int(round(511.0 * height / width)), 511), dtype=numpy.uint32 )
     img.shape = (img.shape[1],img.shape[0])
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
-        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[1] + max_color[1]) / 2.0,
-                     (min_color[2] + max_color[2]) / 2.0)
-    gradient1 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * mid_color[0], 255.0 * min_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * mid_color[1], 255.0 * min_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * mid_color[2], 255.0 * min_color[2], 256))
-                 ).astype(numpy.uint32)
-    gradient2 = (256**3 * 255 + numpy.round(numpy.linspace(255.0 * max_color[0], 255.0 * mid_color[0], 256)) +
-                 256.0 * numpy.round(numpy.linspace(255.0 * max_color[1], 255.0 * mid_color[1], 256)) +
-                 256.0 ** 2.0 * numpy.round(numpy.linspace(255.0 * max_color[2], 255.0 * mid_color[2], 256))
-                 ).astype(numpy.uint32)
-    img[:255, :] = gradient2[:255].reshape(-1, 1)
-    img[255:, :] = gradient1.reshape(-1, 1)
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
+    temp0 = numpy.linspace(1.0, 0.0, 256)[:255].astype(numpy.float64).reshape(-1, 1)
+    temp1 = 1.0 - temp0
+    img[:255, :] = (255 * 256 ** 3.0 + numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+                    numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256 +
+                    numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256 ** 2).astype(numpy.uint32)
+    temp0 = numpy.linspace(0.0, 1.0, 256).astype(numpy.float64).reshape(-1, 1)
+    temp1 = 1.0 - temp0
+    img[255:, :] = (255 * 256 ** 3.0 + numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+                    numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256 +
+                    numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256 ** 2).astype(numpy.uint32)
     pilImage = Image.frombuffer( 'RGBA',(img.shape[1],img.shape[0]),img,'raw','RGBA',0,1)
     if orientation in ['left', 'right']:
         c.insert(bitmap.bitmap( 0, 0, pilImage, height=height))

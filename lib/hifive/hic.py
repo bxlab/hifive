@@ -20,6 +20,7 @@ from hic_data import HiCData
 from libraries._hic_binning import find_fend_coverage, dynamically_bin_unbinned_upper, dynamically_bin_upper_from_upper, remap_counts
 import hic_binning
 import libraries._hic_distance as _distance
+import plotting
 
 
 class HiC(object):
@@ -48,8 +49,6 @@ class HiC(object):
         """
 
         self.file = os.path.abspath(filename)
-        if mode != 'w':
-            self.load()
         if 'mpi4py' in sys.modules.keys():
             self.comm = MPI.COMM_WORLD
             self.rank = self.comm.Get_rank()
@@ -62,6 +61,8 @@ class HiC(object):
             self.silent = silent
         else:
             self.silent = True
+        if mode != 'w':
+            self.load()
         return None
 
     def __getitem__(self, key):
@@ -82,6 +83,8 @@ class HiC(object):
         :type filename: str.
         :returns: None
         """
+        if self.rank > 0:
+            return None
         filename = os.path.abspath(filename)
         # ensure data h5dict exists
         if not os.path.exists(filename):
@@ -90,7 +93,7 @@ class HiC(object):
             return None
         self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
                                        os.path.dirname(self.file)), os.path.basename(filename))
-        self.data = HiCData(filename).data
+        self.data = h5py.File(filename, 'r')
         fendfilename = self.data['/'].attrs['fendfilename']
         if fendfilename[:2] == './':
             fendfilename = fendfilename[2:]
@@ -104,7 +107,7 @@ class HiC(object):
             if not self.silent:
                 print >> sys.stderr, ("Could not find %s.\n") % (fendfilename),
             return None
-        self.fends = Fend(fendfilename).fends
+        self.fends = h5py.File(fendfilename, 'r')
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.fends['chromosomes']):
@@ -114,14 +117,37 @@ class HiC(object):
         self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
         return None
 
-    def save(self):
+    def save(self, out_fname=None):
         """
         Save analysis parameters to h5dict.
 
+        :param filename: Specifies the file name of the :class:`HiC <hifive.hic.HiC>` object to save this analysis to.
+        :type filename: str.
         :returns: None
         """
         if self.rank > 0:
             return None
+        if not out_fname is None:
+            original_file = os.path.abspath(self.file)
+            self.file = out_fname
+            if 'datafilename' in self.__dict__:
+                datafilename = self.datafilename
+                if datafilename[:2] == './':
+                    datafilename = datafilename[2:]
+                parent_count = datafilename.count('../')
+                datafilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
+                                        datafilename.lstrip('/').split('/')[parent_count:])
+                self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(datafilename)),
+                                               os.path.dirname(self.file)), os.path.basename(datafilename))
+            if 'fendfilename' in self.__dict__:
+                fendfilename = self.fendfilename
+                if fendfilename[:2] == './':
+                    fendfilename = fendfilename[2:]
+                parent_count = fendfilename.count('../')
+                fendfilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
+                                        fendfilename.lstrip('/').split('/')[parent_count:])
+                self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                                               os.path.dirname(self.file)), os.path.basename(fendfilename))
         datafile = h5py.File(self.file, 'w')
         for key in self.__dict__.keys():
             if key in ['data', 'fends', 'file', 'chr2int', 'comm', 'rank', 'num_procs', 'silent']:
@@ -158,7 +184,7 @@ class HiC(object):
                 if not self.silent:
                     print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (datafilename),
             else:
-                self.data = HiCData(datafilename).data
+                self.data = h5py.File(datafilename, 'r')
         # ensure fend h5dict exists
         if 'fendfilename' in self.__dict__:
             fendfilename = self.fendfilename
@@ -171,12 +197,21 @@ class HiC(object):
                 if not self.silent:
                     print >> sys.stderr, ("Could not find %s. No fends loaded.\n") % (fendfilename),
             else:
-                self.fends = Fend(fendfilename).fends
+                self.fends = h5py.File(fendfilename, 'r')
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.fends['chromosomes']):
             self.chr2int[chrom] = i
         datafile.close()
+        return None
+
+    def reset_filter(self):
+        """
+        Return all fends to a valid filter state.
+
+        :returns: None
+        """
+        self.filter.fill(1)
         return None
 
     def filter_fends(self, mininteractions=10, mindistance=0, maxdistance=0):
@@ -193,6 +228,8 @@ class HiC(object):
         :type maxdistance: int.
         :returns: None
         """
+        if self.rank > 0:
+            return None
         if not self.silent:
             print >> sys.stderr, ("Filtering fends..."),
         self.mininteractions = mininteractions
@@ -235,7 +272,7 @@ class HiC(object):
             print >> sys.stderr, ("Removed %i of %i fends\n") % (original_count - current_valid, original_count),
         return None
 
-    def find_distance_means(self, numbins=90, minsize=200, maxsize=0, corrected=False):
+    def find_distance_parameters(self, numbins=90, minsize=200, maxsize=0, corrected=False):
         """
         Count reads and possible interactions from valid fend pairs in each distance bin to find mean bin signals. This function is MPI compatible.
 
@@ -297,17 +334,21 @@ class HiC(object):
             for j in range(1, pair_sums.shape[0]):
                 pair_sums[j] += pair_sums[j - 1]
             node_ranges = numpy.searchsorted(pair_sums, node_cutoffs, side='left')
-            for j in range(1, node_cutoffs.shape[0] - 1):
-                if pair_sums[node_ranges[j]] - node_cutoffs[j] > node_cutoffs[j] - pair_sums[node_ranges[j] - 1]:
-                    node_ranges[j] -= 1
             node_start = node_ranges[self.rank]
+            if (node_start > 0 and node_cutoffs[self.rank] - pair_sums[node_start - 1] <
+                                   pair_sums[node_start] - node_cutoffs[self.rank]):
+                node_start -= 1
             node_stop = node_ranges[self.rank + 1]
+            if (node_stop > 0 and node_cutoffs[self.rank + 1] - pair_sums[node_stop - 1] <
+                                   pair_sums[node_stop] - node_cutoffs[self.rank + 1]):
+                node_stop -= 1
             mapping = numpy.zeros(stop_fend - start_fend, dtype=numpy.int32) - 1
             mapping[rev_mapping] = numpy.arange(num_valid, dtype=numpy.int32)
             mids = self.fends['fends']['mid'][rev_mapping + start_fend]
             # pull relevant data
             start_index = self.data['cis_indices'][rev_mapping[node_start] + start_fend]
-            stop_index = self.data['cis_indices'][rev_mapping[node_stop - 1] + 1 + start_fend]
+            stop_index = self.data['cis_indices'][max(rev_mapping[node_stop - 1] + 1,
+                                                      rev_mapping[node_start]) + start_fend]
             indices = self.data['cis_data'][start_index:stop_index, :]
             counts = indices[:, 2].astype(numpy.float64)
             if corrected:
@@ -398,7 +439,7 @@ class HiC(object):
             # pull relevant data
             start_index = self.data['cis_indices'][start_fend]
             stop_index = self.data['cis_indices'][stop_fend]
-            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
+            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int64)
             start_index = node_ranges[self.rank]
             stop_index = node_ranges[self.rank + 1]
             data = self.data['cis_data'][start_index:stop_index, :]
@@ -448,9 +489,9 @@ class HiC(object):
             print >> sys.stderr, ("Done\n"),
         return None
 
-    def find_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0015, burnin_iterations=10000,
+    def find_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0001, burnin_iterations=10000,
                               annealing_iterations=10000, learningrate=0.1, display=0, chroms=None,
-                              precalculate=True, maxiterations=25000):
+                              precalculate=True):
         """
         Using gradient descent, learn correction values for each valid fend based on a Poisson distribution of observations. This function is MPI compatible.
 
@@ -474,7 +515,11 @@ class HiC(object):
         :type precalculate: bool.
         :returns: None
         """
-        if chroms is None:
+        if (chroms is None or
+                (isinstance(chroms, list) and
+                (len(chroms) == 0 or
+                (len(chroms) == 1 and chroms[0] == ''))) or
+                chroms == ''):
             chroms = self.chr2int.keys()
             chroms.sort()
         if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
@@ -524,7 +569,8 @@ class HiC(object):
                                        maxdistance,
                                        node_ranges[self.rank],
                                        node_ranges[self.rank + 1],
-                                       binned)
+                                       binned,
+                                       start_fend)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     fend_ranges[node_ranges[i]:node_ranges[i + 1], :] = self.comm.recv(source=i, tag=11)
@@ -533,22 +579,58 @@ class HiC(object):
             else:
                 self.comm.send(fend_ranges[node_ranges[self.rank]:node_ranges[self.rank + 1], :], dest=0, tag=11)
                 self.comm.Recv(fend_ranges, source=0, tag=13)
+            # find range of fends for each node, creating as even spacing as possible
             total_pairs = numpy.sum(fend_ranges[:, 0])
             node_ranges = numpy.round(numpy.linspace(0, total_pairs, self.num_procs + 1)).astype(numpy.int64)
-            num_pairs = node_ranges[self.rank + 1] - node_ranges[self.rank]
-            indices0 = numpy.zeros(num_pairs, dtype=numpy.int32)
-            indices1 = numpy.zeros(num_pairs, dtype=numpy.int32)
-            distance_means = numpy.zeros(num_pairs, dtype=numpy.float32)
-            data = numpy.zeros(num_pairs, dtype=numpy.int32)
-            _distance.find_node_indices(rev_mapping,
-                                        indices0,
-                                        indices1,
-                                        fend_ranges,
-                                        node_ranges[self.rank],
-                                        node_ranges[self.rank + 1],
-                                        binned)            
-            interactions = numpy.bincount(indices0, minlength=rev_mapping.shape[0])
-            interactions += numpy.bincount(indices1, minlength=rev_mapping.shape[0])
+            temp = numpy.r_[0, fend_ranges[:, 0]]
+            for i in range(1, temp.shape[0]):
+                temp[i] += temp[i - 1]
+            start = numpy.searchsorted(temp, node_ranges[self.rank])
+            if start > 0:
+                if node_ranges[self.rank] - temp[start - 1] < temp[start] - node_ranges[self.rank]:
+                    start -= 1
+            stop = numpy.searchsorted(temp, node_ranges[self.rank + 1])
+            if stop > 0:
+                if node_ranges[self.rank + 1] - temp[stop - 1] < temp[stop] - node_ranges[self.rank + 1]:
+                    stop -= 1
+            num_pairs = temp[stop] - temp[start]
+            del temp
+            # pull needed data for each node and determine number of nonzero pairs
+            start_index = self.data['cis_indices'][start_fend + rev_mapping[start]]
+            stop_index = max(start_index, self.data['cis_indices'][start_fend + rev_mapping[stop - 1] + 1])
+            temp_data = self.data['cis_data'][start_index:stop_index, :]
+            temp_data = temp_data[numpy.where(temp_data[:, 1] < stop_fend)[0], :]
+            temp_data[:, 0] = mapping[temp_data[:, 0] - start_fend]
+            temp_data[:, 1] = mapping[temp_data[:, 1] - start_fend]
+            nonzero_pairs = _distance.find_nonzeros_in_range(fend_ranges, temp_data)
+            # allocate nonzero index and count arrays and fill
+            nonzero_indices0 = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
+            nonzero_indices1 = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
+            counts = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
+            _distance.find_nonzero_node_indices(fend_ranges,
+                                                nonzero_indices0,
+                                                nonzero_indices1,
+                                                counts,
+                                                temp_data)
+            del temp_data
+            # allocate zero index arrays and fill
+            zero_indices0 = numpy.zeros(num_pairs - nonzero_pairs, dtype=numpy.int32)
+            zero_indices1 = numpy.zeros(num_pairs - nonzero_pairs, dtype=numpy.int32)
+            _distance.find_zero_node_indices(rev_mapping,
+                                             fend_ranges,
+                                             nonzero_indices0,
+                                             nonzero_indices1,
+                                             zero_indices0,
+                                             zero_indices1,
+                                             start,
+                                             stop,
+                                             binned,
+                                             start_fend)
+            # count total interactions per fend and sent to root node
+            interactions = numpy.bincount(nonzero_indices0, minlength=rev_mapping.shape[0])
+            interactions += numpy.bincount(nonzero_indices1, minlength=rev_mapping.shape[0])
+            interactions += numpy.bincount(zero_indices0, minlength=rev_mapping.shape[0])
+            interactions += numpy.bincount(zero_indices1, minlength=rev_mapping.shape[0])
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     interactions += self.comm.recv(source=i, tag=11)
@@ -556,36 +638,29 @@ class HiC(object):
             else:
                 self.comm.send(interactions, dest=0, tag=11)
                 temp = None
+            # calculate predicted distance means for all interactions
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rFinding distance means for chromosome %s...") % (' ' * 80, chrom),
-            _distance.find_remapped_distance_means(indices0,
-                                                   indices1,
+            nonzero_means = numpy.zeros(nonzero_indices0.shape[0], dtype=numpy.float32)
+            _distance.find_remapped_distance_means(nonzero_indices0,
+                                                   nonzero_indices1,
                                                    mids,
-                                                   distance_means,
+                                                   nonzero_means,
                                                    self.distance_parameters,
                                                    self.chromosome_means[chrint])
-            if not self.silent:
-                print >> sys.stderr, ("\r%s\rRemapping counts for chromosome %s...") % (' ' * 80, chrom),
-            start_index = self.data['cis_indices'][start_fend]
-            stop_index = self.data['cis_indices'][stop_fend]
-            #start_index = self.data['cis_indices'][start_fend + indices0[0]]
-            #stop_index = self.data['cis_indices'][start_fend + indices0[-1] + 1]
-            temp_data = self.data['cis_data'][start_index:stop_index, :]
-            temp_data = temp_data[numpy.where(temp_data[:, 1] < stop_fend)[0], :]
-            temp_data[:, 0] = mapping[temp_data[:, 0] - start_fend]
-            temp_data[:, 1] = mapping[temp_data[:, 1] - start_fend]
-            temp_data = temp_data[numpy.where((temp_data[:, 0] >= 0) * (temp_data[:, 1] >= 0))[0], :]
-            indices = indices0.astype(numpy.int64) * num_valid + indices1.astype(numpy.int64)
-            data_indices = temp_data[:, 0].astype(numpy.int64) * num_valid + temp_data[:, 1].astype(numpy.int64)
-            temp_indices = numpy.searchsorted(indices[:-1], data_indices)
-            where = numpy.where(data_indices == indices[temp_indices])
-            where = numpy.where(data_indices == indices[temp_indices])[0]
-            data[temp_indices[where]] = temp_data[where, 2]
-            #remap_counts(indices0, indices1, data, temp_data)
+            zero_means = numpy.zeros(zero_indices0.shape[0], dtype=numpy.float32)
+            _distance.find_remapped_distance_means(zero_indices0,
+                                                   zero_indices1,
+                                                   mids,
+                                                   zero_means,
+                                                   self.distance_parameters,
+                                                   self.chromosome_means[chrint])
+            del mids
+            # if requested, find fend means after adjustment by distance means as correction starting point
             if precalculate:
-                enrichments = data / distance_means
-                count_sums = numpy.bincount(indices0, weights=enrichments, minlength=rev_mapping.shape[0])
-                count_sums += numpy.bincount(indices1, weights=enrichments, minlength=rev_mapping.shape[0])
+                enrichments = counts / nonzero_means
+                count_sums = numpy.bincount(nonzero_indices0, weights=enrichments, minlength=rev_mapping.shape[0])
+                count_sums += numpy.bincount(nonzero_indices1, weights=enrichments, minlength=rev_mapping.shape[0])
                 if self.rank == 0:
                     for i in range(1, self.num_procs):
                         count_sums += self.comm.recv(source=i, tag=11)
@@ -597,20 +672,6 @@ class HiC(object):
                     corrections = self.comm.recv(source=0, tag=11)
             else:
                 corrections = self.corrections[numpy.where(mapping >= 0)[0] + start_fend]
-            where = numpy.where(data > 0)[0]
-            nonzero_indices0 = indices0[where]
-            nonzero_indices1 = indices1[where]
-            counts = data[where]
-            nonzero_means = distance_means[where]
-            where = numpy.where(data == 0)[0]
-            del data
-            zero_indices0 = indices0[where]
-            del indices0
-            zero_indices1 = indices1[where]
-            del indices1
-            zero_means = distance_means[where]
-            del distance_means
-            del where
             gradients = numpy.zeros(corrections.shape[0], dtype=numpy.float64)
             cont = True
             # calculate correction gradients
@@ -670,9 +731,8 @@ class HiC(object):
                         learningrate -= learningstep
                         if iteration >= annealing_iterations:
                             cont = False
-                    else:
-                        if (iteration >= burnin_iterations and change <= minchange) or iteration >= maxiterations:
-                            cont = False
+                    elif iteration >= burnin_iterations and change <= minchange:
+                        cont = False
                     iteration += 1
             self.corrections[rev_mapping + start_fend] = corrections
             cost = _distance.calculate_cost(zero_indices0,
@@ -707,9 +767,10 @@ class HiC(object):
     def _exchange_corrections(self, corrections, gradients, interactions, learningrate):
         if self.rank == 0:
             gradients /= interactions
-            change = numpy.mean(numpy.abs(gradients) / corrections)
-            corrections[:] = numpy.minimum(100.0, numpy.maximum(0.001,
+            old_corrections = numpy.copy(corrections)
+            corrections[:] = numpy.minimum(100.0, numpy.maximum(0.01,
                                            corrections - learningrate * gradients))
+            change = numpy.amax(numpy.abs(corrections / old_corrections - 1.0))
             for i in range(1, self.num_procs):
                 self.comm.Send(corrections, dest=i, tag=13)
             for i in range(1, self.num_procs):
@@ -719,14 +780,16 @@ class HiC(object):
             change = self.comm.recv(source=0, tag=11)
         return change
 
-    def find_express_fend_corrections(self, iterations=100, mindistance=0, remove_distance=True, usereads='cis',
-                                      mininteractions=None):
+    def find_express_fend_corrections(self, iterations=100, mindistance=0, maxdistance=0, remove_distance=True, 
+                                      usereads='cis', mininteractions=None, chroms=[]):
         """
-        Using iterative approximation, learn correction values for each valid fend. This function is MPI compatible.
+        Using iterative approximation, learn correction values for each valid fend.
 
         :param iterations: The number of iterations to use for learning fend corrections.
         :type iterations: int.
         :param mindistance: This is the minimum distance between fend midpoints needed to be included in the analysis. All possible and observed interactions with a distance shorter than this are ignored. If 'usereads' is set to 'trans', this value is ignored.
+        :param maxdistance: The maximum inter-fend distance to be included in modeling. If 'usereads' is set to 'trans', this value is ignored.
+        :type maxdistance: int.
         :type mindistance: int.
         :param remove_distance: Specifies whether the estimated distance-dependent portion of the signal is removed prior to learning fend corrections.
         :type remove_distance: bool.
@@ -734,8 +797,12 @@ class HiC(object):
         :type usereads: str.
         :param mininteractions: If a non-zero 'mindistance' is specified or only 'trans' interactions are used, fend filtering will be performed again to ensure that the data being used is sufficient for analyzed fends. This parameter may specify how many interactions are needed for valid fends. If not given, the value used for the last call to :func:`filter_fends` is used or, barring that, one.
         :type mininteractions: int.
+        :param chroms: A list of chromosomes to calculate corrections for. If set as None, all chromosome corrections are found.
+        :type chroms: list
         :returns: None
         """
+        if self.rank > 0:
+            return None
         if mininteractions is None:
             if 'mininteractions' in self.__dict__.keys():
                 mininteractions = self.mininteractions
@@ -757,75 +824,70 @@ class HiC(object):
         # create needed arrays
         fend_means = numpy.zeros(self.filter.shape[0], dtype=numpy.float64)
         interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int64)
-        mids = self.fends['fends']['mid'][:]
-        chr_indices = self.fends['chr_indices'][:]
-        all_valid = numpy.sum(self.filter)
-        min_fend = numpy.zeros((self.filter.shape[0], 2), dtype=numpy.int32)
-        mids = self.fends['fends']['mid'][:]
-        chroms = self.fends['fends']['chr'][:]
+        chr_indices = self.fends['chr_indices'][...]
+        mids = self.fends['fends']['mid'][...]
+        chrs = self.fends['fends']['chr'][...]
+        filt = numpy.copy(self.filter)
+        if (chroms is None or
+                (isinstance(chroms, list) and
+                (len(chroms) == 0 or
+                (len(chroms) == 1 and chroms[0] == ''))) or
+                chroms == ''):
+            chroms = self.chr2int.keys()
+            chroms.sort()
+        elif not chroms is None and not isinstance(chroms, list):
+            chroms = [chroms]
+        for chrm, i in self.chr2int.iteritems():
+            if chrm not in chroms:
+                filt[chr_indices[i]:chr_indices[i + 1]] = 0
+        all_valid = numpy.sum(filt)
         if not self.silent:
             print >> sys.stderr, ("Done\nCopy data for fast correction..."),
         # copy needed arrays from h5dict
         if useread_int < 2:
             data = self.data['cis_data'][...]
-            valid = numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]] *
-                                (mids[data[:, 1]] - mids[data[:, 0]] >= mindistance))[0]
+            distances = mids[data[:, 1]] - mids[data[:, 0]]
+            if maxdistance == 0:
+                maxdistance = numpy.amax(distances) + 1
+            valid = numpy.where(filt[data[:, 0]] * filt[data[:, 1]] *
+                                (distances >= mindistance) * (distances < maxdistance))[0]
             data = data[valid, :]
+            data_indices = numpy.zeros(filt.shape[0] + 1, dtype=numpy.int64)
+            data_indices[1:] += numpy.bincount(data[:, 0], minlength=filt.shape[0])
+            for i in range(1, data_indices.shape[0]):
+                data_indices[i] += data_indices[i - 1]
         else:
             data = None
         if useread_int > 0:
-            trans_data = self.data['trans_data'][:, :]
-            valid = numpy.where(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]])[0]
+            trans_data = self.data['trans_data'][...]
+            valid = numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0]
             trans_data = trans_data[valid, :]
         else:
             trans_data = None
         if not self.silent:
             print >> sys.stderr, ("Done\nCount interactions for fast correction..."),
-        # filter any fends with too few observed interactions
-        current_fends = numpy.sum(self.filter)
-        previous_fends = current_fends + 1
-        while current_fends < previous_fends:
-            if data is None:
-                observed_interactions = numpy.bincount(numpy.r_[trans_data[:, 0], trans_data[:, 1]],
-                                                       minlength=self.filter.shape[0])
-            elif trans_data is None:
-                observed_interactions = numpy.bincount(numpy.r_[data[:, 0], data[:, 1]],
-                                                       minlength=self.filter.shape[0])
-            else:
-                observed_interactions = numpy.bincount(numpy.r_[data[:, 0], data[:, 1], trans_data[:, 0],
-                                                       trans_data[:, 1]], minlength=self.filter.shape[0])
-            self.filter[numpy.where(observed_interactions < mininteractions)] = 0
-            previous_fends = current_fends
-            current_fends = numpy.sum(self.filter)
-            if not data is None:
-                data = data[numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0], :]
-            if not trans_data is None:
-                trans_data = trans_data[numpy.where(self.filter[trans_data[:, 0]] *
-                                                    self.filter[trans_data[:, 1]])[0], :]
+        # double check that, given the type of reads being used for learning, there are enough for each fend
+        # to meet the mininteraction criteria
+        observed_interactions = numpy.zeros(filt.shape[0], dtype=numpy.int32)
+        if not trans_data is None:
+            observed_interactions += numpy.bincount(trans_data[:, 0], minlength=filt.shape[0])
+            observed_interactions += numpy.bincount(trans_data[:, 1], minlength=filt.shape[0])
         if not data is None:
-            data_indices = numpy.r_[0, numpy.bincount(data[:, 0], minlength=self.filter.shape[0])].astype(numpy.int32)
-            for i in range(1, data_indices.shape[0]):
-                data_indices[i] += data_indices[i - 1]
-        if not self.silent:
-            print >> sys.stderr, ("Done\nFind MinDistance for fast correction..."),
-        for i in range(chr_indices.shape[0]-1):
-            # first fend outside of mindistance range
-            start = chr_indices[i]
-            stop = chr_indices[i]
-            for j in range(chr_indices[i], chr_indices[i + 1]):
-                while start < j and mids[j] - mids[start] >= mindistance:
-                    start += 1
-                min_fend[j, 0] = start
-                stop = max(stop, j + 1)
-                while stop < chr_indices[i + 1] and mids[stop] - mids[j] < mindistance:
-                    stop += 1
-                min_fend[j, 1] = stop
-        _distance.find_mindistance_interactions(interactions,
-                                                chr_indices,
-                                                min_fend,
-                                                self.filter,
-                                                useread_int,
-                                                binned)
+            observed_interactions += numpy.bincount(data[:, 0], minlength=filt.shape[0])
+            observed_interactions += numpy.bincount(data[:, 1], minlength=filt.shape[0])
+        if numpy.amin(observed_interactions[numpy.where(filt)]) < mininteractions:
+            if not self.silent:
+                print >> sys.stderr, ("\nInsufficient interactions for one or more fends.\n"),
+                print >> sys.stderr, ("Try resetting and refiltering fends or expanding distance range.\n"),
+            return None
+        _distance.find_distancebound_interactions(interactions,
+                                                  chr_indices,
+                                                  mids,
+                                                  filt,
+                                                  useread_int,
+                                                  binned,
+                                                  mindistance,
+                                                  maxdistance)
         if not self.silent:
             print >> sys.stderr, ("Done\nPrecalculate Distances for fast correction..."),
         # precalculate interaction distance means for all included interactions
@@ -844,19 +906,19 @@ class HiC(object):
             mu = 1.0
             distance_means = numpy.zeros(data.shape[0], dtype=numpy.float32)
             _distance.find_data_distance_means(distance_means,
-                                               self.filter,
+                                               filt,
                                                data,
                                                data_indices,
                                                mids,
-                                               chroms,
+                                               chrs,
                                                self.distance_parameters,
                                                self.chromosome_means)
             if not trans_data is None:
-                total_possible = numpy.sum(self.filter) ** 2
+                total_possible = numpy.sum(filt).astype(numpy.int64) ** 2
                 for i in range(self.fends['chr_indices'].shape[0] - 1):
                     start = self.fends['chr_indices'][i]
                     stop = self.fends['chr_indices'][i + 1]
-                    total_possible -= numpy.sum(self.filter[start:stop]) ** 2
+                    total_possible -= numpy.sum(filt[start:stop].astype(numpy.int64)) ** 2
                 trans_mu = (2.0 * numpy.sum(trans_data[:, 2])) / total_possible
             else:
                 trans_mu = 1.0
@@ -869,7 +931,7 @@ class HiC(object):
                                              fend_means,
                                              data,
                                              trans_data,
-                                             self.filter,
+                                             filt,
                                              self.corrections,
                                              mu,
                                              trans_mu)
@@ -902,7 +964,7 @@ class HiC(object):
         trans_data = trans_data[valid, :]
         del valid
         chrom = self.fends['fends']['chr'][trans_data[:, 0]]
-        indices = chrom * num_chroms - (chrom * (chrom - 1) / 2)
+        indices = chrom * (num_chroms - 1) - (chrom * (chrom + 1) / 2) - 1
         indices += self.fends['fends']['chr'][trans_data[:, 1]]
         del chrom
         counts = trans_data[:, 2] / (self.corrections[trans_data[:, 0]] * self.corrections[trans_data[:, 1]])
@@ -954,10 +1016,10 @@ class HiC(object):
             print >> sys.stderr, ("Done\n"),
         return numpy.hstack((coordinates, mids.reshape(-1, 1)))
 
-    def cis_heatmap(self, chrom, start=0, stop=None, startfend=None, stopfend=None, binsize=0, binbounds=None,
+    def cis_heatmap(self, chrom, start=None, stop=None, startfend=None, stopfend=None, binsize=0, binbounds=None,
                     datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
                     dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
-                    removefailed=False):
+                    removefailed=False, image_file=None, **kwargs):
         """
         Return a heatmap of cis data of the type and shape specified by the passed arguments.
 
@@ -997,7 +1059,10 @@ class HiC(object):
         :type expansion_binsize: int.
         :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
         :type removefailed: bool.
+        :param image_file: If a filename is specified, a PNG image file is written containing the heatmap data. Arguments for the appearance of the image can be passed as additional keyword arguments.
+        :type image_file: str.
         :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
+
         """
         # check that all values are acceptable
         datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
@@ -1060,12 +1125,29 @@ class HiC(object):
                 data = [binned, mapping]
             else:
                 data = binned
+        if not image_file is None:
+            if 'symmetricscaling' not in kwargs:
+                if datatype == 'enrichment':
+                    kwargs['symmetricscaling'] = True
+                else:
+                    kwargs['symmetricscaling'] = False
+            if isinstance(data, list):
+                binned = data[0]
+            else:
+                binned = data
+            if arraytype == 'compact':
+                img = plotting.plot_compact_array(binned, silent=self.silent, **kwargs)
+            elif arraytype == 'full':
+                img = plotting.plot_full_array(binned, silent=self.silent, **kwargs)
+            else:
+                img = plotting.plot_upper_array(binned, silent=self.silent, **kwargs)
+            img.save(image_file, format='png')
         return data
 
-    def trans_heatmap(self, chrom1, chrom2, start1=0, stop1=None, startfend1=None, stopfend1=None, binbounds1=None,
-                      start2=0, stop2=None, startfend2=None, stopfend2=None, binbounds2=None, binsize=1000000,
+    def trans_heatmap(self, chrom1, chrom2, start1=None, stop1=None, startfend1=None, stopfend1=None, binbounds1=None,
+                      start2=None, stop2=None, startfend2=None, stopfend2=None, binbounds2=None, binsize=1000000,
                       datatype='enrichment', returnmapping=False, dynamically_binned=False, minobservations=0,
-                      searchdistance=0, expansion_binsize=0, removefailed=False):
+                      searchdistance=0, expansion_binsize=0, removefailed=False, image_file=None, **kwargs):
         """
         Return a heatmap of trans data of the type and shape specified by the passed arguments.
 
@@ -1110,6 +1192,8 @@ class HiC(object):
         :type expansion_binsize: int.
         :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
         :type removefailed: bool.
+        :param image_file: If a filename is specified, a PNG image file is written containing the heatmap data. Arguments for the appearance of the image can be passed as additional keyword arguments.
+        :type image_file: str.
         :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
         """
         # check that all values are acceptable
@@ -1152,9 +1236,21 @@ class HiC(object):
                 data = [binned, mapping1, mapping2]
             else:
                 data = binned
+        if not image_file is None:
+            if 'symmetricscaling' not in kwargs:
+                if datatype == 'enrichment':
+                    kwargs['symmetricscaling'] = True
+                else:
+                    kwargs['symmetricscaling'] = False
+            if isinstance(data, list):
+                binned = data[0]
+            else:
+                binned = data
+            img = plotting.plot_full_array(binned, silent=self.silent, **kwargs)
+            img.save(image_file, format='png')
         return data
 
-    def write_heatmap_dict(self, filename, binsize, includetrans=True, remove_distance=False, chroms=[]):
+    def write_heatmap_dict(self, filename, binsize, includetrans=True, datatype='enrichment', chroms=[]):
         """
         Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
@@ -1164,12 +1260,19 @@ class HiC(object):
         :type binsize: int.
         :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
         :type includetrans: bool.
-        :param remove_distance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fend corrections are used.
-        :type remove_distance: bool.
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+        :type datatype: str.
         :param chroms: A list of chromosome names indicating which chromosomes should be included. If left empty, all chromosomes are included. Optional.
         :type chroms: list
         :returns: None
         """
+        if (chroms is None or
+                (isinstance(chroms, list) and
+                (len(chroms) == 0 or
+                (len(chroms) == 1 and chroms[0] == ''))) or
+                chroms == ''):
+            chroms = self.chr2int.keys()
+            chroms.sort()
         hic_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
-                                       remove_distance=remove_distance, chroms=chroms, silent=self.silent)
+                                       datatype=datatype, chroms=chroms, silent=self.silent)
         return None

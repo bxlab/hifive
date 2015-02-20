@@ -14,49 +14,51 @@ def main():
         print "OUT_FILE               File name to write new HiCData h5dict to."
         return None
     in_fnames, out_fname = sys.argv[1:3]
+    out_fname = os.path.abspath(out_fname)
     data = []
     in_fnames = in_fnames.split(',')
     for fname in in_fnames:
         data.append(h5py.File(fname, 'r'))
-    basedir = '/' + '/'.join(in_fnames[0].split('/')[:-1]).strip('/') + '/'
     fendfilename = data[0]['/'].attrs['fendfilename']
     if fendfilename[:2] == './':
         fendfilename = fendfilename[2:]
-    fendfilename = "%s/%s" % (basedir, '/'.join(fendfilename.split('/')[fendfilename.count('../'):]))
+    parent_count = fendfilename.count('../')
+    fendfilename = '/'.join(os.path.abspath(in_fnames[0]).split('/')[:-(1 + parent_count)] +
+                            fendfilename.lstrip('/').split('/')[parent_count:])
     fends = h5py.File(fendfilename, 'r')
     maxinsert = data[0]['/'].attrs['maxinsert']
     output = h5py.File(out_fname, 'w')
     output.attrs['maxinsert'] = maxinsert
-    output.attrs['fendfilename'] = os.path.relpath(fendfilename, out_fname)
+    output.attrs['fendfilename'] = "%s/%s" % (os.path.relpath(os.path.dirname(fendfilename),
+                                              os.path.dirname(out_fname)), os.path.basename(fendfilename))
     num_fends = fends['fends'].shape[0]
     temp_data = []
     all_cis_pairs = numpy.zeros(0, dtype=numpy.int64)
     for i in range(len(data)):
-        temp_data.append(data[i]['cis_data'][...])
-        all_cis_pairs = numpy.hstack((all_cis_pairs, temp_data[i][:, 0].astype(numpy.int64) * num_fends +
-                                                     temp_data[i][:, 1].astype(numpy.int64)))
+        temp = data[i]['cis_data'][...].astype(numpy.int64)
+        temp_data.append([temp[:, 0] * num_fends + temp[:, 1], temp[:, 2]])
+        del temp
+        all_cis_pairs = numpy.hstack((all_cis_pairs, temp_data[i][0]))
     all_cis_pairs = numpy.unique(all_cis_pairs)
     cis_data = numpy.zeros((all_cis_pairs.shape[0], 3), dtype=numpy.int32)
     cis_data[:, 0] = all_cis_pairs / num_fends
     cis_data[:, 1] = all_cis_pairs % num_fends
     for i in range(len(data)):
-        indices = temp_data[i][:, 0].astype(numpy.int64) * num_fends + temp_data[i][:, 1].astype(numpy.int64)
-        cis_data[numpy.searchsorted(all_cis_pairs, indices), 2] += temp_data[i][:, 2]
+        cis_data[numpy.searchsorted(all_cis_pairs, temp_data[i][0]), 2] += temp_data[i][1]
     del all_cis_pairs
     del temp_data
     temp_data = []
     all_trans_pairs = numpy.zeros(0, dtype=numpy.int64)
     for i in range(len(data)):
-        temp_data.append(data[i]['trans_data'][...])
-        all_trans_pairs = numpy.hstack((all_trans_pairs, temp_data[i][:, 0].astype(numpy.int64) * num_fends +
-                                                     temp_data[i][:, 1].astype(numpy.int64)))
+        temp = data[i]['trans_data'][...].astype(numpy.int64)
+        temp_data.append([temp[:, 0] * num_fends + temp[:, 1], temp[:, 2]])
+        all_trans_pairs = numpy.hstack((all_trans_pairs, temp_data[i][0]))
     all_trans_pairs = numpy.unique(all_trans_pairs)
     trans_data = numpy.zeros((all_trans_pairs.shape[0], 3), dtype=numpy.int32)
     trans_data[:, 0] = all_trans_pairs / num_fends
     trans_data[:, 1] = all_trans_pairs % num_fends
     for i in range(len(data)):
-        indices = temp_data[i][:, 0].astype(numpy.int64) * num_fends + temp_data[i][:, 1].astype(numpy.int64)
-        trans_data[numpy.searchsorted(all_trans_pairs, indices), 2] += temp_data[i][:, 2]
+        trans_data[numpy.searchsorted(all_trans_pairs, temp_data[i][0]), 2] += temp_data[i][1]
     del all_trans_pairs
     del temp_data
     cis_indices = numpy.r_[0, numpy.bincount(cis_data[:, 0], minlength=num_fends)].astype(numpy.int32)

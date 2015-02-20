@@ -43,7 +43,7 @@ class HiCProject(unittest.TestCase):
         project.filter_fends(mininteractions=10, mindistance=20000, maxdistance=1000000)
         self.assertTrue(numpy.allclose(self.analyzed.filter, project.filter),
             "filtered fends don't match target values")
-        project.find_distance_means(numbins=5, minsize=30000, maxsize=1000000)
+        project.find_distance_parameters(numbins=5, minsize=30000, maxsize=1000000)
         self.assertTrue(numpy.allclose(self.analyzed.distance_parameters, project.distance_parameters),
             "distance parameters don't match target values")
         self.assertTrue(numpy.allclose(self.analyzed.chromosome_means, project.chromosome_means),
@@ -53,7 +53,7 @@ class HiCProject(unittest.TestCase):
         project = hic.HiC(self.analyzed_fname, 'r', silent=True)
         project.corrections.fill(1.0)
         project.find_fend_corrections(mindistance=10000, maxdistance=1000000, minchange=0.0015, burnin_iterations=100,
-                                      annealing_iterations=10, learningrate=0.4, display=0, maxiterations=100)
+                                      annealing_iterations=10, learningrate=0.4, display=0)
         self.assertTrue(numpy.allclose(self.analyzed.corrections, project.corrections),
             "learned correction values don't match target values")
 

@@ -23,11 +23,13 @@ class HiCData(unittest.TestCase):
         self.fend_fname = '%s/tests/data/test.fends' % self.basedir
         self.mat_fname = '%s/tests/data/test.mat' % self.basedir
         self.raw_fname = '%s/tests/data/test.raw' % self.basedir
-        self.bam_fname = '%s/tests/data/test_hic' % self.basedir
+        self.bam_fname1 = '%s/tests/data/test_hic_1.bam' % self.basedir
+        self.bam_fname2 = '%s/tests/data/test_hic_2.bam' % self.basedir
 
     def test_hic_raw_data_creation(self):
         data = hic_data.HiCData('%s/tests/data/test_temp.hcd' % self.basedir, 'w', silent=True)
         data.load_data_from_raw(self.fend_fname, self.raw_fname, 1000)
+        data.save()
         data = h5py.File('%s/tests/data/test_temp.hcd' % self.basedir, 'r')
         for name in self.data['/'].attrs.keys():
             self.assertTrue(name in data['/'].attrs,
@@ -42,6 +44,7 @@ class HiCData(unittest.TestCase):
     def test_hic_mat_data_creation(self):
         data = hic_data.HiCData('%s/tests/data/test_temp.hcd' % self.basedir, 'w', silent=True)
         data.load_data_from_mat(self.fend_fname, self.mat_fname, 1000)
+        data.save()
         data = h5py.File('%s/tests/data/test_temp.hcd' % self.basedir, 'r')
         for name in self.data['/'].attrs.keys():
             self.assertTrue(name in data['/'].attrs,
@@ -58,7 +61,8 @@ class HiCData(unittest.TestCase):
             print >> sys.stderr, "pysam required for bam import"
             return None
         data = hic_data.HiCData('%s/tests/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_bam(self.fend_fname, self.bam_fname, 1000)
+        data.load_data_from_bam(self.fend_fname, [self.bam_fname1, self.bam_fname2], 1000)
+        data.save()
         data = h5py.File('%s/tests/data/test_temp.hcd' % self.basedir, 'r')
         for name in self.data['/'].attrs.keys():
             self.assertTrue(name in data['/'].attrs,

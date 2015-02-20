@@ -41,7 +41,7 @@ class HiCBinning(unittest.TestCase):
 
     def test_generate_heatmap(self):
         self.project.write_heatmap_dict("%s/tests/data/test_temp.hch" % self.basedir, 50000, includetrans=True,
-                                        remove_distance=False)
+                                        datatype='fend')
         heatmap = h5py.File("%s/tests/data/test_temp.hch" % self.basedir)
         for name in self.heatmap['/'].attrs.keys():
             self.assertTrue(name in heatmap['/'].attrs,

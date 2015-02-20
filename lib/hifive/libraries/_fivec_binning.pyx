@@ -33,15 +33,15 @@ cdef extern from "math.h":
 @cython.cdivision(True)
 def find_fragment_coverage(
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] data_indices not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] data_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] starts not None,
         np.ndarray[DTYPE_int_t, ndim=1] stops not None,
         np.ndarray[DTYPE_int_t, ndim=1] coverage not None,
         int mincoverage):
-    cdef int i, j, frag1, valid
-    cdef int num_regions = starts.shape[0]
-    cdef int num_frags = filter.shape[0]
+    cdef long long int i, j, frag1, valid
+    cdef long long int num_regions = starts.shape[0]
+    cdef long long int num_frags = filter.shape[0]
     with nogil:
         valid = 0
         for i in range(num_regions):
@@ -75,10 +75,10 @@ def unbinned_signal_compact(
         double gamma,
         double sigma,
         int datatype):
-    cdef int frag1, frag2, i, j, distance, num_data
-    cdef int num_frags = mapping.shape[0]
-    cdef int xdim = signal.shape[0]
-    cdef int ydim = signal.shape[1]
+    cdef long long int frag1, frag2, i, j, distance, num_data
+    cdef long long int num_frags = mapping.shape[0]
+    cdef long long int xdim = signal.shape[0]
+    cdef long long int ydim = signal.shape[1]
     if not data is None:
         num_data = data.shape[0]
     else:
@@ -112,7 +112,10 @@ def unbinned_signal_compact(
                 if filter[frag2] == 0:
                     continue
                 # give starting expected value
-                signal[i, j, 1] = exp(mu)
+                if datatype > 1:
+                    signal[i, j, 1] = exp(mu)
+                else:
+                    signal[i, j, 1] = 1.0
                 # if finding fragment, enrichment, or expected, correct for fragment
                 if datatype > 0 and datatype != 2:
                     signal[i, j, 1] *= exp(corrections[frag1] + corrections[frag2])
@@ -138,7 +141,7 @@ def unbinned_signal_compact(
 @cython.cdivision(True)
 def unbinned_signal_upper(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] indices,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] strands not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
@@ -150,8 +153,8 @@ def unbinned_signal_upper(
         double sigma,
         int num_bins,
         int datatype):
-    cdef int frag1, frag2, i, j, k, index, distance, num_data
-    cdef int num_frags = mapping.shape[0]
+    cdef long long int frag1, frag2, i, j, k, index, distance, num_data
+    cdef long long int num_frags = mapping.shape[0]
     if not data is None:
         num_data = data.shape[0]
     else:
@@ -170,7 +173,6 @@ def unbinned_signal_upper(
                         continue
                     j = mapping[frag2]
                     signal[index + j, 0] = data[k, 2]
-                    signal[index + mapping[frag2], 0] = data[i, 2]
         # fill in expected signal
         for frag1 in range(num_frags - 1):
             if filter[frag1] == 0:
@@ -182,7 +184,10 @@ def unbinned_signal_upper(
                     continue
                 j = mapping[frag2]
                 # give starting expected value
-                signal[index + j, 1] = exp(mu)
+                if datatype > 1:
+                    signal[index + j, 1] = exp(mu)
+                else:
+                    signal[index + j, 1] = 1.0
                 # if finding fragment, enrichment, or expected, correct for fragment
                 if datatype > 0 and datatype != 2:
                     signal[index + j, 1] *= exp(corrections[frag1] + corrections[frag2])
@@ -205,7 +210,7 @@ def unbinned_signal_upper(
 @cython.cdivision(True)
 def binned_signal_upper(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] indices,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
@@ -217,9 +222,9 @@ def binned_signal_upper(
         double sigma,
         int datatype,
         int num_bins):
-    cdef int frag1, frag2, i, j, k, index, distance, num_data
+    cdef long long int frag1, frag2, i, j, k, index, distance, num_data
     cdef double observed, expected
-    cdef int num_frags = mapping.shape[0]
+    cdef long long int num_frags = mapping.shape[0]
     if not data is None:
         num_data = data.shape[0]
     else:
@@ -234,7 +239,7 @@ def binned_signal_upper(
                 index = i * num_bins - i * (i + 1) / 2 - i - 1
                 for k in range(indices[frag1], indices[frag1 + 1]):
                     frag2 = data[k, 1]
-                    if frag2 >= num_frags or filter[frag2] == 0:
+                    if frag2 >= num_frags or filter[frag2] == 0 or strands[frag1] == strands[frag2]:
                         continue
                     j = mapping[frag2]
                     if i == j:
@@ -250,13 +255,14 @@ def binned_signal_upper(
             i = mapping[frag1]
             index = i * num_bins - i * (i + 1) / 2 - i - 1
             for frag2 in range(frag1 + 1, num_frags):
-                if filter[frag2] == 0 or strands[frag1] == strands[frag2]:
-                    continue
                 j = mapping[frag2]
-                if i == j:
+                if filter[frag2] == 0 or strands[frag1] == strands[frag2] or i == j:
                     continue
                 # give starting expected value
-                expected = exp(mu)
+                if datatype > 1:
+                    expected = exp(mu)
+                else:
+                    expected = 1.0
                 # if finding fragment, enrichment, or expected, correct for fragment
                 if datatype > 0 and datatype != 2:
                     expected *= exp(corrections[frag1] + corrections[frag2])
@@ -282,8 +288,8 @@ def bin_upper_to_upper(
         np.ndarray[DTYPE_t, ndim=2] unbinned not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         int num_bins):
-    cdef int i, j, index, index2
-    cdef int num_fends = mapping.shape[0]
+    cdef long long int i, j, index, index2
+    cdef long long int num_fends = mapping.shape[0]
     with nogil:
         for i in range(num_fends - 1):
             if mapping[i] == -1:
@@ -311,9 +317,9 @@ def dynamically_bin_upper_from_upper(
         int minobservations,
         int maxsearch,
         int removefailed):
-    cdef int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index, index2
-    cdef int num_bins = bounds.shape[0]
-    cdef int num_fends = ub_mids.shape[0]
+    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index, index2
+    cdef long long int num_bins = bounds.shape[0]
+    cdef long long int num_fends = ub_mids.shape[0]
     with nogil:
         for x in range(num_bins - 1):
             index = x * num_bins - x * (x + 1) / 2 - x - 1
@@ -412,10 +418,10 @@ def unbinned_signal_trans_full(
         int startfrag1,
         int startfrag2,
         int datatype):
-    cdef int frag1, frag2, i, j
-    cdef int num_frags1 = mapping1.shape[0]
-    cdef int num_frags2 = mapping2.shape[0]
-    cdef int num_data = data.shape[0]
+    cdef long long int frag1, frag2, i, j
+    cdef long long int num_frags1 = mapping1.shape[0]
+    cdef long long int num_frags2 = mapping2.shape[0]
+    cdef long long int num_data = data.shape[0]
     with nogil:
         # if finding anything but expected, fill in actual signal
         for i in range(num_data):
@@ -468,10 +474,10 @@ def unbinned_signal_trans_compact(
         int startfrag1,
         int startfrag2,
         int datatype):
-    cdef int frag1, frag2, i, j
-    cdef int num_frags1 = mapping1.shape[0]
-    cdef int num_frags2 = mapping2.shape[0]
-    cdef int num_data = data.shape[0]
+    cdef long long int frag1, frag2, i, j
+    cdef long long int num_frags1 = mapping1.shape[0]
+    cdef long long int num_frags2 = mapping2.shape[0]
+    cdef long long int num_data = data.shape[0]
     with nogil:
         # if finding anything but expected, fill in actual signal
         for i in range(num_data):
@@ -547,11 +553,11 @@ def binned_signal_trans(
         int startfrag1,
         int startfrag2,
         int datatype):
-    cdef int frag1, frag2, i, j
+    cdef long long int frag1, frag2, i, j
     cdef double observed, expected
-    cdef int num_frags1 = mapping1.shape[0]
-    cdef int num_frags2 = mapping2.shape[0]
-    cdef int num_data = data.shape[0]
+    cdef long long int num_frags1 = mapping1.shape[0]
+    cdef long long int num_frags2 = mapping2.shape[0]
+    cdef long long int num_data = data.shape[0]
     with nogil:
         # if finding anything but expected, fill in actual signal
         for i in range(num_data):
@@ -605,11 +611,11 @@ def dynamically_bin_trans(
         int minobservations,
         int maxsearch,
         int removefailed):
-    cdef int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist
-    cdef int num_bins1 = bounds1.shape[0]
-    cdef int num_bins2 = bounds2.shape[0]
-    cdef int num_frags1 = mids1.shape[0]
-    cdef int num_frags2 = mids2.shape[0]
+    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist
+    cdef long long int num_bins1 = bounds1.shape[0]
+    cdef long long int num_bins2 = bounds2.shape[0]
+    cdef long long int num_frags1 = mids1.shape[0]
+    cdef long long int num_frags2 = mids2.shape[0]
     with nogil:
         for x in range(num_bins1):
             for y in range(num_bins2):

@@ -42,8 +42,8 @@ def find_max_frag(
         np.ndarray[DTYPE_int_t, ndim=1] starts not None,
         np.ndarray[DTYPE_int_t, ndim=1] stops not None,
         int maxdistance):
-    cdef int i, j, k
-    cdef int num_regions = starts.shape[0]
+    cdef long long int i, j, k
+    cdef long long int num_regions = starts.shape[0]
     with nogil:
         for i in range(num_regions):
             k = starts[i] + 1
@@ -63,11 +63,11 @@ def find_max_frag(
 def find_fragment_interactions(
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] indices not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fragment not None):
-    cdef int i, j, k
-    cdef int num_frags = filter.shape[0]
+    cdef long long int i, j, k
+    cdef long long int num_frags = filter.shape[0]
     with nogil:
         for i in range(num_frags - 1):
             if filter[i] == 0:
@@ -88,48 +88,41 @@ def calculate_gradients(
         np.ndarray[DTYPE_t, ndim=1] log_counts_n not None,
         np.ndarray[DTYPE_t, ndim=1] log_counts not None,
         np.ndarray[DTYPE_t, ndim=1] log_counts_p not None,
-        np.ndarray[DTYPE_int_t, ndim=1] indices not None,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_t, ndim=1] distance_signal not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_t, ndim=1] gradients not None,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fragment not None,
         double sigma,
         int find_cost):
-    cdef int frag1, frag2, i
+    cdef long long int frag1, frag2, h, i
     cdef double value0, value, cost, expected, z_p, z_n, pdf_p, pdf_n, cdf_p, cdf_n
-    cdef int num_frags = filter.shape[0]
+    cdef long long int num_data = data.shape[0]
     cdef double sigma_2 = pow(sigma, 2.0)
     with nogil:
         cost = 0.0
-        for frag1 in range(num_frags-1):
-            if filter[frag1] == 0:
-                continue
-            for i in range(indices[frag1], indices[frag1 + 1]):
-                frag2 = data[i, 1]
-                if filter[frag2] == 0 or frag2 >= max_fragment[frag1]:
-                    continue
-                expected = max(0.01, corrections[frag1] + corrections[frag2] + distance_signal[i])
-                z_p = (log_counts_p[i] - expected) / sigma
-                cdf_p = stdnorm_cdf(z_p)
-                pdf_p = stdnorm_pdf(z_p)
-                z_n = (log_counts_n[i] - expected) / sigma
-                cdf_n = stdnorm_cdf(z_n)
-                pdf_n = stdnorm_pdf(z_n)
-                value0 = (cdf_p - cdf_n) * sigma
-                if value0 != 0:
-                    value = (pdf_p - pdf_n) / value0
-                    gradients[frag1] += value
-                    gradients[frag2] += value
-                    if find_cost:
-                        cost -= log(cdf_p - cdf_n)
-                else:
-                    value = (expected - log_counts[i]) / sigma_2
-                    gradients[frag1] += value
-                    gradients[frag2] += value
-                    if find_cost:
-                        value0 = pow(log_counts[i] - expected, 2.0) / sigma_2
-                        cost += value0 * 0.5
+        for i in range(num_data):
+            frag1 = data[i, 0]
+            frag2 = data[i, 1]
+            expected = max(0.01, corrections[frag1] + corrections[frag2] + distance_signal[i])
+            z_p = (log_counts_p[i] - expected) / sigma
+            cdf_p = stdnorm_cdf(z_p)
+            pdf_p = stdnorm_pdf(z_p)
+            z_n = (log_counts_n[i] - expected) / sigma
+            cdf_n = stdnorm_cdf(z_n)
+            pdf_n = stdnorm_pdf(z_n)
+            value0 = (cdf_p - cdf_n) * sigma
+            if value0 != 0:
+                value = (pdf_p - pdf_n) / value0
+                gradients[frag1] += value
+                gradients[frag2] += value
+                if find_cost:
+                    cost -= log(cdf_p - cdf_n)
+            else:
+                value = (expected - log_counts[i]) / sigma_2
+                gradients[frag1] += value
+                gradients[frag2] += value
+                if find_cost:
+                    value0 = pow(log_counts[i] - expected, 2.0) / sigma_2
+                    cost += value0 * 0.5
     return cost
 
 
@@ -142,8 +135,8 @@ def update_corrections(
     np.ndarray[DTYPE_t, ndim=1] gradients not None,
     np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
     double learning_rate ):
-    cdef int i
-    cdef int num_frags = filter.shape[0]
+    cdef long long int i
+    cdef long long int num_frags = filter.shape[0]
     with nogil:
         for i in range(num_frags):
             if filter[i] == 0:
@@ -162,10 +155,10 @@ def find_fragment_means(
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
         np.ndarray[DTYPE_t, ndim=1] log_counts not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None):
-    cdef int i, frag1, frag2
+    cdef long long int i, frag1, frag2
     cdef double cost, temp
-    cdef int num_frags = interactions.shape[0]
-    cdef int num_data = data.shape[0]
+    cdef long long int num_frags = interactions.shape[0]
+    cdef long long int num_data = data.shape[0]
     with nogil:
         cost = 0.0
         for i in range(num_frags):

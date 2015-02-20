@@ -70,8 +70,8 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
     if 'gamma' not in fivec.__dict__.keys():
         fivec.find_distance_parameters()
     # Determine start, stop, startfrag, and stopfrag
-    chrint = fivec.frags['regions']['chromosome'][region]
-    chrom = fivec.frags['chromosomes'][chrint]
+    chrom = fivec.frags['regions']['chromosome'][region]
+    chrint = fivec.chr2int[chrom]
     if start is None and startfrag is None:
         startfrag = fivec.frags['regions']['start_frag'][region]
         start = fivec.frags['fragments']['mid'][startfrag]
@@ -79,19 +79,27 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
         start = fivec.frags['fragments']['mid'][startfrag]
     else:
         startfrag = _find_frag_from_coord(fivec, chrint, start)
-    if stop is None and stopfrag is None:
+    if (stop is None or stop == 0) and stopfrag is None:
         stopfrag = fivec.frags['regions']['stop_frag'][region]
         stop = fivec.frags['fragments']['mid'][stopfrag - 1] + 1
-    elif stop is None:
+    elif stop is None or stop == 0:
         stop = fivec.frags['fragments']['mid'][stopfrag - 1] + 1
     else:
         stopfrag = _find_frag_from_coord(fivec, chrint, stop)
+    if stopfrag - startfrag == 0:
+        if not silent:
+            print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+        return None
     if not silent:
         print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         start_index = fivec.data['cis_indices'][startfrag]
         stop_index = fivec.data['cis_indices'][stopfrag]
+        if stop_index - start_index == 0:
+            if not silent:
+                print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+            return None
         data_indices = fivec.data['cis_indices'][startfrag:(stopfrag + 1)]
         data_indices -= data_indices[0]
         data = fivec.data['cis_data'][start_index:stop_index, :]
@@ -124,20 +132,17 @@ def unbinned_cis_signal(fivec, region, start=None, stop=None, startfrag=None, st
         data_array = numpy.zeros((forward, -reverse, 2), dtype=numpy.float32)
     else:
         if skipfiltered:
-            num_bins = numpy.sum(fivec.filter[startfrag:stopfrag])
+            rev_mapping = numpy.where(fivec.filter[startfrag:stopfrag])[0]
+            num_bins = rev_mapping.shape[0]
+            mapping = numpy.zeros(stopfrag - startfrag, dtype=numpy.int32) - 1
+            mapping[rev_mapping] = numpy.arange(num_bins)
         else:
             num_bins = stopfrag - startfrag
+            mapping = numpy.arange(num_bins, dtype=numpy.int32)
         if num_bins < 2:
             if not silent:
                 print >> sys.stderr, ("Insufficient data.\n"),
             return None
-        mapping = numpy.zeros(stopfrag - startfrag, dtype=numpy.int32) - 1
-        i = 0
-        for j in range(stopfrag - startfrag):
-            if skipfiltered and fivec.filter[j + startfrag] == 0:
-                continue
-            mapping[j] = i
-            i += 1
         data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
     if datatype_int <= 1:
         mu = 0.0
@@ -229,8 +234,8 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     if 'gamma' not in fivec.__dict__.keys():
         fivec.find_distance_parameters()
     # Determine start, stop, startfrag, and stopfrag
-    chrint = fivec.frags['regions']['chromosome'][region]
-    chrom = fivec.frags['chromosomes'][chrint]
+    chrom = fivec.frags['regions']['chromosome'][region]
+    chrint = fivec.chr2int[chrom]
     if start is None and startfrag is None:
         startfrag = fivec.frags['regions']['start_frag'][region]
         while startfrag < fivec.frags['regions']['stop_frag'][region] and fivec.filter[startfrag] == 0:
@@ -244,17 +249,20 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
         start = (fivec.frags['fragments']['mid'][startfrag] / binsize) * binsize
     else:
         startfrag = _find_frag_from_coord(fivec, chrint, start)
-    if stop is None and stopfrag is None:
+    if (stop is None or stop == 0) and stopfrag is None:
         stopfrag = fivec.frags['regions']['stop_frag'][region]
         while stopfrag > startfrag and fivec.filter[stopfrag - 1] == 0:
             stopfrag -= 1
-        stop = (int(ceil((fivec.frags['fragments']['mid'][stopfrag - 1] + 1 - start) / float(binsize))) *
-                binsize + start)
+        stop = ((fivec.frags['fragments']['mid'][stopfrag - 1] - start) / binsize + 1) * binsize + start
     elif stop is None:
-        stop = (int(ceil((fivec.frags['fragments']['mid'][stopfrag - 1] + 1 - start) / float(binsize))) *
-                binsize + start)
+        stop = ((fivec.frags['fragments']['mid'][stopfrag - 1] - start) / binsize + 1) * binsize + start
     else:
+        stop = ((stop - 1 - start) / binsize + 1) * binsize + start
         stopfrag = _find_frag_from_coord(fivec, chrint, stop)
+    if stopfrag - startfrag == 0:
+        if not silent:
+            print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+        return None
     num_bins = (stop - start) / binsize
     num_frags = stopfrag - startfrag
     if not silent:
@@ -263,6 +271,10 @@ def bin_cis_signal(fivec, region, start=None, stop=None, startfrag=None, stopfra
     if datatype != 'expected':
         start_index = fivec.data['cis_indices'][startfrag]
         stop_index = fivec.data['cis_indices'][stopfrag]
+        if stop_index - start_index == 0:
+            if not silent:
+                print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+            return None
         data_indices = fivec.data['cis_indices'][startfrag:(stopfrag + 1)]
         data_indices -= data_indices[0]
         data = fivec.data['cis_data'][start_index:stop_index, :]
@@ -356,10 +368,9 @@ def bin_cis_array(fivec, unbinned, fragments, start=None, stop=None, binsize=100
         if start is None:
             start = (fivec.frags['fragments']['mid'][fragments[0]] / binsize) * binsize
         if stop is None:
-            stop = (int(ceil((fivec.frags['fragments']['mid'][fragments[-1]] + 1 - start) / float(binsize))) *
-                    binsize + start)
+            stop = ((fivec.frags['fragments']['mid'][fragments[-1]] - start) / binsize + 1) * binsize + start
         else:
-            stop = int(ceil((stop - start) / float(binsize))) * binsize + start
+            stop = ((stop - 1 - start) / binsize + 1) * binsize + start
         num_bins = (stop - start) / binsize
         binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32)
         binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
@@ -539,10 +550,10 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
     if 'gamma' not in fivec.__dict__.keys():
         fivec.find_distance_parameters()
     # Determine start, stop, startfend, and stopfend
-    chrint1 = fivec.frags['regions']['chromosome'][region1]
-    chrom1 = fivec.frags['chromosomes'][chrint1]
-    chrint2 = fivec.frags['regions']['chromosome'][region2]
-    chrom2 = fivec.frags['chromosomes'][chrint2]
+    chrom1 = fivec.frags['regions']['chromosome'][region1]
+    chrint1 = fivec.chr2int[chrom1]
+    chrom2 = fivec.frags['regions']['chromosome'][region2]
+    chrint2 = fivec.chr2int[chrom2]
     if start1 is None and startfrag1 is None:
         startfrag1 = fivec.frags['regions']['start_frag'][region1]
         start1 = fivec.frags['fragments']['mid'][startfrag1]
@@ -550,10 +561,10 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
         start1 = fivec.frags['fragments']['mid'][startfrag1]
     else:
         startfrag1 = _find_frag_from_coord(fivec, chrint1, start1)
-    if stop1 is None and stopfrag1 is None:
+    if (stop1 is None or stop1 == 0) and stopfrag1 is None:
         stopfrag1 = fivec.frags['regions']['stop_frag'][region1]
         stop1 = fivec.frags['fragments']['mid'][stopfrag1 - 1] + 1
-    elif stop1 is None:
+    elif stop1 is None or stop1 == 0:
         stop1 = fivec.frags['fragments']['mid'][stopfrag1 - 1] + 1
     else:
         stopfrag1 = _find_frag_from_coord(fivec, chrint1, stop1)
@@ -564,10 +575,10 @@ def unbinned_trans_signal(fivec, region1, region2, start1=None, stop1=None, star
         start2 = fivec.frags['fragments']['mid'][startfrag2]
     else:
         startfrag2 = _find_frag_from_coord(fivec, chrint2, start2)
-    if stop2 is None and stopfrag2 is None:
+    if (stop2 is None or stop2 == 0) and stopfrag2 is None:
         stopfrag2 = fivec.frags['regions']['stop_frag'][region2]
         stop2 = fivec.frags['fragments']['mid'][stopfrag2 - 1] + 1
-    elif stop2 is None:
+    elif stop2 is None or stop2 == 0:
         stop2 = fivec.frags['fragments']['mid'][stopfrag2 - 1] + 1
     else:
         stopfrag2 = _find_frag_from_coord(fivec, chrint2, stop2)
@@ -756,10 +767,10 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
     if 'gamma' not in fivec.__dict__.keys():
         fivec.find_distance_parameters(silent=silent)
     # Determine start, stop, startfend, and stopfend
-    chrint1 = fivec.frags['regions']['chromosome'][region1]
-    chrom1 = fivec.frags['chromosomes'][chrint1]
-    chrint2 = fivec.frags['regions']['chromosome'][region2]
-    chrom2 = fivec.frags['chromosomes'][chrint2]
+    chrom1 = fivec.frags['regions']['chromosome'][region1]
+    chrint1 = fivec.chr2int[chrom1]
+    chrom2 = fivec.frags['regions']['chromosome'][region2]
+    chrint2 = fivec.chr2int[chrom2]
     if start1 is None and startfrag1 is None:
         startfrag1 = fivec.frags['regions']['start_frag'][region1]
         while startfrag1 < fivec.frags['regions']['stop_frag'][region1] and fivec.filter[startfrag1] == 0:
@@ -773,12 +784,11 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
         stopfrag1 = fivec.frags['regions']['stop_frag'][region1]
         while stopfrag1 > startfrag1 and fivec.filter[stopfrag1 - 1] == 0:
             stopfrag1 -= 1
-        stop1 = (int(ceil((fivec.frags['fragments']['mid'][stopfrag1 - 1] + 1 - start1) / float(binsize))) *
-                 binsize + start1)
+        stop1 = ((fivec.frags['fragments']['mid'][stopfrag1 - 1] - start1) / binsize + 1) * binsize + start1
     elif stop1 is None:
-        stop1 = (int(ceil((fivec.frags['fragments']['mid'][stopfrag1-1] + 1 - start1) / float(binsize))) *
-                 binsize + start1)
+        stop1 = ((fivec.frags['fragments']['mid'][stopfrag1 - 1] - start1) / binsize + 1) * binsize + start1
     else:
+        stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
         stopfrag1 = _find_frag_from_coord(fivec, chrint1, stop1)
     num_bins1 = (stop1 - start1) / binsize
     if start2 is None and startfrag2 is None:
@@ -794,12 +804,11 @@ def bin_trans_signal(fivec, region1, region2, start1=None, stop1=None, startfrag
         stopfrag2 = fivec.frags['regions']['stop_frag'][region2]
         while stopfrag2 > startfrag2 and fivec.filter[stopfrag2 - 1] == 0:
             stopfrag2 -= 1
-        stop2 = (int(ceil((fivec.frags['fragments']['mid'][stopfrag2 - 1] + 1 - start2) / float(binsize))) *
-                 binsize + start2)
+        stop2 = ((fivec.frags['fragments']['mid'][stopfrag2 - 1] - start2) / binsize + 1) * binsize + start2
     elif stop2 is None:
-        stop2 = (int(ceil((fivec.frags['fragments']['mid'][stopfrag2-1] + 1 - start2) / float(binsize))) *
-                 binsize + start2)
+        stop2 = ((fivec.frags['fragments']['mid'][stopfrag2 - 1] - start2) / binsize + 1) * binsize + start2
     else:
+        stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
         stopfrag2 = _find_frag_from_coord(fivec, chrint2, stop2)
     num_bins2 = (stop2 - start2) / binsize
     # If trans mean not already in fivec and 'distance', 'enrichment', or 'expected' is requested, calculate
@@ -914,8 +923,8 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     return None
 
 
-def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_distance=False, arraytype='full',
-                       regions=[], **kwargs):
+def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='enrichment',
+                       regions=[], arraytype='full', **kwargs):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
@@ -927,9 +936,9 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_dista
     :type binsize: int.
     :param includetrans: Indicates whether trans interaction arrays should be calculated and saved.
     :type includetrans: bool.
-    :param remove_distance: If 'True', the expected value is calculated including the expected distance mean. Otherwise, only fragment corrections are used.
-    :type remove_distance: bool.
-    :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact' and 'full'. 'compact' means data are arranged in a N x M x 2 array where N is the number of bins, M is the maximum number of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2.
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fragment', 'enrichment', and 'expected'. Observed values are aways in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, non-filtered bins return value of 1. Expected values are returned for 'distance', 'fragment', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fragment' uses only fragment correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+        :type datatype: str.
+    :param arraytype: This determines what shape of array data are returned in if unbinned heatmaps are requested. Acceptable values are 'compact' and 'full'. 'compact' means data are arranged in a N x M array where N is the number of bins, M is the maximum number of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N.
     :type arraytype: str.
     :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
     :type regions: list.
@@ -940,7 +949,7 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_dista
     else:
         silent = False
     # Check if trans mean is needed and calculate if not already done
-    if includetrans and remove_distance and 'trans_mean' not in fivec.__dict__.keys():
+    if includetrans and datatype in ['distance', 'enrichment'] and 'trans_mean' not in fivec.__dict__.keys():
         fivec.find_trans_mean()
     # Check if filename already exists, and remove if it does
     if os.path.exists(filename):
@@ -950,11 +959,6 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, remove_dista
     if not silent:
         print >> sys.stderr, ("Creating binned heatmap...\n"),
     output = h5py.File(filename, 'w')
-    # Determine the requested data type
-    if remove_distance:
-        datatype = 'enrichment'
-    else:
-        datatype = 'fragment'
     # If regions not specified, fill list
     if len(regions) == 0:
         regions = list(numpy.arange(fivec.frags['regions'].shape[0]))

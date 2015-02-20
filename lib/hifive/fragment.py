@@ -118,24 +118,27 @@ class Fragment(object):
                 while stop_frag < chr_indices[chrint + 1] and fragments['mid'][stop_frag] < region[2]:
                     stop_frag += 1
                 region_array.append([start_frag, stop_frag, chrint, region[1], region[2]])
-        # if regions not given, parse regions
-        for i in range(chr_indices.shape[0] - 1):
-            start_frag = chr_indices[i]
-            stop_frag = start_frag
-            while start_frag < chr_indices[i + 1]:
-                while (stop_frag < chr_indices[i + 1] and (stop_frag == start_frag or
-                       fragments['mid'][stop_frag] - fragments['mid'][stop_frag - 1] < minregionspacing)):
-                    stop_frag += 1
-                region_array.append([i, start_frag, stop_frag, fragments['start'][start_frag],
-                                    fragments['stop'][stop_frag - 1]])
-                start_frag = stop_frag
+        else:
+            # if regions not given, parse regions
+            for i in range(chr_indices.shape[0] - 1):
+                start_frag = chr_indices[i]
+                stop_frag = start_frag
+                while start_frag < chr_indices[i + 1]:
+                    while (stop_frag < chr_indices[i + 1] and (stop_frag == start_frag or
+                           fragments['mid'][stop_frag] - fragments['mid'][stop_frag - 1] < minregionspacing)):
+                        stop_frag += 1
+                    region_array.append([i, start_frag, stop_frag, fragments['start'][start_frag],
+                                        fragments['stop'][stop_frag - 1]])
+                    start_frag = stop_frag
         # convert region list into array
         region_array.sort()
-        regions = numpy.empty(len(region_array), dtype=numpy.dtype([('start_frag', numpy.int32),
-                              ('stop_frag', numpy.int32), ('chromosome', numpy.int32),
+        regions = numpy.empty(len(region_array), dtype=numpy.dtype([
+                              ('index', numpy.int32), ('start_frag', numpy.int32),
+                              ('stop_frag', numpy.int32), ('chromosome', chromosomes.dtype),
                               ('start', numpy.int32), ('stop', numpy.int32)]))
         for i in range(len(region_array)):
-            regions['chromosome'][i] = region_array[i][0]
+            regions['index'][i] = i
+            regions['chromosome'][i] = chromosomes[region_array[i][0]]
             regions['start_frag'][i] = region_array[i][1]
             regions['stop_frag'][i] = region_array[i][2]
             regions['start'][i] = region_array[i][3]
