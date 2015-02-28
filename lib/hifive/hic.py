@@ -754,15 +754,13 @@ class HiC(object):
         :type chroms: list
         :returns: None
         """
-        if self.rank > 0:
-            return None
         if mininteractions is None:
             if 'mininteractions' in self.__dict__.keys():
                 mininteractions = self.mininteractions
             else:
                 mininteractions = 1
-        if not self.silent:
-            print >> sys.stderr, ("Creating needed arrays for fast correction..."),
+        if not self.silent and self.rank == 0:
+            print >> sys.stderr, ("Loading needed data..."),
         # make sure usereads has a valid value
         read_int = {'cis':0, 'all':1, 'trans':2}
         if usereads not in read_int:
@@ -775,12 +773,10 @@ class HiC(object):
         else:
             binned = 0
         # create needed arrays
-        fend_means = numpy.zeros(self.filter.shape[0], dtype=numpy.float64)
-        interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int64)
-        chr_indices = self.fends['chr_indices'][...]
         mids = self.fends['fends']['mid'][...]
         chrs = self.fends['fends']['chr'][...]
         filt = numpy.copy(self.filter)
+        chr_indices = self.fends['chr_indices'][...]
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -788,37 +784,43 @@ class HiC(object):
                 chroms == ''):
             chroms = self.chr2int.keys()
             chroms.sort()
-        elif not chroms is None and not isinstance(chroms, list):
+        elif not chroms is None and isinstance(chroms, str):
             chroms = [chroms]
         for chrm, i in self.chr2int.iteritems():
             if chrm not in chroms:
                 filt[chr_indices[i]:chr_indices[i + 1]] = 0
         all_valid = numpy.sum(filt)
-        if not self.silent:
-            print >> sys.stderr, ("Done\nCopy data for fast correction..."),
         # copy needed arrays from h5dict
         if useread_int < 2:
-            data = self.data['cis_data'][...]
+            cis_ranges = numpy.round(numpy.linspace(0, self.data['cis_data'].shape[0],
+                                                    self.num_procs + 1)).astype(numpy.int64)
+            data = self.data['cis_data'][cis_ranges[self.rank]:cis_ranges[self.rank + 1], :]
             distances = mids[data[:, 1]] - mids[data[:, 0]]
             if maxdistance == 0:
                 maxdistance = numpy.amax(distances) + 1
+                if self.rank == 0:
+                    for i in range(1, self.num_procs):
+                        maxdistance = max(maxdistance, self.comm.recv(source=i, tag=11))
+                    for i in range(1, self.num_procs):
+                        self.comm.send(maxdistance, dest=i, tag=11)
+                else:
+                    self.comm.send(maxdistance, dest=0, tag=11)
+                    maxdistance = self.comm.recv(source=0, tag=11)
             valid = numpy.where(filt[data[:, 0]] * filt[data[:, 1]] *
                                 (distances >= mindistance) * (distances < maxdistance))[0]
             data = data[valid, :]
-            data_indices = numpy.zeros(filt.shape[0] + 1, dtype=numpy.int64)
-            data_indices[1:] += numpy.bincount(data[:, 0], minlength=filt.shape[0])
-            for i in range(1, data_indices.shape[0]):
-                data_indices[i] += data_indices[i - 1]
         else:
             data = None
         if useread_int > 0:
-            trans_data = self.data['trans_data'][...]
+            trans_ranges = numpy.round(numpy.linspace(0, self.data['trans_data'].shape[0],
+                                                      self.num_procs + 1)).astype(numpy.int64)
+            trans_data = self.data['trans_data'][trans_ranges[self.rank]:trans_ranges[self.rank + 1], :]
             valid = numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0]
             trans_data = trans_data[valid, :]
         else:
             trans_data = None
-        if not self.silent:
-            print >> sys.stderr, ("Done\nCount interactions for fast correction..."),
+        if not self.silent and self.rank == 0:
+            print >> sys.stderr, ("Done\nChecking for fend interaction count..."),
         # double check that, given the type of reads being used for learning, there are enough for each fend
         # to meet the mininteraction criteria
         observed_interactions = numpy.zeros(filt.shape[0], dtype=numpy.int32)
@@ -828,40 +830,82 @@ class HiC(object):
         if not data is None:
             observed_interactions += numpy.bincount(data[:, 0], minlength=filt.shape[0])
             observed_interactions += numpy.bincount(data[:, 1], minlength=filt.shape[0])
-        if numpy.amin(observed_interactions[numpy.where(filt)]) < mininteractions:
-            if not self.silent:
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                observed_interactions += self.comm.recv(source=i, tag=11)
+            minobs = numpy.amin(observed_interactions[numpy.where(filt)])
+            for i in range(1, self.num_procs):
+                self.comm.send(minobs, dest=i, tag=11)
+        else:
+            self.comm.send(observed_interactions, dest=0, tag=11)
+            minobs = self.comm.recv(source=0, tag=11)
+        if minobs < mininteractions:
+            if not self.silent and self.rank == 0:
                 print >> sys.stderr, ("\nInsufficient interactions for one or more fends.\n"),
                 print >> sys.stderr, ("Try resetting and refiltering fends or expanding distance range.\n"),
             return None
-        _distance.find_distancebound_interactions(interactions,
-                                                  chr_indices,
-                                                  mids,
-                                                  filt,
-                                                  useread_int,
-                                                  binned,
-                                                  mindistance,
-                                                  maxdistance)
-        if not self.silent:
-            print >> sys.stderr, ("Done\nPrecalculate Distances for fast correction..."),
+        if self.rank == 0:
+            chrints = [self.chr2int[chrom] for chrom in chroms]
+            chrints = numpy.array(chrints, dtype=numpy.int32)
+            numpy.random.shuffle(chrints)
+            chrint_ranges = numpy.round(numpy.linspace(0, chrints.shape[0], self.num_procs + 1)).astype(numpy.int32)
+            for i in range(1, self.num_procs):
+                self.comm.send(chrints[chrint_ranges[i]:chrint_ranges[i + 1]], dest=i, tag=11)
+            chrints = chrints[:chrint_ranges[1]]
+        else:
+            chrints = self.comm.recv(source=0, tag=11)
+        interactions = numpy.zeros(filt.shape[0], dtype=numpy.int64)
+        _distance.find_distancebound_possible_interactions(interactions,
+                                                           chr_indices,
+                                                           mids,
+                                                           filt,
+                                                           chrints,
+                                                           useread_int,
+                                                           binned,
+                                                           mindistance,
+                                                           maxdistance)
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                interactions += self.comm.recv(source=i, tag=11)
+            for i in range(1, self.num_procs):
+                self.comm.Send(interactions, dest=i, tag=13)
+        else:
+            self.comm.send(interactions, dest=0, tag=11)
+            self.comm.Recv(interactions, source=0, tag=13)
+        if not self.silent and self.rank == 0:
+            print >> sys.stderr, ("Done\nPrecalculating distances for fast correction..."),
         # precalculate interaction distance means for all included interactions
         if not remove_distance or data is None:
             distance_means = None
             if trans_data is None:
-                mu = (2.0 * numpy.sum(data[:, 2])) / numpy.sum(interactions)
+                datasum = numpy.sum(data[:, 2])
+            elif data is None:
+                datasum = numpy.sum(trans_data[:, 2])
+            else:
+                datasum = numpy.sum(data[:, 2]) + numpy.sum(trans_data[:, 2])
+            if self.rank == 0:
+                for i in range(1, self.num_procs):
+                    datasum += self.comm.recv(source=i, tag=11)
+                temp_mu = (2.0 * datasum) / numpy.sum(interactions)
+                for i in range(1, self.num_procs):
+                    self.comm.send(temp_mu, dest=i, tag=11)
+            else:
+                self.comm.send(datasum, dest=0, tag=11)
+                temp_mu = self.comm.recv(source=0, tag=11)
+            if trans_data is None:
                 trans_mu = 1.0
+                mu = temp_mu
             elif data is None:
                 mu = 1.0
-                trans_mu = (2.0 * numpy.sum(trans_data[:, 2])) / numpy.sum(interactions)
+                trans_mu = temp_mu
             else:
-                mu = (2.0 * (numpy.sum(data[:, 2]) + numpy.sum(trans_data[:, 2]))) / numpy.sum(interactions)
-                trans_mu = mu
+                mu = temp_mu
+                trans_mu = temp_mu
         else:
             mu = 1.0
-            distance_means = numpy.zeros(data.shape[0], dtype=numpy.float32)
+            distance_means = numpy.zeros(data.shape[0], dtype=numpy.float64)
             _distance.find_data_distance_means(distance_means,
-                                               filt,
                                                data,
-                                               data_indices,
                                                mids,
                                                chrs,
                                                self.distance_parameters,
@@ -872,25 +916,78 @@ class HiC(object):
                     start = self.fends['chr_indices'][i]
                     stop = self.fends['chr_indices'][i + 1]
                     total_possible -= numpy.sum(filt[start:stop].astype(numpy.int64)) ** 2
-                trans_mu = (2.0 * numpy.sum(trans_data[:, 2])) / total_possible
+                if self.rank == 0:
+                    trans_sum = numpy.sum(trans_data[:, 2])
+                    for i in range(1, self.num_procs):
+                        trans_sum += self.comm.recv(source=i, tag=11)
+                    for i in range(1, self.num_procs):
+                        self.comm.send(trans_sum, dest=i, tag=11)
+                else:
+                    self.comm.send(numpy.sum(trans_data[:, 2]), dest=0, tag=11)
+                    trans_sum = self.comm.recv(source=0, tag=11)
+                trans_mu = (2.0 * trans_sum) / total_possible
             else:
                 trans_mu = 1.0
-        if not self.silent:
+        if not self.silent and self.rank == 0:
             print >> sys.stderr, ("Done\nFinding fend corrections...\n"),
         # calculate corrections
+        fend_means = numpy.zeros(filt.shape[0], dtype=numpy.float64)
+        if self.rank == 0:
+            temp = numpy.zeros(filt.shape[0], dtype=numpy.float64)
+        corrections = numpy.copy(self.corrections)
         for iteration in range(iterations):
-            cost = _distance.find_fend_means(distance_means,
-                                             interactions,
-                                             fend_means,
-                                             data,
-                                             trans_data,
-                                             filt,
-                                             self.corrections,
-                                             mu,
-                                             trans_mu)
-            if not self.silent:
-                print >> sys.stderr, ("\rIteration: %i  Cost: %f    ") % (iteration, cost),
-        if not self.silent:
+            _distance.find_fend_means(distance_means,
+                                      fend_means,
+                                      data,
+                                      trans_data,
+                                      corrections,
+                                      mu,
+                                      trans_mu)
+            if self.rank == 0:
+                for i in range(1, self.num_procs):
+                    self.comm.Recv(temp, source=i, tag=13)
+                    fend_means += temp
+                cost = _distance.update_express_corrections(filt,
+                                                            interactions,
+                                                            fend_means,
+                                                            corrections)
+                if not self.silent:
+                    print >> sys.stderr, ("\rIteration: %i  Cost: %f    ") % (iteration, cost),
+                for i in range(1, self.num_procs):
+                    self.comm.Send(corrections, dest=i, tag=13)
+            else:
+                self.comm.Send(fend_means, dest=0, tag=13)
+                self.comm.Recv(corrections, source=0, tag=13)
+        # calculate chromosome mean
+        if data is None:
+            node_ranges = numpy.round(numpy.linspace(0, self.data['cis_data'].shape[0], self.num_procs + 1)
+                                     ).astype(numpy.int32)
+            data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
+            data = data[numpy.where((filt[data[:, 0]] == 1) * (filt[data[:, 1]] == 1))[0], :]
+        chroms = self.fends['fends']['chr'][data[:, 0]]
+        count_sums = numpy.bincount(chroms, weights=data[:, 2],
+                                    minlength=self.fends['chromosomes'].shape[0]).astype(numpy.int64)
+        corrected_sums = numpy.bincount(chroms, weights=(data[:, 2] / (corrections[data[:, 0]] *
+                         corrections[data[:, 1]])), minlength=self.fends['chromosomes'].shape[0]).astype(numpy.int64)
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                count_sums += self.comm.recv(source=i, tag=11)
+                corrected_sums += self.comm.recv(source=i, tag=11)
+            chrom_means = numpy.zeros(count_sums.shape[0], dtype=numpy.float32)
+            for i in range(chrom_means.shape[0]):
+                if count_sums[i] > 0:
+                    chrom_means = numpy.log(count_sum / corrected_sum)
+                    where = numpy.where(filt[chr_indices[i]:chr_indices[i + 1]] == 1)[0] + chr_indices[i]
+                    corrections[where] /= numpy.exp(chrom_means[i] * 0.5)
+            for i in range(1, self.num_procs):
+                self.comm.send(chrom_means, dest=i, tag=11)
+        else:
+            self.comm.send(count_sums, dest=0, tag=11)
+            self.comm.send(corrected_sums, dest=0, tag=11)
+            chrom_means = self.comm.recv(source=0, tag=11)
+        self.chromosome_means = chrom_means
+        self.corrections = corrections
+        if not self.silent and self.rank == 0:
             print >> sys.stderr, ("\r%s\rFinal cost: %f\n") % (' ' * 80, cost),
         return None
 

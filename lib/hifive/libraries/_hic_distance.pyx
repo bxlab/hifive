@@ -138,17 +138,18 @@ def find_fend_distance_bin_values(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_distancebound_interactions(
+def find_distancebound_possible_interactions(
         np.ndarray[DTYPE_int64_t, ndim=1] interactions not None,
         np.ndarray[DTYPE_int_t, ndim=1] chr_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
+        np.ndarray[DTYPE_int_t, ndim=1] chrints not None,
         int useread_int,
         int binned,
         int mindistance,
         int maxdistance):
-    cdef long long int i, j, k, chr_total, all_total, total, stop
-    cdef long long int num_chroms = chr_indices.shape[0] - 1
+    cdef long long int h, i, j, k, chr_total, all_total, total, stop
+    cdef long long int num_chroms = chrints.shape[0]
     cdef long long int num_fends = filter.shape[0]
     with nogil:
         all_total = 0
@@ -157,7 +158,8 @@ def find_distancebound_interactions(
         if useread_int != 0:
             for i in range(num_fends):
                 all_total += filter[i]
-        for i in range(num_chroms):
+        for h in range(num_chroms):
+            i = chrints[h]
             # for each chrom, find valid number of fends
             chr_total = 0
             for j in range(chr_indices[i], chr_indices[i + 1]):
@@ -358,31 +360,28 @@ def find_interaction_distance_means(
 @cython.wraparound(False)
 @cython.cdivision(True)
 def find_data_distance_means(
-        np.ndarray[DTYPE_t, ndim=1] means not None,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
+        np.ndarray[DTYPE_64_t, ndim=1] means not None,
         np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int64_t, ndim=1] data_indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
         np.ndarray[DTYPE_t, ndim=2] parameters not None,
         np.ndarray[DTYPE_t, ndim=1] chrom_means not None):
-    cdef long long int i, j, k, fend2
+    cdef long long int i, j, fend1, fend2
     cdef double distance, chrom_mean
-    cdef long long int num_fends = filter.shape[0]
+    cdef long long int num_data = data.shape[0]
     with nogil:
-        for i in range(num_fends - 1):
-            if filter[i] == 0:
-                continue
-            chrom_mean = chrom_means[chroms[i]]
-            k = 0
-            for j in range(data_indices[i], data_indices[i + 1]):
-                fend2 = data[j, 1]
-                if filter[fend2] == 0:
-                    continue
-                distance = log(mids[fend2] - mids[i])
-                while distance > parameters[k, 0]:
-                    k += 1
-                means[j] = exp(parameters[k, 1] * distance + parameters[k, 2] + chrom_mean)
+        prev_fend = -1
+        for i in range(num_data):
+            fend1 = data[i, 0]
+            if fend1 != prev_fend:
+                prev_fend = fend1
+                j = 0
+            chrom_mean = chrom_means[chroms[fend1]]
+            fend2 = data[i, 1]
+            distance = log(mids[fend2] - mids[fend1])
+            while distance > parameters[j, 0]:
+                    j += 1
+            means[i] = exp(parameters[j, 1] * distance + parameters[j, 2] + chrom_mean)
     return None
 
 
@@ -407,18 +406,16 @@ def update_corrections(
 @cython.wraparound(False)
 @cython.cdivision(True)
 def find_fend_means(
-        np.ndarray[DTYPE_t, ndim=1] distance_means,
-        np.ndarray[DTYPE_int64_t, ndim=1] interactions not None,
+        np.ndarray[DTYPE_64_t, ndim=1] distance_means,
         np.ndarray[DTYPE_64_t, ndim=1] fend_means not None,
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=2] trans_data,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         double mu,
         double trans_mu):
     cdef long long int i, fend1, fend2, num_trans_data, num_data
-    cdef double cost, temp
-    cdef long long int num_fends = filter.shape[0]
+    cdef double temp
+    cdef long long int num_fends = fend_means.shape[0]
     if not trans_data is None:
         num_trans_data = trans_data.shape[0]
     else:
@@ -428,7 +425,6 @@ def find_fend_means(
     else:
         num_data = 0
     with nogil:
-        cost = 0.0
         for i in range(num_fends):
             fend_means[i] = 0.0
         if distance_means is None:
@@ -451,8 +447,24 @@ def find_fend_means(
             temp = trans_data[i, 2] / (trans_mu * corrections[fend1] * corrections[fend2])
             fend_means[fend1] += temp
             fend_means[fend2] += temp
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def update_express_corrections(
+        np.ndarray[DTYPE_int_t, ndim=1] filt,
+        np.ndarray[DTYPE_int64_t, ndim=1] interactions,
+        np.ndarray[DTYPE_64_t, ndim=1] fend_means,
+        np.ndarray[DTYPE_t, ndim=1] corrections):
+    cdef long long int i
+    cdef double cost, temp
+    cdef long long int num_fends = filt.shape[0]
+    with nogil:
+        cost = 0.0
         for i in range(num_fends):
-            if filter[i] == 0:
+            if filt[i] == 0:
                 continue
             temp = fend_means[i] / interactions[i]
             corrections[i] *= pow(temp, 0.5)
