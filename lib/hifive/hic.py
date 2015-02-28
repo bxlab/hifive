@@ -976,7 +976,7 @@ class HiC(object):
             chrom_means = numpy.zeros(count_sums.shape[0], dtype=numpy.float32)
             for i in range(chrom_means.shape[0]):
                 if count_sums[i] > 0:
-                    chrom_means = numpy.log(count_sum / corrected_sum)
+                    chrom_means[i] = numpy.log(count_sums[i] / corrected_sums[i])
                     where = numpy.where(filt[chr_indices[i]:chr_indices[i + 1]] == 1)[0] + chr_indices[i]
                     corrections[where] /= numpy.exp(chrom_means[i] * 0.5)
             for i in range(1, self.num_procs):
