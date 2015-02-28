@@ -968,7 +968,7 @@ class HiC(object):
         count_sums = numpy.bincount(chroms, weights=data[:, 2],
                                     minlength=self.fends['chromosomes'].shape[0]).astype(numpy.int64)
         corrected_sums = numpy.bincount(chroms, weights=(data[:, 2] / (corrections[data[:, 0]] *
-                         corrections[data[:, 1]])), minlength=self.fends['chromosomes'].shape[0]).astype(numpy.int64)
+                         corrections[data[:, 1]])), minlength=self.fends['chromosomes'].shape[0]).astype(numpy.float64)
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 count_sums += self.comm.recv(source=i, tag=11)
@@ -981,10 +981,12 @@ class HiC(object):
                     corrections[where] /= numpy.exp(chrom_means[i] * 0.5)
             for i in range(1, self.num_procs):
                 self.comm.send(chrom_means, dest=i, tag=11)
+                self.comm.Send(corrections, dest=i, tag=13)
         else:
             self.comm.send(count_sums, dest=0, tag=11)
             self.comm.send(corrected_sums, dest=0, tag=11)
             chrom_means = self.comm.recv(source=0, tag=11)
+            self.comm.Recv(corrections, source=0, tag=13)
         self.chromosome_means = chrom_means
         self.corrections = corrections
         if not self.silent and self.rank == 0:

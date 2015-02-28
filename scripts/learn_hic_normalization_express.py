@@ -23,11 +23,11 @@ def main():
     usage = "usage: %prog [options] <project_file>\n\nArguments:"
     usage += "\n<project_file>  HiFive HiC project file"
     help = {
-        "-c":"number of iterations to run learning algorithm for [default: %default]",
-        "-m":"minimum number of interactions for fend filtering, if refiltering is required due to distance cutoff [default: %default]",
+        "-i":"number of iterations to run learning algorithm for [default: %default]",
+        "-c":"minimum number of interactions for fend filtering, if refiltering is required due to distance cutoff [default: %default]",
+        "-m":"minimum interaction distance to include for learning [default: %default]",
         "-x":"maximum interaction distance to include for learning (a zero indicates no maximum) [default: %default]",
         "-r":"which set of reads, 'cis', 'trans', or 'both', to use for learning [default: %default]",
-        "-i":"number of iterations to run learning algorithm for [default: %default]",
         "-d":"remove the distant-dependent portion of the signal prior to learning corrections [default: %default]",
         "-o":"output file to save analyzed copy of HiFive HiC project to. If not specified, original file will be overwritten",
         "-q":"silence output messages [default: %default]",
