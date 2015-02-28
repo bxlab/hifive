@@ -311,9 +311,9 @@ class HiC(object):
         cutoffs = numpy.linspace(numpy.log(max(minsize, 1.0)), numpy.log(max(maxsize, max_dist)),
                                  numbins).astype(numpy.float32)
         cutoffs[-1] += 1.0
-        bin_size = numpy.zeros((num_chroms + 1, numbins), dtype=numpy.int64)
-        count_sum = numpy.zeros((num_chroms + 1, numbins), dtype=numpy.float64)
-        logdistance_sum = numpy.zeros((num_chroms + 1, numbins), dtype=numpy.float64)
+        bin_size = numpy.zeros(numbins, dtype=numpy.int64)
+        count_sum = numpy.zeros(numbins, dtype=numpy.float64)
+        logdistance_sum = numpy.zeros(numbins, dtype=numpy.float64)
         if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
             binned = 1
         else:
@@ -367,7 +367,6 @@ class HiC(object):
                                              logdistance_sum,
                                              node_start,
                                              node_stop,
-                                             h,
                                              binned)
         if self.rank == 0:
             # exchange arrays
@@ -377,15 +376,9 @@ class HiC(object):
                 bin_size += self.comm.recv(source=i, tag=11)
                 count_sum += self.comm.recv(source=i, tag=11)
                 logdistance_sum += self.comm.recv(source=i, tag=11)
-            # find chromosome means
-            bin_size[-1, :] = numpy.sum(bin_size[:-1, :], axis=0)
-            count_sum[-1, :] = numpy.sum(count_sum[:-1, :], axis=0)
-            logdistance_sum[-1, :] = numpy.sum(logdistance_sum[:-1, :], axis=0)
-            bin_size = bin_size.astype(numpy.float64)
-            count_sum = count_sum.astype(numpy.float64)
-            valid = numpy.where(count_sum[-1, :] > 0.0)[0]
-            count_means = numpy.log(count_sum[-1, valid] / bin_size[-1, valid])
-            distance_means = logdistance_sum[-1, valid] / bin_size[-1, valid]
+            valid = numpy.where(count_sum > 0.0)[0]
+            count_means = numpy.log(count_sum[valid].astype(numpy.float64) / bin_size[valid])
+            distance_means = logdistance_sum[valid] / bin_size[valid]
             # find distance line parameters, cutoffs, slopes and intercepts
             distance_parameters = numpy.zeros((valid.shape[0] - 1, 3), dtype=numpy.float32)
             distance_parameters[:-1, 0] = distance_means[1:-1]
@@ -393,7 +386,7 @@ class HiC(object):
             distance_parameters[:, 1] = ((count_means[1:] - count_means[:-1]) /
                                          (distance_means[1:] - distance_means[:-1]))
             distance_parameters[:, 2] = (count_means[1:] - distance_parameters[:, 1] * distance_means[1:])
-            # distribute distance parameters and chromosome means to all nodes
+            # distribute distance parameters to all nodes
             for i in range(1, self.num_procs):
                 self.comm.send(distance_parameters, dest=i, tag=11)
         else:
@@ -402,66 +395,11 @@ class HiC(object):
             self.comm.send(logdistance_sum, dest=0, tag=11)
             distance_parameters = self.comm.recv(source=0, tag=11)
         self.distance_parameters = distance_parameters
-        if not corrected:
-            chrom_sums = self._find_chromosome_means()
-            if self.rank == 0:
-                self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
-                chrom_sums[valid_chroms] /= numpy.sum(bin_size[:-1, :], axis=1)
-                chrom_sums[-1] /= numpy.sum(bin_size[-1, :])
-                chrom_sums[valid_chroms] = numpy.log(chrom_sums[valid_chroms])
-                chrom_sums[-1] = numpy.log(chrom_sums[-1])
-                self.chromosome_means[valid_chroms] = (chrom_sums[-1] - chrom_sums[valid_chroms]).astype(numpy.float32)
-                for i in range(1, self.num_procs):
-                    self.comm.send(self.chromosome_means, dest=i, tag=11)
-            else:
-                self.chromosome_means = self.comm.recv(source=0, tag=11)
+        if not 'chromosome_means' in self.__dict__.keys():
+            self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
         if not self.silent:
             print >> sys.stderr, ('\r%s\rFinding distance curve... Done\n') % (' ' * 80),
         return None
-
-    def _find_chromosome_means(self):
-        chr_indices = self.fends['chr_indices'][...]
-        self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
-        chrom_sums = numpy.zeros(chr_indices.shape[0], dtype=numpy.float64)
-        for i in range(chr_indices.shape[0] - 1):
-            start_fend = chr_indices[i]
-            stop_fend = chr_indices[i + 1]
-            num_valid = numpy.sum(self.filter[start_fend:stop_fend])
-            if num_valid == 0:
-                continue
-            rev_mapping = numpy.where(self.filter[start_fend:stop_fend] == 1)[0].astype(numpy.int32)
-            if not self.silent:
-                print >> sys.stderr, ('\r%s\rFinding mean for chromosome %s...') % \
-                                     (' ' * 80, self.fends['chromosomes'][i]),
-            mapping = numpy.zeros(stop_fend - start_fend, dtype=numpy.int32) - 1
-            mapping[rev_mapping] = numpy.arange(num_valid, dtype=numpy.int32)
-            mids = self.fends['fends']['mid'][rev_mapping + start_fend]
-            # pull relevant data
-            start_index = self.data['cis_indices'][start_fend]
-            stop_index = self.data['cis_indices'][stop_fend]
-            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int64)
-            start_index = node_ranges[self.rank]
-            stop_index = node_ranges[self.rank + 1]
-            data = self.data['cis_data'][start_index:stop_index, :]
-            data[:, 0] = mapping[data[:, 0] - start_fend]
-            data[:, 1] = mapping[data[:, 1] - start_fend]
-            valid = numpy.where((data[:, 0] != -1) * (data[:, 1] != -1))[0]
-            data = data[valid, :]
-            _distance.find_chromosome_sums(mids,
-                                           data,
-                                           self.distance_parameters,
-                                           chrom_sums,
-                                           i)
-        if self.rank == 0:
-            for i in range(1, self.num_procs):
-                chrom_sums += self.comm.recv(source=i, tag=11)
-            chrom_sums[-1] = numpy.sum(chrom_sums[:-1])
-            for i in range(1, self.num_procs):
-                self.comm.Send(chrom_sums, dest=i, tag=13)
-        else:
-            self.comm.send(chrom_sums, dest=0, tag=11)
-            self.comm.Recv(chrom_sums, source=0, tag=13)
-        return chrom_sums
 
     def _smooth_distance_means(self, smoothed):
         """Smooth distance curve in log-space using triangular smoothing of
@@ -734,7 +672,22 @@ class HiC(object):
                     elif iteration >= burnin_iterations and change <= minchange:
                         cont = False
                     iteration += 1
-            self.corrections[rev_mapping + start_fend] = corrections
+            # calculate chromosome mean
+            count_sum = numpy.sum(counts).astype(numpy.int64)
+            corrected_sum = numpy.sum(counts / (corrections[nonzero_indices0] * corrections[nonzero_indices1])).astype(numpy.float64)
+            if self.rank == 0:
+                for i in range(1, self.num_procs):
+                    count_sum += self.comm.recv(source=i, tag=11)
+                    corrected_sum += self.comm.recv(source=i, tag=11)
+                chrom_mean = numpy.log(count_sum / corrected_sum)
+                for i in range(1, self.num_procs):
+                    self.comm.send(chrom_mean, dest=i, tag=11)
+            else:
+                self.comm.send(count_sum, dest=0, tag=11)
+                self.comm.send(corrected_sum, dest=0, tag=11)
+                chrom_mean = self.comm.recv(source=0, tag=11)
+            self.chromosome_means[self.chr2int[chrom]] = chrom_mean
+            self.corrections[rev_mapping + start_fend] = corrections / numpy.exp(chrom_mean * 0.5)
             cost = _distance.calculate_cost(zero_indices0,
                                             zero_indices1,
                                             nonzero_indices0,

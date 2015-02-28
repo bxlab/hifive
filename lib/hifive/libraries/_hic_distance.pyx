@@ -692,12 +692,11 @@ def find_distance_bin_sums(
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_64_t, ndim=1] counts not None,
         np.ndarray[DTYPE_int_t, ndim=2] indices not None,
-        np.ndarray[DTYPE_int64_t, ndim=2] bin_size not None,
-        np.ndarray[DTYPE_64_t, ndim=2] count_sum not None,
-        np.ndarray[DTYPE_64_t, ndim=2] logdistance_sum not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] bin_size not None,
+        np.ndarray[DTYPE_64_t, ndim=1] count_sum not None,
+        np.ndarray[DTYPE_64_t, ndim=1] logdistance_sum not None,
         int start,
         int stop,
-        int index,
         int binned):
     cdef long long int i, j, temp, fend1, fend2, previous_fend
     cdef double log_dist
@@ -717,7 +716,7 @@ def find_distance_bin_sums(
             log_dist = log(mids[fend2] - mids[fend1])
             while log_dist > cutoffs[j]:
                 j += 1
-            count_sum[index, j] += counts[i]
+            count_sum[j] += counts[i]
         for fend1 in range(start, stop):
             j = 0
             if binned == 0:
@@ -732,47 +731,19 @@ def find_distance_bin_sums(
                     log_dist = log(mids[fend2] - mids[fend1])
                     while log_dist > cutoffs[j]:
                         j += 1
-                    bin_size[index, j] += 1
-                    logdistance_sum[index, j] += log_dist
+                    bin_size[j] += 1
+                    logdistance_sum[j] += log_dist
             else:
                 for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
                     log_dist = log(mids[fend2] - mids[fend1])
                     while log_dist > cutoffs[j]:
                         j += 1
-                    bin_size[index, j] += 1
-                    logdistance_sum[index, j] += log_dist
+                    bin_size[j] += 1
+                    logdistance_sum[j] += log_dist
             for fend2 in range(fend1 + 4, num_fends):
                 log_dist = log(mids[fend2] - mids[fend1])
                 while log_dist > cutoffs[j]:
                     j += 1
-                bin_size[index, j] += 1
-                logdistance_sum[index, j] += log_dist
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def find_chromosome_sums(
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_t, ndim=2] parameters not None,
-        np.ndarray[DTYPE_64_t, ndim=1] sums not None,
-        int h):
-    cdef long long int i, j, fend1, fend2, previous_index
-    cdef double log_dist
-    cdef long long int num_data = data.shape[0]
-    with nogil:
-        previous_index = -1
-        j = 0
-        for i in range(num_data):
-            fend1 = data[i, 0]
-            if fend1 != previous_index:
-                j = 0
-                previous_index = fend1
-            fend2 = data[i, 1]
-            log_dist = log(mids[fend2] - mids[fend1])
-            while log_dist > parameters[j, 0]:
-                j += 1
-            sums[h] += data[i, 2] / exp(parameters[j, 1] * log_dist + parameters[j, 2])
+                bin_size[j] += 1
+                logdistance_sum[j] += log_dist
     return None

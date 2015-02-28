@@ -44,12 +44,9 @@ class FiveCProject(unittest.TestCase):
         self.assertTrue(numpy.allclose(self.analyzed.filter, project.filter),
             "filtered fragments don't match target values")
         project.find_distance_parameters()
-        print self.analyzed.mu, project.mu
-        print self.analyzed.gamma, project.gamma
-        print self.analyzed.sigma, project.sigma
-        self.assertTrue(self.analyzed.mu == project.mu and self.analyzed.gamma == project.gamma and
-                        self.analyzed.sigma == project.sigma,
-                        "distance parameters don't match target values")
+        self.assertTrue(numpy.allclose(numpy.array([self.analyzed.mu, self.analyzed.gamma, self.analyzed.sigma]),
+                                       numpy.array([project.mu, project.gamma, project.sigma])),
+                                       "distance parameters don't match target values")
 
     def test_fivec_project_analysis(self):
         project = fivec.FiveC(self.analyzed_fname, 'r', silent=True)

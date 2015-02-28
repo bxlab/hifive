@@ -971,7 +971,7 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     for region in regions:
         if binsize == 0:
             results = unbinned_cis_signal(fivec, region, datatype=datatype, arraytype=arraytype, returnmapping=True,
-                                          silent=silent)
+                                          silent=silent, skipfiltered=True)
         else:
             results = bin_cis_signal(fivec, region, binsize=binsize, datatype=datatype, returnmapping=True,
                                      silent=silent)
@@ -982,18 +982,25 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
         output.create_dataset('%i.counts' % region, data=results[0][:, :, 0])
         output.create_dataset('%i.expected' % region, data=results[0][:, :, 1])
         if binsize > 0:
-            output.create_dataset('%i.positions' % region, data=results[1][:, 2])
+            output.create_dataset('%i.positions' % region, data=results[1][:, 2:])
         elif arraytype == 'full':
-            output.create_dataset('%i.fragments' % region, data=numpy.arange(
-                                  fivec.frags['regions']['start_frag'][region],
-                                  fivec.frags['regions']['stop_frag'][region]))
+            starts = fivec.frags['fragments']['start'][...]
+            stops = fivec.frags['fragments']['stop'][...]
+            pos = numpy.zeros((results[1].shape[0], 2), dtype=numpy.int32)
+            pos[:, 0] = starts[results[1]]
+            pos[:, 1] = stops[results[1]]
+            output.create_dataset('%i.positions' % region, data=pos)
         else:
-            strands = fivec.frags['fragments']['strand'][fivec.frags['regions']['start_frag'][region]:
-                                  fivec.frags['regions']['stop_frag'][region]]
-            output.create_dataset('%i.forward_fragments' % region, data=(
-                                  numpy.where(strands == 0)[0] + fivec.frags['regions']['start_frag'][region]))
-            output.create_dataset('%i.reverse_fragments' % region, data=(
-                                  numpy.where(strands == 1)[0] + fivec.frags['regions']['start_frag'][region]))
+            starts = fivec.frags['fragments']['start'][...]
+            stops = fivec.frags['fragments']['stop'][...]
+            fpos = numpy.zeros((results[1].shape[0], 2), dtype=numpy.int32)
+            fpos[:, 0] = starts[results[1]]
+            fpos[:, 1] = stops[results[1]]
+            rpos = numpy.zeros((results[2].shape[0], 2), dtype=numpy.int32)
+            rpos[:, 0] = starts[results[2]]
+            rpos[:, 1] = stops[results[2]]
+            output.create_dataset('%i.forward_positions' % region, data=fpos)
+            output.create_dataset('%i.reverse_positions' % region, data=rpos)
     for region in remove:
         del regions[regions.index(region)]
     all_regions = fivec.frags['regions'][...]
