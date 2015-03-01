@@ -680,14 +680,17 @@ class HiC(object):
                     count_sum += self.comm.recv(source=i, tag=11)
                     corrected_sum += self.comm.recv(source=i, tag=11)
                 chrom_mean = numpy.log(count_sum / corrected_sum)
+                corrections /= (count_sum / corrected_sum) ** 0.5
                 for i in range(1, self.num_procs):
                     self.comm.send(chrom_mean, dest=i, tag=11)
+                    self.comm.Send(corrections, dest=i, tag=13)
             else:
                 self.comm.send(count_sum, dest=0, tag=11)
                 self.comm.send(corrected_sum, dest=0, tag=11)
                 chrom_mean = self.comm.recv(source=0, tag=11)
+                self.comm.Recv(corrections, source=0, tag=13)
             self.chromosome_means[self.chr2int[chrom]] = chrom_mean
-            self.corrections[rev_mapping + start_fend] = corrections / numpy.exp(chrom_mean * 0.5)
+            self.corrections[rev_mapping + start_fend] = corrections
             cost = _distance.calculate_cost(zero_indices0,
                                             zero_indices1,
                                             nonzero_indices0,
@@ -978,7 +981,7 @@ class HiC(object):
                 if count_sums[i] > 0:
                     chrom_means[i] = numpy.log(count_sums[i] / corrected_sums[i])
                     where = numpy.where(filt[chr_indices[i]:chr_indices[i + 1]] == 1)[0] + chr_indices[i]
-                    corrections[where] /= numpy.exp(chrom_means[i] * 0.5)
+                    corrections[where] /= (count_sums[i] / corrected_sums[i]) ** 0.5
             for i in range(1, self.num_procs):
                 self.comm.send(chrom_means, dest=i, tag=11)
                 self.comm.Send(corrections, dest=i, tag=13)
