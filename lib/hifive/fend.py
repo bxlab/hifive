@@ -93,6 +93,8 @@ class Fend(object):
         chromosomes = []
         chr2int = {}
         data = {}
+        gcscore = {}
+        mapscore = {}
         input = open(fname, 'r')
         fragment_index = 1
         chromosome_index = 2
@@ -105,6 +107,14 @@ class Fend(object):
                 chromosome_index = temp.index('chr')
                 coordinate_index = temp.index('coord')
                 length_index = temp.index('frag_len')
+                if 'frag_gc' in temp:
+                    gc_index = temp.index('frag_gc')
+                else:
+                    gc_index = None
+                if 'map_score' in temp:
+                    map_index = temp.index('map_score')
+                else:
+                    map_index = None
                 continue
             chrom = temp[chromosome_index].strip('chr')
             frag = int(temp[fragment_index])
@@ -114,9 +124,17 @@ class Fend(object):
             if frag not in data:
                 # keep first instance of each fragment
                 data[frag] = [0, chr2int[chrom], int(temp[coordinate_index]), int(temp[length_index])]
+                if not gc_index is None:
+                    gcscore[(frag, 0)] = float(temp[gc_index])
+                if not map_index is None:
+                    mapscore[(frag, 0)] = float(temp[map_index])
             else:
                 # make sure that fragment has both ends present in file
                 data[frag][0] += 1
+                if not gc_index is None:
+                    gcscore[(frag, 1)] = float(temp[gc_index])
+                if not map_index is None:
+                    mapscore[(frag, 1)] = float(temp[map_index])
         input.close()
         keys = data.keys()
         for key in keys:
@@ -124,8 +142,12 @@ class Fend(object):
                 del data[key]
         keys = data.keys()
         keys.sort()
-        fends = numpy.empty(len(keys) * 2, dtype=numpy.dtype([('chr', numpy.int32), ('start', numpy.int32),
-                ('stop', numpy.int32), ('mid', numpy.int32)]))
+        dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32), ('mid', numpy.int32)]
+        if len(gcscore) > 0:
+            dtypes.append(('gc', numpy.float32))
+        if len(mapscore) > 0:
+            dtypes.append(('mappability', numpy.float32))
+        fends = numpy.empty(len(keys) * 2, dtype=numpy.dtype(dtypes))
         for i, key in enumerate(keys):
             # make 2 entries for each fragment, one for each half
             index = i * 2
@@ -133,11 +155,19 @@ class Fend(object):
             fends['start'][index] = data[key][2]
             fends['stop'][index] = data[key][2] + data[key][3] / 2
             fends['mid'][index] = (fends['start'][index] + fends['stop'][index]) / 2
+            if (key, 0) in gcscore:
+                fends['gc'][index] = gcscore[(key, 0)]
+            if (key, 0) in mapscore:
+                fends['mappability'][index] = mapscore[(key, 0)]
             index = i * 2 + 1
             fends['chr'][index] = data[key][1]
             fends['start'][index] = data[key][2] + data[key][3] / 2
             fends['stop'][index] = data[key][2] + data[key][3]
             fends['mid'][index] = (fends['start'][index] + fends['stop'][index]) / 2
+            if (key, 1) in gcscore:
+                fends['gc'][index] = gcscore[(key, 1)]
+            if (key, 1) in mapscore:
+                fends['mappability'][index] = mapscore[(key, 1)]
         chromosomes = numpy.array(chromosomes)
         return [fends, chromosomes]
 
