@@ -26,7 +26,7 @@ try:
 except:
     pass
 
-from libraries._hic_distance import find_max_fend
+from libraries._hic_interactions import find_max_fend
 import libraries._hic_binning as _hic_binning
 
 
