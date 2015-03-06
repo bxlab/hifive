@@ -7,6 +7,8 @@ import _fivec_distance
 import _hic_distance
 import _fivec_binning
 import _hic_binning
+import _hic_interactions
+import _hic_optimize
 
 
 __version__ = '2.0.0'

@@ -36,16 +36,30 @@ def main():
     hic.load_data(data_fname)
     hic.filter_fends(mininteractions=options.minint, mindistance=options.mindist, maxdistance=options.maxdist)
     hic.find_distance_parameters(minsize=options.minbin, numbins=options.numbin)
-    if options.express:
+    if options.algorithm in ['regression', 'regression-probability', 'regression-express']:
+        hic.find_regression_fend_corrections(max_iterations=options.iter, chroms=options.chroms.split(','),
+                                             mindistance=options.mindist, maxdistance=options.maxdist,
+                                             model=options.model, num_bins=options.modelbins)
+    if options.algorithm == 'express':
         hic.find_express_fend_corrections(iterations=options.iter, mindistance=options.mindist,
                                           maxdistance=options.maxdist, mininteractions=options.minint,
                                           usereads=options.reads, remove_distance=options.nodist,
                                           chroms=options.chroms.split(','))
-    else:
+    elif options.algorithm == 'regression-express':
+        hic.find_express_fend_corrections(iterations=options.iter, mindistance=options.mindist,
+                                          maxdistance=options.maxdist, mininteractions=options.minint,
+                                          usereads=options.reads, remove_distance=options.nodist,
+                                          chroms=options.chroms.split(','), precorrect=True)
+    elif options.algorithm == 'probability':
         hic.find_fend_corrections(display=options.display, mindistance=options.mindist, maxdistance=options.maxdist,
                                   chroms=options.chroms.split(','), learningrate=options.rate,
                                   burnin_iterations=options.burnin, annealing_iterations=options.anneal,
                                   minchange=options.change, precalculate=options.precalc)
+    elif options.algorithm == 'regression-probability':
+        hic.find_fend_corrections(display=options.display, mindistance=options.mindist, maxdistance=options.maxdist,
+                                  chroms=options.chroms.split(','), learningrate=options.rate,
+                                  burnin_iterations=options.burnin, annealing_iterations=options.anneal,
+                                  minchange=options.change, precalculate=options.precalc, precorrect=True)
     hic.save()
     return None
 
@@ -67,17 +81,19 @@ def setup_parser():
         "MAXDIST":"largest interaction distance to be included for filtering and, if not using Express, learning fend corrections (zero indicates no maximum) [default: %default]",
         "MINBIN":"smallest interaction distance bin size for distance function [default: %default]",
         "NUMBIN":"number of bins to partion interaction distance range into for distance function [default: %default]",
-        "EXPRESS":"indicates that the express learning algorithm should be used",
+        "ALGORITHM":"select the learning algorithm that should be used (probability, express, regression, regression-probability, or regression-express) [default: %default]",
         "BURNIN":"number of iterations to run burn-in phase for under the standard learning algorithm with constant learning rate [default: %default]",
         "ANNEAL":"number of iterations to run annealing-in phase for under the standard learning algorithm with decreasing learning rate [default: %default]",
-        "ITER":"number of iterations to run learning for under Express learning algorithm [default %default]",
+        "ITER":"number of iterations to run learning for under Express or Regression learning algorithm [default %default]",
         "CHANGE":"minimum mean change in the fend correction parameter values needed to keep running past 'burnin_iterations' number of iterations during burn-in phase [default: %default]",
         "PRECALC":"precalculate correction values from fend means",
         "RATE":"learning rate, defined as percentage of gradient to use for updating parameter values [default: %default]",
         "READS":"which set of reads, 'cis', 'trans', or 'both', to use for learning [default: %default]",
         "REMOVE":"remove the distant-dependent portion of the signal prior to learning corrections [default: %default]",
-        "CHROMS":"comma-separated list of chromosome names to learn corrections for [default: all chromosomes]",
         "DISPLAY":"number of iterations to wait before explicitly calculating cost and updating display (zero indicates off) [default: %default]",
+        "MODEL":"comma-separated list of parameters to include in regression model (gc, len, mappability, and distance) [default: %default]",
+        "MODELBINS":"comma-separated list of number of bins, one for each model parameter [default: %default]",
+        "CHROMS":"comma-separated list of chromosome names to learn corrections for [default: all chromosomes]",
         "QUIET":"silence output messages [default: %default]",
     }
     parser = optparse.OptionParser(usage=usage)
@@ -103,7 +119,9 @@ def setup_parser():
                       action="store", help=help["MINBIN"])
     parser.add_option("-n", "--num-bins", dest="numbin", default=100, metavar="NUMBIN", type="int", action="store",
                       help=help["NUMBIN"])
-    parser.add_option("-l", "--express", dest="express", action="store_true", default=False, help=help["EXPRESS"])
+    parser.add_option("-a", "--algorithm", dest="algorithm", action="choice", default='probability',
+                      choices=["probability", "express", "regression", "regression-probability", "regression-express"],
+                      help=help["ALGORITHM"], metavar="ALGORITHM")
     parser.add_option("-p", "--precalculate", dest="precalc", action="store_true", default=False, help=help["PRECALC"])
     parser.add_option("-b", "--burnin", dest="burnin", default=1000, metavar="BURNIN", type="int", action="store",
                       help=help["BURNIN"])
@@ -121,6 +139,10 @@ def setup_parser():
                       help=help["REMOVE"])
     parser.add_option("-f", "--reads", dest="reads", default="cis", metavar="READS", type="choice",
                       action="store", help=help["READS"], choices=["cis", "trans", "both"])
+    parser.add_option("-h", "--model", dest="model", default="gc,len,distance", metavar="MODEL", type="store",
+                      help=help["MODEL"])
+    parser.add_option("-j", "--modelbins", dest="modelbins", default="20,20,15", metavar="MODELBINS", type="store",
+                      help=help["MODELBINS"])
     parser.add_option("-c", "--chromosomes", dest="chroms", default="", metavar="CHROMS", type="string",
                       action="store", help=help["CHROMS"])
     parser.add_option("-q", "--quiet", dest="silent", action="store_true", default=False, help=help["QUIET"])
@@ -137,6 +159,12 @@ def check_options(parser, options, args):
         (not options.mat is None and (len(options.raw) > 0 or len(options.bam) > 0)) or
         (len(options.bam) == 0 and len(options.raw) == 0 and options.mat is None)):
         parser.error('requires exactly one data argument type (-S/--bam, -R/--raw, or -M/--mat)')
+    options.model = options.model.split(',')
+    options.modelbins = options.modelbins.split(',')
+    for i in range(len(options.modelbins)):
+        options.modelbins[i] = int(options.modelbins[i])
+    if len(options.model) != len(options.modelbins):
+        parser.error("'model' and 'modelbins' options must be the same length")
     return None
 
 def display_options(options, args):
@@ -172,23 +200,33 @@ def display_options(options, args):
     else:
         maxdist = str(options.maxdist)
     settings +=     "Maximum interaction distance:   %s\n" % maxdist
-    if options.express:
-        settings += "Learning algorithm:             approximate (Express)\n"
+    settings +=     "Learning algorithm:             %s\n" % options.algorithm
+    if options.algorithm in ['express', 'regression-express']:
         settings += "Remove distance-dependence:     %s\n" % str(options.nodist)
         settings += "Reads to include in learning:   %s\n" % options.reads
+        settings += "Number of learning iterations:  %i\n" % options.iter
+    elif options.algorithm == 'regression':
         settings += "Number of learning iterations:  %i\n" % options.iter
     else:
         settings += "Learning algorithm:             probabilistic (Standard)\n"
         settings += "Precalculate corrections:       %s\n" % str(options.precalc)
         settings += "Learning rate:                  %f\n" % options.rate
         settings += "Correction change cutoff:       %f\n" % options.change
-        settings += "Number of burnin iterations:    %i\n" % options.burnin
-        settings += "Number of annealing iterations: %i\n" % options.anneal
         if options.display == 0:
             display = "off"
         else:
             display = str(options.display)
         settings += "Iterations between display:     %s\n" % display
+        settings += "Number of burnin iterations:    %i\n" % options.burnin
+        settings += "Number of annealing iterations: %i\n" % options.anneal
+    if options.algorithm == 'regression-probability':
+        settings += "Number of regression iterations:%i\n" % options.iter
+    if options.algorithm in ['regression', 'regression-probability', 'regression-express']:
+        settings += "Regression model parameters:   %s\n" % ','.join(options.model)
+        temp = '%i' % options.modelbins[0]
+        for i in range(1, len(options.modelbins)):
+            temp += ',%i' % options.modelbins[i]
+        settings += "Regression model bin sizes:    %s\n" % temp
     if options.chroms == "":
         chroms = "all"
     else:

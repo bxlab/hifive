@@ -18,9 +18,11 @@ except:
 
 from fend import Fend
 from hic_data import HiCData
-from libraries._hic_binning import find_fend_coverage, dynamically_bin_unbinned_upper, dynamically_bin_upper_from_upper, remap_counts, regression_bin_observed, regression_bin_expected, regression_log_likelihood
 import hic_binning
+import libraries._hic_binning as _binning
 import libraries._hic_distance as _distance
+import libraries._hic_interactions as _interactions
+import libraries._hic_optimize as _optimize
 import plotting
 
 
@@ -68,6 +70,7 @@ class HiC(object):
         self.map_corrections = None
         self.len_bins = None
         self.len_corrections = None
+        self.corrections = None
         self.normalization = 'none'
         if mode != 'w':
             self.load()
@@ -122,7 +125,6 @@ class HiC(object):
             self.chr2int[chrom] = i
         # create arrays
         self.filter = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.int32)
-        self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
         return None
 
     def save(self, out_fname=None):
@@ -252,17 +254,17 @@ class HiC(object):
         # determine maximum ranges of valid interactions for each fend
         max_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
         min_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
-        _distance.find_max_fend(max_fend,
-                                self.fends['fends']['mid'][...],
-                                self.fends['fends']['chr'][...],
-                                self.fends['chr_indices'][...],
-                                0,
-                                maxdistance)
-        _distance.find_min_fend(min_fend,
-                        self.fends['fends']['mid'][...],
-                        self.fends['fends']['chr'][...],
-                        self.fends['chr_indices'][...],
-                        mindistance)
+        _interactions.find_max_fend(max_fend,
+                                    self.fends['fends']['mid'][...],
+                                    self.fends['fends']['chr'][...],
+                                    self.fends['chr_indices'][...],
+                                    0,
+                                    maxdistance)
+        _interactions.find_min_fend(min_fend,
+                                    self.fends['fends']['mid'][...],
+                                    self.fends['fends']['chr'][...],
+                                    self.fends['chr_indices'][...],
+                                    mindistance)
          # copy needed arrays
         data = self.data['cis_data'][...]
         indices = self.data['cis_indices'][...]
@@ -270,13 +272,13 @@ class HiC(object):
         while current_valid < previous_valid:
             previous_valid = current_valid
             coverage.fill(0)
-            find_fend_coverage(data,
-                               indices,
-                               self.filter,
-                               min_fend,
-                               max_fend,
-                               coverage,
-                               mininteractions)
+            _interactions.find_fend_coverage(data,
+                                             indices,
+                                             self.filter,
+                                             min_fend,
+                                             max_fend,
+                                             coverage,
+                                             mininteractions)
             current_valid = numpy.sum(self.filter)
         if not self.silent:
             print >> sys.stderr, ("Removed %i of %i fends\n") % (original_count - current_valid, original_count),
@@ -439,7 +441,7 @@ class HiC(object):
 
     def find_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0001, burnin_iterations=10000,
                               annealing_iterations=10000, learningrate=0.1, display=0, chroms=None,
-                              precalculate=True):
+                              precalculate=True, precorrect=False):
         """
         Using gradient descent, learn correction values for each valid fend based on a Poisson distribution of observations. This function is MPI compatible.
 
@@ -461,8 +463,16 @@ class HiC(object):
         :type chroms: list
         :param precalculate: Specifies whether the correction values should be initialized at the fend means.
         :type precalculate: bool.
+        :param precorrect: Use regression-based corrections in expected value calculations, resulting in a chained normalization approach.
+        :type precorrect: bool.
         :returns: None
         """
+        if (precorrect and self.gc_corrections is None and
+            self.map_corrections is None and self.len_corrections is None):
+            if not self.silent:
+                print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_regression_fend_corrections'.\n"),
+            return None
+        self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -474,6 +484,34 @@ class HiC(object):
             binned = 1
         else:
             binned = 0
+        if precorrect:
+            if not self.gc_corrections is None:
+                gc_bins = int((0.25 + 2 * self.gc_corrections.shape[0]) ** 0.5 - 0.5)
+                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
+                indices = numpy.triu_indices(gc_bins, 0)
+                gc_corrections[indices] = self.gc_corrections
+                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
+            else:
+                gc_corrections = None
+                gc_indices = None
+            if not self.len_corrections is None:
+                len_bins = int((0.25 + 2 * self.len_corrections.shape[0]) ** 0.5 - 0.5)
+                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
+                indices = numpy.triu_indices(len_bins, 0)
+                len_corrections[indices] = self.len_corrections
+                len_corrections[indices[1], indices[0]] = len_corrections[indices]
+            else:
+                len_corrections = None
+                len_indices = None
+            if not self.map_corrections is None:
+                map_bins = int((0.25 + 2 * self.map_corrections.shape[0]) ** 0.5 - 0.5)
+                map_corrections = numpy.zeros((map_bins, map_bins), dtype=numpy.float32)
+                indices = numpy.triu_indices(map_bins, 0)
+                map_corrections[indices] = self.map_corrections
+                map_corrections[indices[1], indices[0]] = map_corrections[indices]
+            else:
+                map_corrections = None
+                map_indices = None
         for chrom in chroms:
             chrint = self.chr2int[chrom]
             if self.rank == 0:
@@ -510,15 +548,15 @@ class HiC(object):
             if maxdistance == 0:
                 maxdistance = mids[-1] - mids[0]
             # find number of downstream interactions for each fend using distance limits
-            _distance.find_fend_ranges(rev_mapping,
-                                       mids,
-                                       fend_ranges,
-                                       mindistance,
-                                       maxdistance,
-                                       node_ranges[self.rank],
-                                       node_ranges[self.rank + 1],
-                                       binned,
-                                       start_fend)
+            _interactions.find_fend_ranges(rev_mapping,
+                                           mids,
+                                           fend_ranges,
+                                           mindistance,
+                                           maxdistance,
+                                           node_ranges[self.rank],
+                                           node_ranges[self.rank + 1],
+                                           binned,
+                                           start_fend)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     fend_ranges[node_ranges[i]:node_ranges[i + 1], :] = self.comm.recv(source=i, tag=11)
@@ -550,30 +588,30 @@ class HiC(object):
             temp_data = temp_data[numpy.where(temp_data[:, 1] < stop_fend)[0], :]
             temp_data[:, 0] = mapping[temp_data[:, 0] - start_fend]
             temp_data[:, 1] = mapping[temp_data[:, 1] - start_fend]
-            nonzero_pairs = _distance.find_nonzeros_in_range(fend_ranges, temp_data)
+            nonzero_pairs = _interactions.find_nonzeros_in_range(fend_ranges, temp_data)
             # allocate nonzero index and count arrays and fill
             nonzero_indices0 = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
             nonzero_indices1 = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
             counts = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
-            _distance.find_nonzero_node_indices(fend_ranges,
-                                                nonzero_indices0,
-                                                nonzero_indices1,
-                                                counts,
-                                                temp_data)
+            _interactions.find_nonzero_node_indices(fend_ranges,
+                                                    nonzero_indices0,
+                                                    nonzero_indices1,
+                                                    counts,
+                                                    temp_data)
             del temp_data
             # allocate zero index arrays and fill
             zero_indices0 = numpy.zeros(num_pairs - nonzero_pairs, dtype=numpy.int32)
             zero_indices1 = numpy.zeros(num_pairs - nonzero_pairs, dtype=numpy.int32)
-            _distance.find_zero_node_indices(rev_mapping,
-                                             fend_ranges,
-                                             nonzero_indices0,
-                                             nonzero_indices1,
-                                             zero_indices0,
-                                             zero_indices1,
-                                             start,
-                                             stop,
-                                             binned,
-                                             start_fend)
+            _interactions.find_zero_node_indices(rev_mapping,
+                                                 fend_ranges,
+                                                 nonzero_indices0,
+                                                 nonzero_indices1,
+                                                 zero_indices0,
+                                                 zero_indices1,
+                                                 start,
+                                                 stop,
+                                                 binned,
+                                                 start_fend)
             # count total interactions per fend and sent to root node
             interactions = numpy.bincount(nonzero_indices0, minlength=rev_mapping.shape[0])
             interactions += numpy.bincount(nonzero_indices1, minlength=rev_mapping.shape[0])
@@ -603,6 +641,38 @@ class HiC(object):
                                                    zero_means,
                                                    self.distance_parameters,
                                                    self.chromosome_means[chrint])
+            # if precorrecting using regression correction values, find correction matrices and adjust distance means
+            if precorrect:
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rFinding regression corrections for chromosome %s...") % (' ' * 80,
+                                                                                                          chrom),
+                if not gc_corrections is None:
+                    gc_indices = numpy.searchsorted(self.gc_bins, self.fends['fends']['gc'][rev_mapping + startfend])
+                if not len_corrections is None:
+                    len_indices = numpy.searchsorted(self.len_bins,
+                                                     self.fends['fends']['stop'][rev_mapping + startfend] -
+                                                     self.fends['fends']['start'][rev_mapping + startfend])
+                if not map_corrections is None:
+                    map_indices = numpy.searchsorted(self.map_bins,
+                                                     self.fends['fends']['mappability'][rev_mapping + startfend])
+                _optimize.find_regression_correction_adjustment(nonzero_means,
+                                                                nonzero_indices0,
+                                                                nonzero_indices1,
+                                                                gc_corrections,
+                                                                len_corrections,
+                                                                map_corrections,
+                                                                gc_indices,
+                                                                len_indices,
+                                                                map_indices)
+                _optimize.find_regression_correction_adjustment(zero_means,
+                                                                zero_indices0,
+                                                                zero_indices1,
+                                                                gc_corrections,
+                                                                len_corrections,
+                                                                map_corrections,
+                                                                gc_indices,
+                                                                len_indices,
+                                                                map_indices)
             del mids
             # if requested, find fend means after adjustment by distance means as correction starting point
             if precalculate:
@@ -643,24 +713,24 @@ class HiC(object):
                         findcost = True
                     else:
                         findcost = False
-                    _distance.calculate_gradients(zero_indices0,
-                                                  zero_indices1,
-                                                  nonzero_indices0,
-                                                  nonzero_indices1,
-                                                  nonzero_means,
-                                                  zero_means,
-                                                  counts,
-                                                  corrections,
-                                                  gradients)
-                    if findcost:
-                        cost = _distance.calculate_cost(zero_indices0,
+                    _optimized.calculate_prob_gradients(zero_indices0,
                                                         zero_indices1,
                                                         nonzero_indices0,
                                                         nonzero_indices1,
                                                         nonzero_means,
                                                         zero_means,
                                                         counts,
-                                                        corrections)
+                                                        corrections,
+                                                        gradients)
+                    if findcost:
+                        cost = _optimize.calculate_prob_cost(zero_indices0,
+                                                             zero_indices1,
+                                                             nonzero_indices0,
+                                                             nonzero_indices1,
+                                                             nonzero_means,
+                                                             zero_means,
+                                                             counts,
+                                                             corrections)
                         if self.rank == 0:
                             for i in range(1, self.num_procs):
                                 cost += self.comm.recv(source=i, tag=11)
@@ -701,14 +771,14 @@ class HiC(object):
                 self.comm.Recv(corrections, source=0, tag=13)
             self.chromosome_means[self.chr2int[chrom]] = chrom_mean
             self.corrections[rev_mapping + start_fend] = corrections
-            cost = _distance.calculate_cost(zero_indices0,
-                                            zero_indices1,
-                                            nonzero_indices0,
-                                            nonzero_indices1,
-                                            nonzero_means,
-                                            zero_means,
-                                            counts,
-                                            corrections)
+            cost = _optimize.calculate_prob_cost(zero_indices0,
+                                                 zero_indices1,
+                                                 nonzero_indices0,
+                                                 nonzero_indices1,
+                                                 nonzero_means,
+                                                 zero_means,
+                                                 counts,
+                                                 corrections)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     cost += self.comm.recv(source=i, tag=11)
@@ -719,7 +789,10 @@ class HiC(object):
                 self.comm.send(cost, dest=0, tag=11)
         if not self.silent:
             print >> sys.stderr, ("\rLearning corrections... Done%s\n") % (' ' * 80),
-        self.normalization = 'probabilistic'
+        if precorrect:
+            self.normalization = 'regression-probability'
+        else:
+            self.normalization = 'probabilistic'
         return None
 
     def _exchange_gradients(self, gradients, temp):
@@ -748,7 +821,7 @@ class HiC(object):
         return change
 
     def find_express_fend_corrections(self, iterations=100, mindistance=0, maxdistance=0, remove_distance=True, 
-                                      usereads='cis', mininteractions=None, chroms=[]):
+                                      usereads='cis', mininteractions=None, chroms=[], precorrect=False):
         """
         Using iterative matrix-balancing approximation, learn correction values for each valid fend. This function is MPI compatible.
 
@@ -766,6 +839,8 @@ class HiC(object):
         :type mininteractions: int.
         :param chroms: A list of chromosomes to calculate corrections for. If set as None, all chromosome corrections are found.
         :type chroms: list
+        :param precorrect: Use regression-based corrections in expected value calculations, resulting in a chained normalization approach.
+        :type precorrect: bool.
         :returns: None
         """
         if mininteractions is None:
@@ -773,14 +848,15 @@ class HiC(object):
                 mininteractions = self.mininteractions
             else:
                 mininteractions = 1
-        if not self.silent and self.rank == 0:
-            print >> sys.stderr, ("Loading needed data..."),
         # make sure usereads has a valid value
         read_int = {'cis':0, 'all':1, 'trans':2}
         if usereads not in read_int:
             if not self.silent:
-                print >> sys.stderr, ("usereads does not have a valid value.\n"),
+                print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
             return None
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
+        self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
         useread_int = read_int[usereads]
         if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
             binned = 1
@@ -833,8 +909,9 @@ class HiC(object):
             trans_data = trans_data[valid, :]
         else:
             trans_data = None
-        if not self.silent and self.rank == 0:
-            print >> sys.stderr, ("Done\nChecking for fend interaction count..."),
+        trans_means = None
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\rChecking for fend interaction count...") % (' ' * 80),
         # double check that, given the type of reads being used for learning, there are enough for each fend
         # to meet the mininteraction criteria
         observed_interactions = numpy.zeros(filt.shape[0], dtype=numpy.int32)
@@ -854,7 +931,7 @@ class HiC(object):
             self.comm.send(observed_interactions, dest=0, tag=11)
             minobs = self.comm.recv(source=0, tag=11)
         if minobs < mininteractions:
-            if not self.silent and self.rank == 0:
+            if not self.silent:
                 print >> sys.stderr, ("\nInsufficient interactions for one or more fends.\n"),
                 print >> sys.stderr, ("Try resetting and refiltering fends or expanding distance range.\n"),
             return None
@@ -869,15 +946,15 @@ class HiC(object):
         else:
             chrints = self.comm.recv(source=0, tag=11)
         interactions = numpy.zeros(filt.shape[0], dtype=numpy.int64)
-        _distance.find_distancebound_possible_interactions(interactions,
-                                                           chr_indices,
-                                                           mids,
-                                                           filt,
-                                                           chrints,
-                                                           useread_int,
-                                                           binned,
-                                                           mindistance,
-                                                           maxdistance)
+        _interactions.find_distancebound_possible_interactions(interactions,
+                                                               chr_indices,
+                                                               mids,
+                                                               filt,
+                                                               chrints,
+                                                               useread_int,
+                                                               binned,
+                                                               mindistance,
+                                                               maxdistance)
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 interactions += self.comm.recv(source=i, tag=11)
@@ -886,8 +963,6 @@ class HiC(object):
         else:
             self.comm.send(interactions, dest=0, tag=11)
             self.comm.Recv(interactions, source=0, tag=13)
-        if not self.silent and self.rank == 0:
-            print >> sys.stderr, ("Done\nPrecalculating distances for fast correction..."),
         # precalculate interaction distance means for all included interactions
         if not remove_distance or data is None:
             distance_means = None
@@ -916,14 +991,22 @@ class HiC(object):
                 mu = temp_mu
                 trans_mu = temp_mu
         else:
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\rPrecalculating distances...") % (' ' * 80),
             mu = 1.0
-            distance_means = numpy.zeros(data.shape[0], dtype=numpy.float64)
-            _distance.find_data_distance_means(distance_means,
-                                               data,
-                                               mids,
-                                               chrs,
-                                               self.distance_parameters,
-                                               self.chromosome_means)
+            all_chrints = hic.fends['fends']['chr'][data[:, 0]]
+            chrint_indices = numpy.r_[0, numpy.bincount(all_chrints)]
+            for i in range(1, chrint_indices.shape[0]):
+                chrint_indices[i] += chrint_indices[i - 1]
+            distance_means = numpy.zeros(data.shape[0], dtype=numpy.float32)
+            for i in range(chrint_indices.shape[0] - 1):
+                if chrint_indices[i] < chrint_indices[i + 1]:
+                    _distance.find_remapped_distance_means(data[chrint_indices[i]:chrint_indices[i + 1], 0],
+                                                           data[chrint_indices[i]:chrint_indices[i + 1], 1],
+                                                           mids,
+                                                           distance_means[chrint_indices[i]:chrint_indices[i + 1]],
+                                                           self.distance_parameters,
+                                                           self.chromosome_means[i])
             if not trans_data is None:
                 total_possible = numpy.sum(filt).astype(numpy.int64) ** 2
                 for i in range(self.fends['chr_indices'].shape[0] - 1):
@@ -942,15 +1025,74 @@ class HiC(object):
                 trans_mu = (2.0 * trans_sum) / total_possible
             else:
                 trans_mu = 1.0
+        if precorrect:
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\rFinding regression corrections...") % (' ' * 80),
+            if not self.gc_corrections is None:
+                gc_bins = int((0.25 + 2 * self.gc_corrections.shape[0]) ** 0.5 - 0.5)
+                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
+                indices = numpy.triu_indices(gc_bins, 0)
+                gc_corrections[indices] = self.gc_corrections
+                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
+                gc_indices = numpy.searchsorted(self.gc_bins, self.fends['fends']['gc'][...]).astype(numpy.int32)
+            else:
+                gc_corrections = None
+                gc_indices = None
+            if not self.len_corrections is None:
+                len_bins = int((0.25 + 2 * self.len_corrections.shape[0]) ** 0.5 - 0.5)
+                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
+                indices = numpy.triu_indices(len_bins, 0)
+                len_corrections[indices] = self.len_corrections
+                len_corrections[indices[1], indices[0]] = len_corrections[indices]
+                len_indices = numpy.searchsorted(self.len_bins, self.fends['fends']['stop'][...] -
+                                                 self.fends['fends']['start'][...]).astype(numpy.int32)
+            else:
+                len_corrections = None
+                len_indices = None
+            if not self.map_corrections is None:
+                map_bins = int((0.25 + 2 * self.map_corrections.shape[0]) ** 0.5 - 0.5)
+                map_corrections = numpy.zeros((map_bins, map_bins), dtype=numpy.float32)
+                indices = numpy.triu_indices(map_bins, 0)
+                map_corrections[indices] = self.map_corrections
+                map_corrections[indices[1], indices[0]] = map_corrections[indices]
+                map_indices = numpy.searchsorted(self.map_bins,
+                                                 self.fends['fends']['mappability'][...]).astype(numpy.int32)
+            else:
+                map_corrections = None
+                map_indices = None
+            if not data is None:
+                if distance_means is None:
+                    distance_means = numpy.ones(data.shape[0], dtype=numpy.float32)
+                _optimize.find_regression_correction_adjustment(distance_means,
+                                                                data[:, 0],
+                                                                data[:, 1],
+                                                                gc_corrections,
+                                                                len_corrections,
+                                                                map_corrections,
+                                                                gc_indices,
+                                                                len_indices,
+                                                                map_indices)
+            if not trans_data is None:
+                trans_means = numpy.ones(trans_data.shape[0], dtype=numpy.float32)
+                _optimize.find_regression_correction_adjustment(trans_means,
+                                                                trans_data[:, 0],
+                                                                trans_data[:, 1],
+                                                                gc_corrections,
+                                                                len_corrections,
+                                                                map_corrections,
+                                                                gc_indices,
+                                                                len_indices,
+                                                                map_indices)
         if not self.silent and self.rank == 0:
-            print >> sys.stderr, ("Done\nFinding fend corrections...\n"),
+            print >> sys.stderr, ("\r%s\rFinding fend corrections...") % (' ' * 80),
         # calculate corrections
         fend_means = numpy.zeros(filt.shape[0], dtype=numpy.float64)
         if self.rank == 0:
             temp = numpy.zeros(filt.shape[0], dtype=numpy.float64)
         corrections = numpy.copy(self.corrections)
         for iteration in range(iterations):
-            _distance.find_fend_means(distance_means,
+            _optimize.find_fend_means(distance_means,
+                                      trans_means,
                                       fend_means,
                                       data,
                                       trans_data,
@@ -961,12 +1103,13 @@ class HiC(object):
                 for i in range(1, self.num_procs):
                     self.comm.Recv(temp, source=i, tag=13)
                     fend_means += temp
-                cost = _distance.update_express_corrections(filt,
+                cost = _optimize.update_express_corrections(filt,
                                                             interactions,
                                                             fend_means,
                                                             corrections)
                 if not self.silent:
-                    print >> sys.stderr, ("\rIteration: %i  Cost: %f    ") % (iteration, cost),
+                    print >> sys.stderr, ("\r%s\rFinding fend corrections  Iteration: %i  Cost: %f") % (' ' * 80,
+                                          iteration, cost),
                 for i in range(1, self.num_procs):
                     self.comm.Send(corrections, dest=i, tag=13)
             else:
@@ -1004,8 +1147,11 @@ class HiC(object):
         self.chromosome_means = chrom_means
         self.corrections = corrections
         if not self.silent and self.rank == 0:
-            print >> sys.stderr, ("\r%s\rFinal cost: %f\n") % (' ' * 80, cost),
-        self.normalization = 'express'
+            print >> sys.stderr, ("\r%s\rCompleted learning express corrections. Final cost: %f\n") % (' ' * 80, cost),
+        if precorrect:
+            self.normalization = 'regression-express'
+        else:
+            self.normalization = 'express'
         return None
 
     def find_regression_fend_corrections(self, mindistance=0, maxdistance=0, chroms=None, num_bins=[20, 20, 20],
@@ -1067,7 +1213,8 @@ class HiC(object):
             gc_bins = num_bins[model.index('gc')]
             gc_values = self.fends['fends']['gc'][...][valid]
             gc_values.sort()
-            self.gc_bins = gc_values[numpy.round(numpy.linspace(0, gc_values.shape[0], gc_bins + 1)).astype(numpy.int32)[1:] - 1]
+            self.gc_bins = gc_values[numpy.round(numpy.linspace(0, gc_values.shape[0],
+                                     gc_bins + 1)).astype(numpy.int32)[1:] - 1]
             self.gc_bins[-1] = numpy.inf
             self.gc_corrections = numpy.zeros(gc_bins * (gc_bins + 1) / 2, dtype=numpy.float64)
             total_bins *= self.gc_corrections.shape[0]
@@ -1086,21 +1233,25 @@ class HiC(object):
                 self.map_corrections[index:(index + map_bins - i)] = self.map_bins[i] * self.map_bins[i:]
             map_div = total_bins
             total_bins *= self.map_corrections.shape[0]
-            map_indices = numpy.searchsorted(self.map_bins, self.fends['fends']['mappability'][...]).astype(numpy.int32)
+            map_indices = numpy.searchsorted(self.map_bins,
+                                             self.fends['fends']['mappability'][...]).astype(numpy.int32)
         else:
             map_div = 0
             map_indices = None
             map_bins = 0
         if 'len' in model:
             len_bins = num_bins[model.index('len')]
-            len_values = (self.fends['fends']['stop'][...][valid] - self.fends['fends']['start'][...][valid]).astype(numpy.float32)
+            len_values = (self.fends['fends']['stop'][...][valid] -
+                          self.fends['fends']['start'][...][valid]).astype(numpy.float32)
             len_values.sort()
-            self.len_bins = len_values[numpy.round(numpy.linspace(0, len_values.shape[0], len_bins + 1)).astype(numpy.int32)[1:] - 1]
+            self.len_bins = len_values[numpy.round(numpy.linspace(0, len_values.shape[0],
+                                       len_bins + 1)).astype(numpy.int32)[1:] - 1]
             self.len_bins[-1] = numpy.inf
             self.len_corrections = numpy.zeros(len_bins * (len_bins + 1) / 2, dtype=numpy.float64)
             len_div = total_bins
             total_bins *= self.len_corrections.shape[0]
-            len_indices = numpy.searchsorted(self.len_bins, self.fends['fends']['stop'][...] - self.fends['fends']['start'][...]).astype(numpy.int32)
+            len_indices = numpy.searchsorted(self.len_bins, self.fends['fends']['stop'][...] -
+                                             self.fends['fends']['start'][...]).astype(numpy.int32)
         else:
             len_div = 0
             len_indices = None
@@ -1115,7 +1266,8 @@ class HiC(object):
                     max_dist = max(max_dist, dists[self.chr2int[chrom]])
             else:
                 max_dist = maxdistance
-            distance_cutoffs = numpy.ceil(numpy.exp(numpy.linspace(numpy.log(max(1, mindistance)), numpy.log(max_dist), distance_bins + 1))[1:]).astype(numpy.int32)
+            distance_cutoffs = numpy.ceil(numpy.exp(numpy.linspace(numpy.log(max(1, mindistance)),
+                                          numpy.log(max_dist), distance_bins + 1))[1:]).astype(numpy.int32)
             distance_cutoffs[-1] += 1
             distance_corrections = numpy.zeros(distance_bins, dtype=numpy.float64)
             distance_div = total_bins
@@ -1139,24 +1291,24 @@ class HiC(object):
             stop_index = self.data['cis_indices'][chr_indices[chrint + 1]]
             node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
             data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
-            regression_bin_observed(data,
-                                    self.filter,
-                                    mids,
-                                    bin_counts,
-                                    gc_indices,
-                                    map_indices,
-                                    len_indices,
-                                    distance_cutoffs,
-                                    gc_div,
-                                    map_div,
-                                    len_div,
-                                    distance_div,
-                                    gc_bins,
-                                    map_bins,
-                                    len_bins,
-                                    distance_bins,
-                                    mindistance,
-                                    maxdistance)
+            _binning.regression_bin_observed(data,
+                                             self.filter,
+                                             mids,
+                                             bin_counts,
+                                             gc_indices,
+                                             map_indices,
+                                             len_indices,
+                                             distance_cutoffs,
+                                             gc_div,
+                                             map_div,
+                                             len_div,
+                                             distance_div,
+                                             gc_bins,
+                                             map_bins,
+                                             len_bins,
+                                             distance_bins,
+                                             mindistance,
+                                             maxdistance)
             # Find number of possible interactions in each bin
             maxfend = chr_indices[chrint + 1]
             if self.num_procs == 1:
@@ -1167,7 +1319,8 @@ class HiC(object):
                 fend_sizes = numpy.r_[0, numfends - numpy.arange(1, numfends)]
                 for i in range(1, fend_sizes.shape[0]):
                     fend_sizes[i] += fend_sizes[i - 1]
-                node_targets = numpy.round(numpy.linspace(0, numfends * (numfends - 1) / 2, self.num_procs + 1)).astype(numpy.int64)
+                node_targets = numpy.round(numpy.linspace(0, numfends * (numfends - 1) / 2,
+                                           self.num_procs + 1)).astype(numpy.int64)
                 node_ranges = numpy.searchsorted(fend_sizes[1:], node_targets).astype(numpy.int32)
                 if (node_ranges[self.rank] < fend_sizes.shape[0] - 1 and
                     node_targets[self.rank] - fend_sizes[node_ranges[self.rank]] > 
@@ -1179,26 +1332,26 @@ class HiC(object):
                     node_ranges[self.rank + 1] += 1
                 startfend = node_ranges[self.rank] + chr_indices[chrint]
                 stopfend = node_ranges[self.rank + 1] + chr_indices[chrint]
-            regression_bin_expected(filt,
-                                    mids,
-                                    bin_counts,
-                                    gc_indices,
-                                    map_indices,
-                                    len_indices,
-                                    distance_cutoffs,
-                                    gc_div,
-                                    map_div,
-                                    len_div,
-                                    distance_div,
-                                    gc_bins,
-                                    map_bins,
-                                    len_bins,
-                                    distance_bins,
-                                    mindistance,
-                                    maxdistance,
-                                    startfend,
-                                    stopfend,
-                                    maxfend)
+            _binning.regression_bin_expected(filt,
+                                             mids,
+                                             bin_counts,
+                                             gc_indices,
+                                             map_indices,
+                                             len_indices,
+                                             distance_cutoffs,
+                                             gc_div,
+                                             map_div,
+                                             len_div,
+                                             distance_div,
+                                             gc_bins,
+                                             map_bins,
+                                             len_bins,
+                                             distance_bins,
+                                             mindistance,
+                                             maxdistance,
+                                             startfend,
+                                             stopfend,
+                                             maxfend)
         # Exchange bin_counts
         if self.rank == 0:
             for i in range(1, self.num_procs):
@@ -1219,29 +1372,36 @@ class HiC(object):
         if gc_bins > 0:
             gc_indices = numpy.arange(bin_counts.shape[0], dtype=numpy.int32) % self.gc_corrections.shape[0]
             self.gc_corrections = (
-                numpy.bincount(gc_indices, weights=bin_counts[:, 0], minlength=self.gc_corrections.shape[0]).astype(numpy.float64) /
-                (numpy.maximum(1, numpy.bincount(gc_indices, weights=bin_counts[:, 1], minlength=self.gc_corrections.shape[0])) *
+                numpy.bincount(gc_indices, weights=bin_counts[:, 0],
+                               minlength=self.gc_corrections.shape[0]).astype(numpy.float64) /
+                (numpy.maximum(1, numpy.bincount(gc_indices, weights=bin_counts[:, 1],
+                               minlength=self.gc_corrections.shape[0])) *
                 prior)).astype(numpy.float64)
         else:
             gc_indices = None
         if map_bins > 0:
-            map_indices = (numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / map_div) % self.map_corrections.shape[0]
+            map_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / map_div) %
+                           self.map_corrections.shape[0])
         else:
             map_indices = None
         if len_bins > 0:
-            len_indices = (numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / len_div) % self.len_corrections.shape[0]
+            len_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / len_div) %
+                           self.len_corrections.shape[0])
             self.len_corrections = (
-                numpy.bincount(len_indices, weights=bin_counts[:, 0], minlength=self.len_corrections.shape[0]).astype(numpy.float64) /
-                (numpy.maximum(1, numpy.bincount(len_indices, weights=bin_counts[:, 1], minlength=self.len_corrections.shape[0])) *
-                prior)).astype(numpy.float64)
+                numpy.bincount(len_indices, weights=bin_counts[:, 0],
+                minlength=self.len_corrections.shape[0]).astype(numpy.float64) /
+                (numpy.maximum(1, numpy.bincount(len_indices, weights=bin_counts[:, 1],
+                minlength=self.len_corrections.shape[0])) * prior)).astype(numpy.float64)
         else:
             len_indices = None
         if distance_bins > 0:
-            distance_indices = (numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / distance_div) % distance_corrections.shape[0]
+            distance_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / distance_div) %
+                                distance_corrections.shape[0])
             distance_corrections = (
-                numpy.bincount(distance_indices, weights=bin_counts[:, 0], minlength=distance_corrections.shape[0]).astype(numpy.float64) /
-                (numpy.maximum(1, numpy.bincount(distance_indices, weights=bin_counts[:, 1], minlength=distance_corrections.shape[0])) *
-                prior)).astype(numpy.float64)
+                numpy.bincount(distance_indices, weights=bin_counts[:, 0],
+                minlength=distance_corrections.shape[0]).astype(numpy.float64) /
+                (numpy.maximum(1, numpy.bincount(distance_indices, weights=bin_counts[:, 1],
+                minlength=distance_corrections.shape[0])) * prior)).astype(numpy.float64)
         else:
             distance_indices = None
 
@@ -1264,12 +1424,13 @@ class HiC(object):
                 temp = distance_c[distance_i]
                 sum_log += numpy.log2(temp)
                 prod *= temp
-            return -numpy.sum(counts[:, 0] * (numpy.log2(prior) + sum_log) + (counts[:, 1] - counts[:, 0]) * numpy.log2(1.0 - prior * prod))
+            return (-numpy.sum(counts[:, 0] * (numpy.log2(prior) + sum_log) +
+                    (counts[:, 1] - counts[:, 0]) * numpy.log2(1.0 - prior * prod)))
 
-        ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, self.map_corrections, map_indices,
-                     distance_corrections, distance_indices, bin_counts, prior)
+        ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, self.map_corrections,
+                     map_indices, distance_corrections, distance_indices, bin_counts, prior)
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning regression corrections... iteration:00  ll:%f\n") % (' ' * 80, ll),
+            print >> sys.stderr, ("\r%s\rLearning regression corrections... iteration:00  ll:%f") % (' ' * 80, ll),
         iteration = 0
         delta = numpy.inf
         pgtol = 1e-8
@@ -1289,7 +1450,8 @@ class HiC(object):
         while iteration < max_iterations and delta >= learning_threshold:
             if not self.gc_corrections is None:
                 new_gc_corrections = numpy.zeros(self.gc_corrections.shape[0], dtype=numpy.float64)
-                node_ranges = numpy.round(numpy.linspace(0, self.gc_corrections.shape[0], self.num_procs + 1)).astype(numpy.int32)
+                node_ranges = numpy.round(numpy.linspace(0, self.gc_corrections.shape[0],
+                                          self.num_procs + 1)).astype(numpy.int32)
                 for i in range(node_ranges[self.rank], node_ranges[self.rank + 1]):
                     where = numpy.where(gc_indices == i)[0]
                     temp_bin_counts = bin_counts[where, :]
@@ -1319,11 +1481,13 @@ class HiC(object):
                         self.comm.Send(new_gc_corrections, dest=i, tag=13)
                 else:
                     if node_ranges[self.rank + 1] > node_ranges[self.rank]:
-                        self.comm.Send(new_gc_corrections[node_ranges[self.rank]:node_ranges[self.rank + 1]], dest=0, tag=13)
+                        self.comm.Send(new_gc_corrections[node_ranges[self.rank]:node_ranges[self.rank + 1]],
+                                       dest=0, tag=13)
                     self.comm.Recv(new_gc_corrections, source=0, tag=13)
             if not self.len_corrections is None:
                 new_len_corrections = numpy.zeros(self.len_corrections.shape[0], dtype=numpy.float64)
-                node_ranges = numpy.round(numpy.linspace(0, self.len_corrections.shape[0], self.num_procs + 1)).astype(numpy.int32)
+                node_ranges = numpy.round(numpy.linspace(0, self.len_corrections.shape[0],
+                                          self.num_procs + 1)).astype(numpy.int32)
                 for i in range(node_ranges[self.rank], node_ranges[self.rank + 1]):
                     where = numpy.where(len_indices == i)[0]
                     temp_bin_counts = bin_counts[where, :]
@@ -1353,23 +1517,25 @@ class HiC(object):
                         self.comm.Send(new_len_corrections, dest=i, tag=13)
                 else:
                     if node_ranges[self.rank + 1] > node_ranges[self.rank]:
-                        self.comm.Send(new_len_corrections[node_ranges[self.rank]:node_ranges[self.rank + 1]], dest=0, tag=13)
+                        self.comm.Send(new_len_corrections[node_ranges[self.rank]:node_ranges[self.rank + 1]],
+                                       dest=0, tag=13)
                     self.comm.Recv(new_len_corrections, source=0, tag=13)
             if not self.gc_corrections is None:
                 self.gc_corrections = new_gc_corrections
             if not self.len_corrections is None:
                 self.len_corrections = new_len_corrections
             iteration += 1
-            new_ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, self.map_corrections, map_indices,
-                             distance_corrections, distance_indices, bin_counts, prior)
+            new_ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, self.map_corrections,
+                             map_indices, distance_corrections, distance_indices, bin_counts, prior)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLearning regression corrections... iteration:%02i  ll:%f\n") % (' ' * 80, iteration, new_ll),
+                print >> sys.stderr, ("\r%s\rLearning regression corrections... iteration:%02i  ll:%f\n") % (' ' * 80,
+                                      iteration, new_ll),
             delta = ll - new_ll
             if delta < 0.0:
                 delta = numpy.inf
             ll = new_ll
         if not self.silent:
-            print >> sys.stderr, ("\rLearning regression corrections... Done%s\n") % (' ' * 80),
+            print >> sys.stderr, ("\r%s\rLearning regression corrections... Final ll:%f\n") % (' ' * 80, ll),
         self.normalization = 'regression'
         return None
 
@@ -1511,46 +1677,23 @@ class HiC(object):
             return None
         # determine if data is to be dynamically binned
         if not dynamically_binned:
-            # determine if data is to be unbinned or binned
-            if binbounds is None and binsize == 0:
-                # data should be unbinned
-                data = hic_binning.unbinned_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
-                                                       stopfend=stopfend, datatype=datatype, arraytype=arraytype,
-                                                       maxdistance=maxdistance, skipfiltered=skipfiltered,
-                                                       returnmapping=returnmapping, silent=self.silent)
-            else:
-                # data should be binned
-                data = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
-                                                  stopfend=stopfend, binsize=binsize, binbounds=binbounds,
-                                                  datatype=datatype, arraytype=arraytype, maxdistance=maxdistance,
-                                                  returnmapping=returnmapping, silent=self.silent)
+            data = hic_binning.find_cis_signal(self, chrom, binsize=binsize, binbounds=binbounds, start=start,
+                                               stop=stop, startfend=startfend, stopfend=stopfend, datatype=datatype,
+                                               arraytype=arraytype, maxdistance=maxdistance, skipfiltered=skipfiltered,
+                                               returnmapping=returnmapping, silent=self.silent)
         else:
-            if expansion_binsize == 0:
-                # data should be dynamically binned with unbinned expansion data
-                expansion, fends = hic_binning.unbinned_cis_signal(self, chrom, start=start, stop=stop,
-                                                                   startfend=startfend, stopfend=stopfend,
-                                                                   datatype=datatype, arraytype=arraytype,
-                                                                   maxdistance=maxdistance, skipfiltered=True,
-                                                                   returnmapping=True, silent=self.silent)
-                mids = self.fends['fends']['mid'][fends]
-                binned, mapping = hic_binning.bin_cis_array(self, expansion, fends, start=start, stop=stop,
-                                                            binsize=binsize, binbounds=binbounds, arraytype=arraytype,
-                                                            returnmapping=True, silent=self.silent)
-            else:
-                # data should be dynamically binned with binned expansion data
-                expansion, mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop,
+            expansion, exp_mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop,
                                                                 startfend=startfend, stopfend=stopfend,
                                                                 binsize=expansion_binsize, binbounds=None,
                                                                 datatype=datatype, arraytype=arraytype,
                                                                 maxdistance=maxdistance, returnmapping=True,
                                                                 silent=self.silent)
-                mids = (mapping[:, 2] + mapping[:, 3]) / 2
-                binned, mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
-                                                             stopfend=stopfend, binsize=binsize, binbounds=binbounds,
-                                                             datatype=datatype, arraytype=arraytype,
-                                                             maxdistance=maxdistance, returnmapping=True,
-                                                             silent=self.silent)
-            hic_binning.dynamically_bin_cis_array(expansion, mids, binned, mapping[:, 2:],
+            binned, mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
+                                                         stopfend=stopfend, binsize=binsize, binbounds=binbounds,
+                                                         datatype=datatype, arraytype=arraytype,
+                                                         maxdistance=maxdistance, returnmapping=True,
+                                                         silent=self.silent)
+            hic_binning.dynamically_bin_cis_array(expansion, exp_mapping, binned, mapping,
                                                   minobservations=minobservations, searchdistance=searchdistance,
                                                   removefailed=removefailed, silent=self.silent)
             if returnmapping:
@@ -1578,8 +1721,9 @@ class HiC(object):
 
     def trans_heatmap(self, chrom1, chrom2, start1=None, stop1=None, startfend1=None, stopfend1=None, binbounds1=None,
                       start2=None, stop2=None, startfend2=None, stopfend2=None, binbounds2=None, binsize=1000000,
-                      datatype='enrichment', returnmapping=False, dynamically_binned=False, minobservations=0,
-                      searchdistance=0, expansion_binsize=0, removefailed=False, image_file=None, **kwargs):
+                      skipfiltered=False, datatype='enrichment', returnmapping=False, dynamically_binned=False,
+                      minobservations=0, searchdistance=0, expansion_binsize=0, removefailed=False, image_file=None,
+                      **kwargs):
         """
         Return a heatmap of trans data of the type and shape specified by the passed arguments.
 
@@ -1610,6 +1754,8 @@ class HiC(object):
         :type binbounds2: numpy array
         :param binsize: This is the coordinate width of each bin. If binbounds is not None, this value is ignored.
         :type binsize: int.
+        :param skipfiltered: If 'True', all interaction bins for filtered out fends are removed and a reduced-size array is returned.
+        :type skipfiltered: bool.
         :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
         :type datatype: str.
         :param returnmapping: If 'True', a list containing the data array and two 2d arrays of N x 4 containing the first fend and last fend plus one included in each bin and first and last coordinates for the first and second chromosomes is returned. Otherwise only the data array is returned.
@@ -1638,32 +1784,33 @@ class HiC(object):
             datatype_int = datatypes[datatype]
         # determine if data is to be dynamically binned
         if not dynamically_binned:
-            data = hic_binning.bin_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,
+            data = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,
                                                 startfend1=startfend1, stopfend1=stopfend1, binbounds1=binbounds1,
                                                 start2=start2, stop2=stop2, startfend2=startfend2, stopfend2=stopfend2,
                                                 binbounds2=binbounds2, binsize=binsize, datatype=datatype,
-                                                returnmapping=returnmapping, silent=self.silent)
+                                                returnmapping=returnmapping, skipfiltered=skipfiltered,
+                                                silent=self.silent)
         else:
-            expansion, mapping1, mapping2 = hic_binning.bin_trans_signal(self, chrom1, chrom2, start1=start1,
-                                                                         stop1=stop1, startfend1=startfend1,
-                                                                         stopfend1=stopfend1, binbounds1=binbounds1,
-                                                                         start2=start2, stop2=stop2,
-                                                                         startfend2=startfend2, stopfend2=stopfend2,
-                                                                         binbounds2=binbounds2,
-                                                                         binsize=expansion_binsize, datatype=datatype,
-                                                                         returnmapping=True, silent=self.silent)
-            mids1 = (mapping1[:, 2] + mapping1[:, 3]) / 2
-            mids2 = (mapping2[:, 2] + mapping2[:, 3]) / 2
-            binned, mapping1, mapping2 = hic_binning.bin_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,
-                                                                      startfend1=startfend1, stopfend1=stopfend1,
-                                                                      binbounds1=binbounds1, start2=start2,
-                                                                      stop2=stop2, startfend2=startfend2,
-                                                                      stopfend2=stopfend2, binbounds2=binbounds2,
-                                                                      binsize=binsize, datatype=datatype,
-                                                                      returnmapping=True, silent=self.silent)
-            hic_binning.dynamically_bin_trans_array(expansion, mids1, mids2, binned, mapping1[:, 2:], mapping2[:, 2:],
-                                                    minobservations=minobservations, searchdistance=searchdistance,
-                                                    removefailed=removefailed, silent=self.silent)
+            expansion, exp_mapping1, exp_mapping2 = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1,
+                                                                        stop1=stop1, startfend1=startfend1,
+                                                                        stopfend1=stopfend1, binbounds1=binbounds1,
+                                                                        start2=start2, stop2=stop2,
+                                                                        startfend2=startfend2, stopfend2=stopfend2,
+                                                                        binbounds2=binbounds2,
+                                                                        binsize=expansion_binsize, datatype=datatype,
+                                                                        returnmapping=True, silent=self.silent)
+            binned, mapping1, mapping2 = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1,
+                                                                       stop1=stop1, startfend1=startfend1,
+                                                                       stopfend1=stopfend1, binbounds1=binbounds1,
+                                                                       start2=start2, stop2=stop2,
+                                                                       startfend2=startfend2, stopfend2=stopfend2,
+                                                                       binbounds2=binbounds2, binsize=binsize,
+                                                                       datatype=datatype, returnmapping=True,
+                                                                       silent=self.silent)
+            hic_binning.dynamically_bin_trans_array(expansion, exp_mapping1, exp_mapping2, binned, mapping1,
+                                                    mapping2, minobservations=minobservations,
+                                                    searchdistance=searchdistance, removefailed=removefailed,
+                                                    silent=self.silent)
             if returnmapping:
                 data = [binned, mapping1, mapping2]
             else:

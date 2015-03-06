@@ -32,357 +32,196 @@ cdef extern from "math.h":
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_distance_mapping(
-        np.ndarray[DTYPE_int_t, ndim=2] mapping not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        int first_fend,
-        int start,
-        int binsize,
-        int stepsize):
-    cdef long long int start_fend, stop_fend, start_pos, stop_pos, i
-    cdef long long int num_bins = mapping.shape[0]
-    cdef long long int num_fends = mids.shape[0]
-    with nogil:
-        start_fend = 0
-        stop_fend = 0
-        start_pos = start
-        stop_pos = start + binsize
-        for i in range(num_bins):
-            while start_fend < num_fends - 1 and mids[start_fend] < start_pos:
-                start_fend += 1
-            stop_fend = max(stop_fend, start_fend)
-            while stop_fend < num_fends - 1 and mids[stop_fend] < stop_pos:
-                stop_fend += 1
-            mapping[i, 0] = start_fend + first_fend
-            mapping[i, 1] = stop_fend + first_fend
-            start_pos += stepsize
-            stop_pos += stepsize
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def find_fend_coverage(
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int64_t, ndim=1] data_indices not None,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_int_t, ndim=1] min_fend not None,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
-        np.ndarray[DTYPE_int_t, ndim=1] coverage not None,
-        int mincoverage):
-    cdef long long int i, fend1, valid
-    cdef long long int num_fends = filter.shape[0]
-    with nogil:
-        valid = 0
-        for fend1 in range(num_fends):
-            if filter[fend1] == 0:
-                continue
-            i = data_indices[fend1]
-            while i < data_indices[fend1 + 1] and data[i, 1] < min_fend[fend1]:
-                i += 1
-            while i < data_indices[fend1 + 1] and data[i, 1] < max_fend[fend1]:
-                if filter[data[i, 1]] == 1:
-                    coverage[fend1] += 1
-                    coverage[data[i, 1]] += 1
-                i += 1
-        for i in range(num_fends):
-            if coverage[i] < mincoverage:
-                filter[i] = 0
-            else:
-                valid += 1
-    return valid
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def unbinned_signal_compact(
+def find_cis_compact_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int64_t, ndim=1] indices,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
-        np.ndarray[DTYPE_t, ndim=2] parameters not None,
-        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
-        np.ndarray[DTYPE_t, ndim=3] signal not None,
-        int datatype,
-        int startfend):
-    cdef long long int fend1, fend2, i, j, k, last_index
-    cdef double distance, chrom_mean
+        np.ndarray[DTYPE_t, ndim=3] signal not None):
+    cdef long long int fend1, fend2, i
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
-        # if finding anything but expected, fill in actual signal
-        if datatype < 4:
-            for i in range(num_fends - 1):
-                fend1 = mapping[i]
-                if filter[fend1] == 0:
+        for fend1 in range(num_fends - 1):
+            if mapping[fend1] == -1:
+                continue
+            for i in range(indices[fend1], indices[fend1 + 1]):
+                fend2 = data[i, 1]
+                if mapping[fend2] == -1 or fend2 > max_fend[fend1]:
                     continue
-                j = i + 1
-                k = indices[fend1 - startfend]
-                last_index = indices[fend1 - startfend + 1]
-                while j < max_fend[i]:
-                    fend2 = mapping[j]
-                    if filter[fend2] > 0:
-                        while k < last_index and data[k, 1] < fend2:
-                            k += 1
-                        if k < last_index and data[k, 1] == fend2:
-                            signal[i, j - i - 1, 0] = data[k, 2]
-                    j += 1
-        # fill in expected signal
-        for i in range(num_fends - 1):
-            fend1 = mapping[i]
-            if filter[fend1] == 0:
-                continue
-            chrom_mean = chromosome_means[chroms[i]]
-            j = i + 1
-            fend2 = mapping[j]
-            k = 0
-            # find opposite strand adjacents, skipping same fragment and same strand adjacents
-            while j < num_fends and fend2 < (fend1 / 2 + 2) * 2:
-                if fend2 == fend1 + 2 and filter[fend2] == 1:
-                     # give starting expected value
-                    signal[i, j - i - 1, 1] = 1.0
-                    # if finding fend, enrichment, or expected, correct for fend
-                    if datatype > 0 and datatype != 2:
-                        signal[i, j - i - 1, 1] *= corrections[fend1] * corrections[fend2]
-                    # if finding distance, enrichment, or expected, correct for distance
-                    if datatype > 1:
-                        distance = log(mids[j] - mids[i])
-                        while distance > parameters[k, 0]:
-                            k += 1
-                        signal[i, j - i - 1, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                        # if finding expected only, fill in filter values for observed signal
-                        if datatype == 4:
-                            signal[i, j - i - 1, 0] = 1.0
-                j += 1
-                if j < num_fends:
-                    fend2 = mapping[j]
-            while j < max_fend[i]:
-                fend2 = mapping[j]
-                if filter[fend2] > 0:
-                    # give starting expected value
-                    signal[i, j - i - 1, 1] = 1.0
-                    # if finding fend, enrichment, or expected, correct for fend
-                    if datatype > 0 and datatype != 2:
-                        signal[i, j - i - 1, 1] *= corrections[fend1] * corrections[fend2]
-                    # if finding distance, enrichment, or expected, correct for distance
-                    if datatype > 1:
-                        distance = log(mids[j] - mids[i])
-                        while distance > parameters[k, 0]:
-                            k += 1
-                        signal[i, j - i - 1, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                        # if finding expected only, fill in filter values for observed signal
-                        if datatype == 4:
-                            signal[i, j - i - 1, 0] = 1.0
-                j += 1
+                signal[mapping[fend1], mapping[fend2] - mapping[fend1] - 1, 0] += data[i, 2]
     return None
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def unbinned_signal_upper(
+def find_cis_upper_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int64_t, ndim=1] indices,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
-        np.ndarray[DTYPE_t, ndim=2] parameters not None,
-        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
-        np.ndarray[DTYPE_t, ndim=2] signal not None,
-        int datatype,
-        int startfend):
-    cdef long long int fend1, fend2, k
-    cdef long long int index, i, j
-    cdef double distance, chrom_mean
+        np.ndarray[DTYPE_t, ndim=2] signal not None):
+    cdef long long int fend1, fend2, i, index, num_bins
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int signal_size = signal.shape[0]
+    num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
     with nogil:
-        # if finding anything but expected, fill in actual signal
-        if datatype < 4:
-            for i in range(num_fends - 1):
-                fend1 = mapping[i]
-                if filter[fend1] == 0:
-                    continue
-                index = i * num_fends - i * (i + 1) / 2 - i - 1
-                j = i + 1
-                for k in range(indices[fend1 - startfend], indices[fend1 - startfend + 1]):
-                    fend2 = data[k, 1]
-                    if filter[fend2] == 0:
-                        continue
-                    while j < num_fends and mapping[j] < fend2:
-                        j += 1
-                    if j < num_fends and mapping[j] == fend2:
-                        signal[index + j, 0] = data[k, 2]
-        # fill in expected signal
-        for i in range(num_fends - 1):
-            fend1 = mapping[i]
-            if filter[fend1] == 0:
+        for fend1 in range(num_fends - 1):
+            if mapping[fend1] == -1:
                 continue
-            chrom_mean = chromosome_means[chroms[i]]
-            index = i * num_fends - i * (i + 1) / 2 - i - 1
-            j = i + 1
-            fend2 = mapping[j]
-            k = 0
-            # find opposite strand adjacents, skipping same fragment and same strand adjacents
-            while j < num_fends and fend2 < (fend1 / 2 + 2) * 2:
-                if fend2 == fend1 + 2 and filter[fend2] == 1:
-                     # give starting expected value
-                    signal[index + j, 1] = 1.0
-                    # if finding fend, enrichment, or expected, correct for fend
-                    if datatype > 0 and datatype != 2:
-                        signal[index + j, 1] *= corrections[fend1] * corrections[fend2]
-                    # if finding distance, enrichment, or expected, correct for distance
-                    if datatype > 1:
-                        distance = log(mids[j] - mids[i])
-                        while distance > parameters[k, 0]:
-                            k += 1
-                        signal[index + j, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                        # if finding expected only, fill in filter values for observed signal
-                        if datatype == 4:
-                            signal[index + j, 0] = 1.0
-                j += 1
-                if j < num_fends:
-                    fend2 = mapping[j]
-            while j < max_fend[i]:
-                fend2 = mapping[j]
-                if filter[fend2] > 0:
-                    # give starting expected value
-                    signal[index + j, 1] = 1.0
-                    # if finding fend, enrichment, or expected, correct for fend
-                    if datatype > 0 and datatype != 2:
-                        signal[index + j, 1] *= corrections[fend1] * corrections[fend2]
-                    # if finding distance, enrichment, or expected, correct for distance
-                    if datatype > 1:
-                        distance = log(mids[j] - mids[i])
-                        while distance > parameters[k, 0]:
-                            k += 1
-                        signal[index + j, 1] *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                        # if finding expected only, fill in filter values for observed signal
-                        if datatype == 4:
-                            signal[index + j, 0] = 1.0
-                j += 1
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def binned_signal_compact(
-        np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int64_t, ndim=1] indices,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
-        np.ndarray[DTYPE_t, ndim=2] parameters not None,
-        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
-        np.ndarray[DTYPE_t, ndim=3] signal not None,
-        int datatype):
-    cdef long long int i, j, k, l
-    cdef double distance, chrom_mean, expected, observed
-    cdef long long int num_fends = mapping.shape[0]
-    with nogil:
-        for i in range(num_fends - 1):
-            if filter[i] == 0 or mapping[i] == -1:
-                continue
-            chrom_mean = chromosome_means[chroms[i]]
-            k = 0
-            l = indices[i]
-            # fill in signal
-            for j in range(i + 2, max_fend[i]):
-                if filter[j] == 0 or mapping[j] == -1 or mapping[i] == mapping[j] or (i / 2 == j / 2 and i != j + 2):
-                    continue
-                # if requested, find observed signal
-                if datatype < 4:
-                    while l < indices[i + 1] and data[l, 1] < j:
-                        l += 1
-                    if l < indices[i + 1] and data[l, 1] == j:
-                        observed = data[l, 2]
-                    else:
-                        observed = 0.0
-                else:
-                    observed = 1.0
-                # find expected signal
-                expected = 1.0
-                # if finding fend, enrichment, or expected, correct for fend
-                if datatype > 0 and datatype != 2:
-                    expected *= corrections[i] * corrections[j]
-                # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    distance = log(mids[j] - mids[i])
-                    while distance > parameters[k, 0]:
-                        k += 1
-                    expected *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[mapping[i], mapping[j] - mapping[i] - 1, 0] += observed
-                signal[mapping[i], mapping[j] - mapping[i] - 1, 1] += expected
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def binned_signal_upper(
-        np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int64_t, ndim=1] indices,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_int_t, ndim=1] chroms not None,
-        np.ndarray[DTYPE_t, ndim=2] parameters not None,
-        np.ndarray[DTYPE_t, ndim=1] chromosome_means not None,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
-        np.ndarray[DTYPE_t, ndim=2] signal not None,
-        int datatype,
-        int num_bins):
-    cdef long long int i, j, k, l, index
-    cdef double distance, chrom_mean, expected, observed
-    cdef long long int num_fends = mapping.shape[0]
-    with nogil:
-        for i in range(num_fends - 1):
-            if filter[i] == 0 or mapping[i] == -1:
-                continue
-            chrom_mean = chromosome_means[chroms[i]]
             index = mapping[i] * num_bins - mapping[i] * (mapping[i] + 1) / 2 - mapping[i] - 1
-            k = 0
-            l = indices[i]
-            # fill in signal
-            for j in range(i + 2, max_fend[i]):
-                if filter[j] == 0 or mapping[j] == -1 or mapping[i] == mapping[j] or (i / 2 == j / 2 and i != j + 2):
+            for i in range(indices[fend1], indices[fend1 + 1]):
+                fend2 = data[i, 1]
+                if mapping[fend2] == -1 or fend2 > max_fend[fend1]:
                     continue
-                # if requested, find observed signal
-                if datatype < 4:
-                    while l < indices[i + 1] and data[l, 1] < j:
-                        l += 1
-                    if l < indices[i + 1] and data[l, 1] == j:
-                        observed = data[l, 2]
-                    else:
-                        observed = 0.0
-                else:
-                    observed = 1.0
-                # find expected signal
-                expected = 1.0
-                # if finding fend, enrichment, or expected, correct for fend
-                if datatype > 0 and datatype != 2:
-                    expected *= corrections[i] * corrections[j]
+                signal[index + mapping[fend2], 0] += data[i, 2]
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_cis_compact_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
+        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
+        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_t, ndim=2] map_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_t, ndim=2] parameters,
+        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
+        np.ndarray[DTYPE_t, ndim=3] signal not None,
+        double chrom_mean):
+    cdef long long int fend1, fend2, k, map1
+    cdef double distance, value
+    cdef long long int num_fends = mapping.shape[0]
+    with nogil:
+        for fend1 in range(num_fends - 1):
+            map1 = mapping[fend1]
+            if map1 == -1:
+                continue
+            k = 0
+            # find opposite strand adjacents, skipping same fragment and same strand adjacents
+            fend2 = fend1 + 2
+            if mapping[fend2] >= 0 and fend2 < max_fend[fend1]:
+                 # give starting expected value
+                value = 1.0
+                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                if not corrections is None:
+                    value *= corrections[fend1] * corrections[fend2]
+                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
+                if not gc_indices is None:
+                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
+                if not len_indices is None:
+                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
+                if not map_indices is None:
+                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
                 # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    distance = log(mids[j] - mids[i])
+                if not mids is None:
+                    distance = log(mids[fend2] - mids[fend1])
                     while distance > parameters[k, 0]:
                         k += 1
-                    expected *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[index + mapping[j], 0] += observed
-                signal[index + mapping[j], 1] += expected
+                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                signal[map1, mapping[fend2] - map1 - 1, 1] += value
+            for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
+                if mapping[fend2] == -1:
+                    continue
+                 # give starting expected value
+                value = 1.0
+                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                if not corrections is None:
+                    value *= corrections[fend1] * corrections[fend2]
+                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
+                if not gc_indices is None:
+                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
+                if not len_indices is None:
+                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
+                if not map_indices is None:
+                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
+                # if finding distance, enrichment, or expected, correct for distance
+                if not mids is None:
+                    distance = log(mids[fend2] - mids[fend1])
+                    while distance > parameters[k, 0]:
+                        k += 1
+                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                signal[map1, mapping[fend2] - map1 - 1, 1] += value
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_cis_upper_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
+        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
+        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_t, ndim=2] map_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_t, ndim=2] parameters,
+        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
+        np.ndarray[DTYPE_t, ndim=2] signal not None,
+        double chrom_mean):
+    cdef long long int fend1, fend2, k, index, num_bins, map1
+    cdef double distance, value
+    cdef long long int num_fends = mapping.shape[0]
+    num_bins = int(0.5 + pow(0.25 + signal.shape[0], 0.5))
+    with nogil:
+        for fend1 in range(num_fends - 1):
+            map1 = mapping[fend1]
+            if map1 == -1:
+                continue
+            k = 0
+            index = map1 * num_bins - map1 * (map1 + 1) / 2 - map1 - 1
+            # find opposite strand adjacents, skipping same fragment and same strand adjacents
+            fend2 = fend1 + 2
+            if mapping[fend2] >= 0 and fend2 < max_fend[fend1]:
+                 # give starting expected value
+                value = 1.0
+                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                if not corrections is None:
+                    value *= corrections[fend1] * corrections[fend2]
+                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
+                if not gc_indices is None:
+                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
+                if not len_indices is None:
+                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
+                if not map_indices is None:
+                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
+                # if finding distance, enrichment, or expected, correct for distance
+                if not mids is None:
+                    distance = log(mids[fend2] - mids[fend1])
+                    while distance > parameters[k, 0]:
+                        k += 1
+                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                signal[index + mapping[fend2], 1] += value
+            for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
+                if mapping[fend2] == -1:
+                    continue
+                 # give starting expected value
+                value = 1.0
+                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                if not corrections is None:
+                    value *= corrections[fend1] * corrections[fend2]
+                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
+                if not gc_indices is None:
+                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
+                if not len_indices is None:
+                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
+                if not map_indices is None:
+                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
+                # if finding distance, enrichment, or expected, correct for distance
+                if not mids is None:
+                    distance = log(mids[fend2] - mids[fend1])
+                    while distance > parameters[k, 0]:
+                        k += 1
+                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                signal[index + mapping[fend2], 1] += value
     return None
 
 
@@ -578,243 +417,6 @@ def dynamically_bin_upper_from_upper(
                 if binned[index + y, 0] < minobservations and removefailed == 1:
                     binned[index + y, 0] = 0
                     binned[index + y, 1] = 0
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def dynamically_bin_unbinned_upper(
-        np.ndarray[DTYPE_t, ndim=2] unbinned not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_t, ndim=2] binned not None,
-        int minobservations):
-    cdef long long int x, y, i, j, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, 
-    cdef long long int old_lX, old_uX, old_lY, old_uY, max_dist, min_dist, index, index2
-    cdef double temp_count, temp_exp
-    cdef long long int num_fends = mids.shape[0]
-    with nogil:
-        for x in range(num_fends - 1):
-            index = x * num_fends - x * (x + 1) / 2 - x - 1
-            lX = x
-            uX = x
-            lY = x
-            uY = x
-            for y in range(x + 1, num_fends):
-                # if bin already meets our criteria, skip
-                if binned[index + y, 0] >= minobservations:
-                    lX = x
-                    uX = x
-                    lY = y
-                    uY = y
-                    continue
-                # otherwise shift lower y bound forward 1
-                elif y == x + 1:
-                    lY = y
-                    uY = y
-                else:
-                    old_lX = lX
-                    old_uX = uX
-                    old_lY = lY
-                    old_uY = uY
-                    lY += 1
-                    uY = max(uY, y)
-                    # determine if any bounds are too far away
-                    lX_dist = mids[x] - mids[lX]
-                    uX_dist = mids[uX] - mids[x]
-                    lY_dist = mids[y] - mids[lY]
-                    uY_dist = mids[uY] - mids[y]
-                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                    if min_dist == 0:
-                        lX = x
-                        uX = x
-                        lY = y
-                        uY = y
-                    else:
-                        while lX < x and mids[x] - mids[lX] > min_dist:
-                            lX += 1
-                        while uX > x and mids[uX] - mids[x] > min_dist:
-                            uX -= 1
-                        while lY < y and mids[y] - mids[lY] > min_dist:
-                            lY += 1
-                        while uY > y and mids[uY] - mids[y] > min_dist:
-                            uY -= 1
-                        # check to see total enclosed in rectangle
-                        binned[index + y, 0] = binned[index + y - 1, 0]
-                        binned[index + y, 1] = binned[index + y - 1, 1]
-                        if lX > old_lX:
-                            for i in range(old_lX, lX):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                for j in range(max(i + 1, old_lY), old_uY + 1):
-                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
-                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
-                        if uX < old_uX:
-                            for i in range(uX + 1, old_uX + 1):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                for j in range(max(i + 1, old_lY), old_uY + 1):
-                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
-                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
-                        if lY > old_lY:
-                            for i in range(lX, uX + 1):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                for j in range(max(i + 1, old_lY), lY):
-                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
-                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
-                        if uY < old_uY:
-                            for i in range(lX, uX + 1):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                for j in range(max(i + 1, uY + 1), old_uY + 1):
-                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
-                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
-                        elif old_uY < uY:
-                            for i in range(lX, uX + 1):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                for j in range(max(i + 1, old_uY + 1), uY + 1):
-                                    binned[index + y, 0] += unbinned[index2 + j, 0]
-                                    binned[index + y, 1] += unbinned[index2 + j, 1]
-                # check if we've met our criterion
-                if binned[index + y, 0] < minobservations:
-                    # find distance in each direction
-                    if lX > 0:
-                        lX_dist = mids[x] - mids[lX - 1]
-                    else:
-                        lX_dist = 1000000000
-                    if uX < num_fends - 1:
-                        uX_dist = mids[uX + 1] - mids[x]
-                    else:
-                        uX_dist = 1000000000
-                    if lY > 0:
-                        lY_dist = mids[y] - mids[lY - 1]
-                    else:
-                        lY_dist = 1000000000
-                    if uY < num_fends - 1:
-                        uY_dist = mids[uY + 1] - mids[y]
-                    else:
-                        uY_dist = 1000000000
-                    # determine min distance
-                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                    # keep searching while less minobservations
-                    while binned[index + y, 0] < minobservations:
-                        # find min dist, update distance, and add new row or col of observations
-                        if min_dist == lX_dist:
-                            lX -= 1
-                            if lX > 0:
-                                lX_dist = mids[x] - mids[lX - 1]
-                            else:
-                                lX_dist = 1000000000
-                            index2 = lX * num_fends - lX * (lX + 1) / 2 - lX - 1
-                            for i in range(max(lX + 1, lY), uY + 1):
-                                binned[index + y, 0] += unbinned[index2 + i, 0]
-                                binned[index + y, 1] += unbinned[index2 + i, 1]
-                        elif min_dist == uX_dist:
-                            uX += 1
-                            if uX < num_fends - 1:
-                                uX_dist = mids[uX + 1] - mids[x]
-                            else:
-                                uX_dist = 1000000000
-                            index2 = uX * num_fends - uX * (uX + 1) / 2 - uX - 1
-                            for i in range(max(uX + 1, lY), uY + 1):
-                                binned[index + y, 0] += unbinned[index2 + i, 0]
-                                binned[index + y, 1] += unbinned[index2 + i, 1]
-                        elif min_dist == lY_dist:
-                            lY -= 1
-                            if lY > 0:
-                                lY_dist = mids[y] - mids[lY - 1]
-                            else:
-                                lY_dist = 1000000000
-                            for i in range(lX, min(uX + 1, lY)):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                binned[index + y, 0] += unbinned[index2 + lY, 0]
-                                binned[index + y, 1] += unbinned[index2 + lY, 1]
-                        elif min_dist == uY_dist:
-                            uY += 1
-                            if uY < num_fends - 1:
-                                uY_dist = mids[uY + 1] - mids[y]
-                            else:
-                                uY_dist = 1000000000
-                            for i in range(lX, min(uX + 1, uY)):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                binned[index + y, 0] += unbinned[index2 + uY, 0]
-                                binned[index + y, 1] += unbinned[index2 + uY, 1]
-                        # determine min distance
-                        min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                # else if we've overshot our goal, remove as many rows/cols as needed
-                elif binned[index + y, 0] > minobservations:
-                    # find furthest row or col
-                    lX_dist = mids[x] - mids[lX]
-                    uX_dist = mids[uX] - mids[x]
-                    lY_dist = mids[y] - mids[lY]
-                    uY_dist = mids[uY] - mids[y]
-                    max_dist = max(max(lX_dist, uX_dist), max(lY_dist, uY_dist))
-                    # if bin only includes itself, continue
-                    if max_dist == 0:
-                        continue
-                    continue_search = 1
-                    while continue_search == 1:
-                        continue_search = 0
-                        # find sum of furthest col or row
-                        temp_count = 0.0
-                        temp_exp = 0.0
-                        if lX_dist == max_dist:
-                            index2 = lX * num_fends - lX * (lX + 1) / 2 - lX - 1
-                            for i in range(max(lX + 1, lY), uY + 1):
-                                temp_count += unbinned[index2 + i, 0]
-                                temp_exp += unbinned[index2 + i, 1]
-                            if binned[index + y, 0] - temp_count >= minobservations:
-                                binned[index + y, 0] -= temp_count
-                                binned[index + y, 1] -= temp_exp
-                                lX += 1
-                                if lX < x:
-                                    lX_dist = mids[x] - mids[lX]
-                                else:
-                                    lX_dist = 0
-                                continue_search = 1
-                        elif uX_dist == max_dist:
-                            index2 = uX * num_fends - uX * (uX + 1) / 2 - uX - 1
-                            for i in range(max(uX + 1, lY), uY + 1):
-                                temp_count += unbinned[index2 + i, 0]
-                                temp_exp += unbinned[index2 + i, 1]
-                            if binned[index + y, 0] - temp_count >= minobservations:
-                                binned[index + y, 0] -= temp_count
-                                binned[index + y, 1] -= temp_exp
-                                uX -= 1
-                                if uX > x:
-                                    uX_dist = mids[uX] - mids[x]
-                                else:
-                                    uX_dist = 0
-                                continue_search = 1
-                        elif lY_dist == max_dist:
-                            for i in range(lX, min(uX + 1, lY)):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                temp_count += unbinned[index2 + lY, 0]
-                                temp_exp += unbinned[index2 + lY, 1]
-                            if binned[index + y, 0] - temp_count >= minobservations:
-                                binned[index + y, 0] -= temp_count
-                                binned[index + y, 1] -= temp_exp
-                                lY += 1
-                                if lY < y:
-                                    lY_dist = mids[y] - mids[lY]
-                                else:
-                                    lY_dist = 0
-                                continue_search = 1
-                        elif uY_dist == max_dist:
-                            for i in range(lX, min(uX + 1, uY)):
-                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                                temp_count += unbinned[index2 + uY, 0]
-                                temp_exp += unbinned[index2 + uY, 1]
-                            if binned[index + y, 0] - temp_count >= minobservations:
-                                binned[index + y, 0] -= temp_count
-                                binned[index + y, 1] -= temp_exp
-                                uY -= 1
-                                if uY > y:
-                                    uY_dist = mids[uY] - mids[y]
-                                else:
-                                    uY_dist = 0
-                                continue_search = 1
-                        max_dist = max(max(lX_dist, uX_dist), max(lY_dist, uY_dist))
-                        # if bin only includes itself, continue
-                        if max_dist == 0:
-                            continue_search = 0
     return None
 
 
@@ -1106,61 +708,315 @@ def dynamically_bin_compact_from_compact(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def binned_signal_trans(
+def dynamically_bin_unbinned_upper(
+        np.ndarray[DTYPE_t, ndim=2] unbinned not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
+        np.ndarray[DTYPE_t, ndim=2] binned not None,
+        int minobservations):
+    cdef long long int x, y, i, j, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, 
+    cdef long long int old_lX, old_uX, old_lY, old_uY, max_dist, min_dist, index, index2
+    cdef double temp_count, temp_exp
+    cdef long long int num_fends = mids.shape[0]
+    with nogil:
+        for x in range(num_fends - 1):
+            index = x * num_fends - x * (x + 1) / 2 - x - 1
+            lX = x
+            uX = x
+            lY = x
+            uY = x
+            for y in range(x + 1, num_fends):
+                # if bin already meets our criteria, skip
+                if binned[index + y, 0] >= minobservations:
+                    lX = x
+                    uX = x
+                    lY = y
+                    uY = y
+                    continue
+                # otherwise shift lower y bound forward 1
+                elif y == x + 1:
+                    lY = y
+                    uY = y
+                else:
+                    old_lX = lX
+                    old_uX = uX
+                    old_lY = lY
+                    old_uY = uY
+                    lY += 1
+                    uY = max(uY, y)
+                    # determine if any bounds are too far away
+                    lX_dist = mids[x] - mids[lX]
+                    uX_dist = mids[uX] - mids[x]
+                    lY_dist = mids[y] - mids[lY]
+                    uY_dist = mids[uY] - mids[y]
+                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                    if min_dist == 0:
+                        lX = x
+                        uX = x
+                        lY = y
+                        uY = y
+                    else:
+                        while lX < x and mids[x] - mids[lX] > min_dist:
+                            lX += 1
+                        while uX > x and mids[uX] - mids[x] > min_dist:
+                            uX -= 1
+                        while lY < y and mids[y] - mids[lY] > min_dist:
+                            lY += 1
+                        while uY > y and mids[uY] - mids[y] > min_dist:
+                            uY -= 1
+                        # check to see total enclosed in rectangle
+                        binned[index + y, 0] = binned[index + y - 1, 0]
+                        binned[index + y, 1] = binned[index + y - 1, 1]
+                        if lX > old_lX:
+                            for i in range(old_lX, lX):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                for j in range(max(i + 1, old_lY), old_uY + 1):
+                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
+                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
+                        if uX < old_uX:
+                            for i in range(uX + 1, old_uX + 1):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                for j in range(max(i + 1, old_lY), old_uY + 1):
+                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
+                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
+                        if lY > old_lY:
+                            for i in range(lX, uX + 1):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                for j in range(max(i + 1, old_lY), lY):
+                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
+                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
+                        if uY < old_uY:
+                            for i in range(lX, uX + 1):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                for j in range(max(i + 1, uY + 1), old_uY + 1):
+                                    binned[index + y, 0] -= unbinned[index2 + j, 0]
+                                    binned[index + y, 1] -= unbinned[index2 + j, 1]
+                        elif old_uY < uY:
+                            for i in range(lX, uX + 1):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                for j in range(max(i + 1, old_uY + 1), uY + 1):
+                                    binned[index + y, 0] += unbinned[index2 + j, 0]
+                                    binned[index + y, 1] += unbinned[index2 + j, 1]
+                # check if we've met our criterion
+                if binned[index + y, 0] < minobservations:
+                    # find distance in each direction
+                    if lX > 0:
+                        lX_dist = mids[x] - mids[lX - 1]
+                    else:
+                        lX_dist = 1000000000
+                    if uX < num_fends - 1:
+                        uX_dist = mids[uX + 1] - mids[x]
+                    else:
+                        uX_dist = 1000000000
+                    if lY > 0:
+                        lY_dist = mids[y] - mids[lY - 1]
+                    else:
+                        lY_dist = 1000000000
+                    if uY < num_fends - 1:
+                        uY_dist = mids[uY + 1] - mids[y]
+                    else:
+                        uY_dist = 1000000000
+                    # determine min distance
+                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                    # keep searching while less minobservations
+                    while binned[index + y, 0] < minobservations:
+                        # find min dist, update distance, and add new row or col of observations
+                        if min_dist == lX_dist:
+                            lX -= 1
+                            if lX > 0:
+                                lX_dist = mids[x] - mids[lX - 1]
+                            else:
+                                lX_dist = 1000000000
+                            index2 = lX * num_fends - lX * (lX + 1) / 2 - lX - 1
+                            for i in range(max(lX + 1, lY), uY + 1):
+                                binned[index + y, 0] += unbinned[index2 + i, 0]
+                                binned[index + y, 1] += unbinned[index2 + i, 1]
+                        elif min_dist == uX_dist:
+                            uX += 1
+                            if uX < num_fends - 1:
+                                uX_dist = mids[uX + 1] - mids[x]
+                            else:
+                                uX_dist = 1000000000
+                            index2 = uX * num_fends - uX * (uX + 1) / 2 - uX - 1
+                            for i in range(max(uX + 1, lY), uY + 1):
+                                binned[index + y, 0] += unbinned[index2 + i, 0]
+                                binned[index + y, 1] += unbinned[index2 + i, 1]
+                        elif min_dist == lY_dist:
+                            lY -= 1
+                            if lY > 0:
+                                lY_dist = mids[y] - mids[lY - 1]
+                            else:
+                                lY_dist = 1000000000
+                            for i in range(lX, min(uX + 1, lY)):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                binned[index + y, 0] += unbinned[index2 + lY, 0]
+                                binned[index + y, 1] += unbinned[index2 + lY, 1]
+                        elif min_dist == uY_dist:
+                            uY += 1
+                            if uY < num_fends - 1:
+                                uY_dist = mids[uY + 1] - mids[y]
+                            else:
+                                uY_dist = 1000000000
+                            for i in range(lX, min(uX + 1, uY)):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                binned[index + y, 0] += unbinned[index2 + uY, 0]
+                                binned[index + y, 1] += unbinned[index2 + uY, 1]
+                        # determine min distance
+                        min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                # else if we've overshot our goal, remove as many rows/cols as needed
+                elif binned[index + y, 0] > minobservations:
+                    # find furthest row or col
+                    lX_dist = mids[x] - mids[lX]
+                    uX_dist = mids[uX] - mids[x]
+                    lY_dist = mids[y] - mids[lY]
+                    uY_dist = mids[uY] - mids[y]
+                    max_dist = max(max(lX_dist, uX_dist), max(lY_dist, uY_dist))
+                    # if bin only includes itself, continue
+                    if max_dist == 0:
+                        continue
+                    continue_search = 1
+                    while continue_search == 1:
+                        continue_search = 0
+                        # find sum of furthest col or row
+                        temp_count = 0.0
+                        temp_exp = 0.0
+                        if lX_dist == max_dist:
+                            index2 = lX * num_fends - lX * (lX + 1) / 2 - lX - 1
+                            for i in range(max(lX + 1, lY), uY + 1):
+                                temp_count += unbinned[index2 + i, 0]
+                                temp_exp += unbinned[index2 + i, 1]
+                            if binned[index + y, 0] - temp_count >= minobservations:
+                                binned[index + y, 0] -= temp_count
+                                binned[index + y, 1] -= temp_exp
+                                lX += 1
+                                if lX < x:
+                                    lX_dist = mids[x] - mids[lX]
+                                else:
+                                    lX_dist = 0
+                                continue_search = 1
+                        elif uX_dist == max_dist:
+                            index2 = uX * num_fends - uX * (uX + 1) / 2 - uX - 1
+                            for i in range(max(uX + 1, lY), uY + 1):
+                                temp_count += unbinned[index2 + i, 0]
+                                temp_exp += unbinned[index2 + i, 1]
+                            if binned[index + y, 0] - temp_count >= minobservations:
+                                binned[index + y, 0] -= temp_count
+                                binned[index + y, 1] -= temp_exp
+                                uX -= 1
+                                if uX > x:
+                                    uX_dist = mids[uX] - mids[x]
+                                else:
+                                    uX_dist = 0
+                                continue_search = 1
+                        elif lY_dist == max_dist:
+                            for i in range(lX, min(uX + 1, lY)):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                temp_count += unbinned[index2 + lY, 0]
+                                temp_exp += unbinned[index2 + lY, 1]
+                            if binned[index + y, 0] - temp_count >= minobservations:
+                                binned[index + y, 0] -= temp_count
+                                binned[index + y, 1] -= temp_exp
+                                lY += 1
+                                if lY < y:
+                                    lY_dist = mids[y] - mids[lY]
+                                else:
+                                    lY_dist = 0
+                                continue_search = 1
+                        elif uY_dist == max_dist:
+                            for i in range(lX, min(uX + 1, uY)):
+                                index2 = i * num_fends - i * (i + 1) / 2 - i - 1
+                                temp_count += unbinned[index2 + uY, 0]
+                                temp_exp += unbinned[index2 + uY, 1]
+                            if binned[index + y, 0] - temp_count >= minobservations:
+                                binned[index + y, 0] -= temp_count
+                                binned[index + y, 1] -= temp_exp
+                                uY -= 1
+                                if uY > y:
+                                    uY_dist = mids[uY] - mids[y]
+                                else:
+                                    uY_dist = 0
+                                continue_search = 1
+                        max_dist = max(max(lX_dist, uX_dist), max(lY_dist, uY_dist))
+                        # if bin only includes itself, continue
+                        if max_dist == 0:
+                            continue_search = 0
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_trans_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int64_t, ndim=1] indices,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_t, ndim=3] signal not None,
-        double trans_mean,
-        int start1,
-        int start2,
-        int datatype):
-    cdef long long int i, j, k, bin1, bin2, fend1, fend2
-    cdef double expected, observed
+        np.ndarray[DTYPE_t, ndim=3] signal not None):
+    cdef long long int fend1, fend2, i, stop
     cdef long long int num_fends1 = mapping1.shape[0]
     cdef long long int num_fends2 = mapping2.shape[0]
-    cdef long long int num_bins1 = data.shape[0]
-    cdef long long int num_bins2 = data.shape[1]
     with nogil:
-        for i in range(num_fends1):
-            fend1 = i + start1
-            if filter[fend1] == 0:
+        for fend1 in range(num_fends1 - 1):
+            if mapping1[fend1] == -1:
                 continue
-            bin1 = mapping1[i]
-            k = indices[i]
-            if bin1 == -1:
+            i = indices[fend1]
+            stop = indices[fend1 + 1]
+            while i < stop and data[i, 1] < 0:
+                i += 1 
+            while i < stop and data[i, 1] < num_fends2:
+                fend2 = data[i, 1]
+                if mapping2[fend2] == -1:
+                    i += 1
+                    continue
+                signal[mapping1[fend1], mapping2[fend2], 0] += data[i, 2]
+                i += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_trans_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections1,
+        np.ndarray[DTYPE_t, ndim=1] corrections2,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices1,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices2,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices1,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices2,
+        np.ndarray[DTYPE_int_t, ndim=1] map_indices1,
+        np.ndarray[DTYPE_int_t, ndim=1] map_indices2,
+        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
+        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_t, ndim=2] map_corrections,
+        np.ndarray[DTYPE_t, ndim=3] signal not None,
+        double trans_mean):
+    cdef long long int fend1, fend2, map1, map2
+    cdef double value
+    cdef long long int num_fends1 = mapping1.shape[0]
+    cdef long long int num_fends2 = mapping2.shape[0]
+    with nogil:
+        for fend1 in range(num_fends1 - 1):
+            map1 = mapping1[fend1]
+            if map1 == -1:
                 continue
-            # fill in signal
-            for j in range(num_fends2):
-                fend2 = j + start2
-                if filter[fend2] == 0:
+            for fend2 in range(num_fends2):
+                map2 = mapping2[fend2]
+                if map2 == -1:
                     continue
-                bin2 = mapping2[j]
-                if bin2 == -1:
-                    continue
-                # if requested, find observed signal
-                if datatype < 4:
-                    while k < indices[i + 1] and data[k, 1] < fend2:
-                        k += 1
-                    if k < indices[i + 1] and data[k, 1] == fend2:
-                        observed = data[k, 2]
-                    else:
-                        observed = 0.0
-                else:
-                    observed = 1.0
-                # find expected signal
-                expected = 1.0
-                # if finding fend, enrichment, or expected, correct for fend
-                if datatype > 0 and datatype != 2:
-                    expected *= corrections[fend1] * corrections[fend2]
-                # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    expected *= trans_mean
-                signal[bin1, bin2, 0] += observed
-                signal[bin1, bin2, 1] += expected
+                 # give starting expected value
+                value = trans_mean
+                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                if not corrections1 is None:
+                    value *= corrections1[fend1] * corrections2[fend2]
+                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
+                if not gc_indices1 is None:
+                    value *= gc_corrections[gc_indices1[fend1], gc_indices2[fend2]]
+                if not len_indices1 is None:
+                    value *= len_corrections[len_indices1[fend1], len_indices2[fend2]]
+                if not map_indices1 is None:
+                    value *= map_corrections[map_indices1[fend1], map_indices2[fend2]]
+                signal[map1, map2, 1] += value
     return None
 
 
@@ -1258,33 +1114,6 @@ def dynamically_bin_trans(
                 if binned[x, y, 0] < minobservations and removefailed == 1:
                     binned[x, y, 0] = 0
                     binned[x, y, 1] = 0
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def remap_counts(
-        np.ndarray[DTYPE_int_t, ndim=1] indices0,
-        np.ndarray[DTYPE_int_t, ndim=1] indices1,
-        np.ndarray[DTYPE_int_t, ndim=1] data,
-        np.ndarray[DTYPE_int_t, ndim=2] temp_data):
-    cdef long long int i, j, fend0, fend1
-    cdef long long int num_pairs = indices0.shape[0]
-    cdef long long int num_data = temp_data.shape[0]
-    with nogil:
-        i = 0
-        for j in range(num_data):
-            fend0 = temp_data[j, 0]
-            fend1 = temp_data[j, 1]
-            if fend0 < 0 or fend1 < 0:
-                continue
-            while i < num_pairs and indices0[i] < fend0:
-                i += 1
-            while i < num_pairs and indices0[i] == fend0 and indices1[i] < fend1:
-                i += 1
-            if fend0 == indices0[i] and fend1 == indices1[i]:
-                data[i] = temp_data[j, 2]
     return None
 
 
@@ -1424,4 +1253,3 @@ def regression_bin_expected(
                     index += k * distance_div
                 counts[index, 1] += 1
     return None
-

@@ -86,11 +86,7 @@ def main():
     data, mapping = hic.cis_heatmap(chrom=options.chrom, binsize=options.binsize, start=options.start,
                                     stop=options.stop, datatype=options.datatype, arraytype=arraytype,
                                     maxdistance=options.maxdist, returnmapping=True, skipfiltered=True)
-    if options.binsize == 0:
-        mapping = numpy.hstack((hic.fends['fends']['start'][mapping].reshape(-1, 1),
-                               hic.fends['fends']['stop'][mapping].reshape(-1, 1)))
-    else:
-        mapping = mapping[:, 2:]
+    mapping = mapping[:, :2]
     output = open(args[1], 'w')
     if arraytype == 'upper':
         pos = 0
