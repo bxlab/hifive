@@ -16,7 +16,7 @@ if 'setuptools.extension' in sys.modules:
 
 def main():
     setup(name = "hifive",
-          version = "2.1.0",
+          version = "2.2.0",
           description = 'Python library for normalizing and analyzing HiC and 5C data',
           zip_safe = False,
           include_package_data = True,
@@ -46,6 +46,12 @@ def get_extension_modules():
     extensions.append(Extension("hifive.libraries._hic_binning", ["lib/hifive/libraries/_hic_binning.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++"))
     extensions.append(Extension("hifive.libraries._fivec_binning", ["lib/hifive/libraries/_fivec_binning.pyx"],
+                                include_dirs=[numpy.get_include()], language="c++"))
+    # Interaction functions
+    extensions.append(Extension("hifive.libraries._hic_interactions", ["lib/hifive/libraries/_hic_interactions.pyx"],
+                                include_dirs=[numpy.get_include()], language="c++"))
+    # Optimization functions
+    extensions.append(Extension("hifive.libraries._hic_optimize", ["lib/hifive/libraries/_hic_optimize.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++"))
     # Boundary Index functions
     extensions.append(Extension("hifive.libraries._bi", ["lib/hifive/libraries/_bi.pyx"],
