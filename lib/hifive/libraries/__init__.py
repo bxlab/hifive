@@ -2,11 +2,9 @@ import sys
 
 import _bi
 import _fivec_binning
+import _fivec_optimize
 import _hic_binning
-import _fivec_distance
 import _hic_distance
-import _fivec_binning
-import _hic_binning
 import _hic_interactions
 import _hic_optimize
 

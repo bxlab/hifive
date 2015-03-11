@@ -38,17 +38,21 @@ def find_cis_compact_observed(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None):
-    cdef long long int fend1, fend2, i
+    cdef long long int fend1, fend2, i, map1, map2
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
         for fend1 in range(num_fends - 1):
-            if mapping[fend1] == -1:
+            map1 = mapping[fend1]
+            if map1 == -1:
                 continue
             for i in range(indices[fend1], indices[fend1 + 1]):
                 fend2 = data[i, 1]
-                if mapping[fend2] == -1 or fend2 > max_fend[fend1]:
+                if fend2 >= num_fends:
                     continue
-                signal[mapping[fend1], mapping[fend2] - mapping[fend1] - 1, 0] += data[i, 2]
+                map2 = mapping[fend2]
+                if map2 == -1 or map1 == map2 or fend2 >= max_fend[fend1]:
+                    continue
+                signal[map1, map2 - map1 - 1, 0] += data[i, 2]
     return None
 
 
@@ -61,19 +65,23 @@ def find_cis_upper_observed(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None):
-    cdef long long int fend1, fend2, i, index, num_bins
+    cdef long long int fend1, fend2, i, index, map1, map2
     cdef long long int num_fends = mapping.shape[0]
-    num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
     with nogil:
         for fend1 in range(num_fends - 1):
-            if mapping[fend1] == -1:
+            map1 = mapping[fend1]
+            if map1 == -1:
                 continue
-            index = mapping[i] * num_bins - mapping[i] * (mapping[i] + 1) / 2 - mapping[i] - 1
+            index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
             for i in range(indices[fend1], indices[fend1 + 1]):
                 fend2 = data[i, 1]
-                if mapping[fend2] == -1 or fend2 > max_fend[fend1]:
+                if fend2 >= num_fends:
                     continue
-                signal[index + mapping[fend2], 0] += data[i, 2]
+                map2 = mapping[fend2]
+                if map2 == -1 or map2 == map1 or fend2 >= max_fend[fend1]:
+                    continue
+                signal[index + map2, 0] += data[i, 2]
     return None
 
 
@@ -94,7 +102,7 @@ def find_cis_compact_expected(
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         double chrom_mean):
-    cdef long long int fend1, fend2, k, map1
+    cdef long long int fend1, fend2, k, map1, map2
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
@@ -105,7 +113,8 @@ def find_cis_compact_expected(
             k = 0
             # find opposite strand adjacents, skipping same fragment and same strand adjacents
             fend2 = fend1 + 2
-            if mapping[fend2] >= 0 and fend2 < max_fend[fend1]:
+            map2 = mapping[fend2]
+            if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
                  # give starting expected value
                 value = 1.0
                 # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
@@ -119,14 +128,15 @@ def find_cis_compact_expected(
                 if not map_indices is None:
                     value *= map_corrections[map_indices[fend1], map_indices[fend2]]
                 # if finding distance, enrichment, or expected, correct for distance
-                if not mids is None:
+                if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
                     while distance > parameters[k, 0]:
                         k += 1
                     value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[map1, mapping[fend2] - map1 - 1, 1] += value
+                signal[map1, map2 - map1 - 1, 1] += value
             for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
-                if mapping[fend2] == -1:
+                map2 = mapping[fend2]
+                if map2 == -1 or map2 == map1:
                     continue
                  # give starting expected value
                 value = 1.0
@@ -141,12 +151,12 @@ def find_cis_compact_expected(
                 if not map_indices is None:
                     value *= map_corrections[map_indices[fend1], map_indices[fend2]]
                 # if finding distance, enrichment, or expected, correct for distance
-                if not mids is None:
+                if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
                     while distance > parameters[k, 0]:
                         k += 1
                     value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[map1, mapping[fend2] - map1 - 1, 1] += value
+                signal[map1, map2 - map1 - 1, 1] += value
     return None
 
 
@@ -167,20 +177,21 @@ def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         double chrom_mean):
-    cdef long long int fend1, fend2, k, index, num_bins, map1
+    cdef long long int fend1, fend2, k, index, map1, map2
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
-    num_bins = int(0.5 + pow(0.25 + signal.shape[0], 0.5))
+    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
     with nogil:
         for fend1 in range(num_fends - 1):
             map1 = mapping[fend1]
             if map1 == -1:
                 continue
             k = 0
-            index = map1 * num_bins - map1 * (map1 + 1) / 2 - map1 - 1
+            index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
             # find opposite strand adjacents, skipping same fragment and same strand adjacents
             fend2 = fend1 + 2
-            if mapping[fend2] >= 0 and fend2 < max_fend[fend1]:
+            map2 = mapping[fend2]
+            if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
                  # give starting expected value
                 value = 1.0
                 # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
@@ -194,14 +205,15 @@ def find_cis_upper_expected(
                 if not map_indices is None:
                     value *= map_corrections[map_indices[fend1], map_indices[fend2]]
                 # if finding distance, enrichment, or expected, correct for distance
-                if not mids is None:
+                if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
                     while distance > parameters[k, 0]:
                         k += 1
                     value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[index + mapping[fend2], 1] += value
+                signal[index + map2, 1] += value
             for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
-                if mapping[fend2] == -1:
+                map2 = mapping[fend2]
+                if map2 == -1 or map2 == map1:
                     continue
                  # give starting expected value
                 value = 1.0
@@ -216,12 +228,12 @@ def find_cis_upper_expected(
                 if not map_indices is None:
                     value *= map_corrections[map_indices[fend1], map_indices[fend2]]
                 # if finding distance, enrichment, or expected, correct for distance
-                if not mids is None:
+                if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
                     while distance > parameters[k, 0]:
                         k += 1
                     value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[index + mapping[fend2], 1] += value
+                signal[index + map2, 1] += value
     return None
 
 
@@ -964,7 +976,7 @@ def find_trans_observed(
                 i += 1 
             while i < stop and data[i, 1] < num_fends2:
                 fend2 = data[i, 1]
-                if mapping2[fend2] == -1:
+                if fend2 >= num_fends2 or mapping2[fend2] == -1:
                     i += 1
                     continue
                 signal[mapping1[fend1], mapping2[fend2], 0] += data[i, 2]

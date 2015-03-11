@@ -71,6 +71,8 @@ class HiC(object):
         self.len_bins = None
         self.len_corrections = None
         self.corrections = None
+        self.distance_parameters = None
+        self.chromosome_means = None
         self.normalization = 'none'
         if mode != 'w':
             self.load()
@@ -439,9 +441,10 @@ class HiC(object):
             print >> sys.stderr, ("Done\n"),
         return None
 
-    def find_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0001, burnin_iterations=10000,
-                              annealing_iterations=10000, learningrate=0.1, display=0, chroms=None,
-                              precalculate=True, precorrect=False):
+    def find_probability_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0001,
+                                          burnin_iterations=10000, annealing_iterations=10000,
+                                          learningrate=0.1, display=0, chroms=[], precalculate=True,
+                                          precorrect=False):
         """
         Using gradient descent, learn correction values for each valid fend based on a Poisson distribution of observations. This function is MPI compatible.
 
@@ -647,14 +650,15 @@ class HiC(object):
                     print >> sys.stderr, ("\r%s\rFinding regression corrections for chromosome %s...") % (' ' * 80,
                                                                                                           chrom),
                 if not gc_corrections is None:
-                    gc_indices = numpy.searchsorted(self.gc_bins, self.fends['fends']['gc'][rev_mapping + startfend])
+                    gc_indices = numpy.searchsorted(self.gc_bins,
+                                 self.fends['fends']['gc'][rev_mapping + start_fend]).astype(numpy.int32)
                 if not len_corrections is None:
                     len_indices = numpy.searchsorted(self.len_bins,
-                                                     self.fends['fends']['stop'][rev_mapping + startfend] -
-                                                     self.fends['fends']['start'][rev_mapping + startfend])
+                                  self.fends['fends']['stop'][rev_mapping + start_fend] -
+                                  self.fends['fends']['start'][rev_mapping + start_fend]).astype(numpy.int32)
                 if not map_corrections is None:
                     map_indices = numpy.searchsorted(self.map_bins,
-                                                     self.fends['fends']['mappability'][rev_mapping + startfend])
+                                  self.fends['fends']['mappability'][rev_mapping + start_fend]).astype(numpy.int32)
                 _optimize.find_regression_correction_adjustment(nonzero_means,
                                                                 nonzero_indices0,
                                                                 nonzero_indices1,
@@ -713,15 +717,15 @@ class HiC(object):
                         findcost = True
                     else:
                         findcost = False
-                    _optimized.calculate_prob_gradients(zero_indices0,
-                                                        zero_indices1,
-                                                        nonzero_indices0,
-                                                        nonzero_indices1,
-                                                        nonzero_means,
-                                                        zero_means,
-                                                        counts,
-                                                        corrections,
-                                                        gradients)
+                    _optimize.calculate_prob_gradients(zero_indices0,
+                                                       zero_indices1,
+                                                       nonzero_indices0,
+                                                       nonzero_indices1,
+                                                       nonzero_means,
+                                                       zero_means,
+                                                       counts,
+                                                       corrections,
+                                                       gradients)
                     if findcost:
                         cost = _optimize.calculate_prob_cost(zero_indices0,
                                                              zero_indices1,
@@ -849,15 +853,13 @@ class HiC(object):
             else:
                 mininteractions = 1
         # make sure usereads has a valid value
-        read_int = {'cis':0, 'all':1, 'trans':2}
-        if usereads not in read_int:
+        if usereads not in ['cis', 'trans', 'all']:
             if not self.silent:
                 print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
             return None
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
         self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
-        useread_int = read_int[usereads]
         if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
             binned = 1
         else:
@@ -994,7 +996,7 @@ class HiC(object):
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rPrecalculating distances...") % (' ' * 80),
             mu = 1.0
-            all_chrints = hic.fends['fends']['chr'][data[:, 0]]
+            all_chrints = self.fends['fends']['chr'][data[:, 0]]
             chrint_indices = numpy.r_[0, numpy.bincount(all_chrints)]
             for i in range(1, chrint_indices.shape[0]):
                 chrint_indices[i] += chrint_indices[i - 1]
@@ -1157,7 +1159,7 @@ class HiC(object):
     def find_regression_fend_corrections(self, mindistance=0, maxdistance=0, chroms=None, num_bins=[20, 20, 20],
                                          model=['gc', 'len', 'distance'], learning_threshold=1.0, max_iterations=10):
         """
-        Using Poisson regression, learn correction values for combinations of model parameter bins. This function is MPI compatible.
+        Using multinomial regression, learn correction values for combinations of model parameter bins. This function is MPI compatible.
 
         :param mindistance: The minimum inter-fend distance to be included in modeling.
         :type mindistance: int.
@@ -1292,7 +1294,7 @@ class HiC(object):
             node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
             data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
             _binning.regression_bin_observed(data,
-                                             self.filter,
+                                             filt,
                                              mids,
                                              bin_counts,
                                              gc_indices,
@@ -1528,7 +1530,7 @@ class HiC(object):
             new_ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, self.map_corrections,
                              map_indices, distance_corrections, distance_indices, bin_counts, prior)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLearning regression corrections... iteration:%02i  ll:%f\n") % (' ' * 80,
+                print >> sys.stderr, ("\r%s\rLearning regression corrections... iteration:%02i  ll:%f") % (' ' * 80,
                                       iteration, new_ll),
             delta = ll - new_ll
             if delta < 0.0:
@@ -1663,18 +1665,18 @@ class HiC(object):
 
         """
         # check that all values are acceptable
-        datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
-        if datatype not in datatypes:
+        if datatype not in ['raw', 'fend', 'distance', 'enrichment', 'expected']:
             if not self.silent:
                 print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
             return None
-        else:
-            datatype_int = datatypes[datatype]
-        if ((dynamically_binned == True and arraytype not in ['compact', 'upper']) or
-            (arraytype not in ['full', 'compact', 'upper'])):
+        if arraytype not in ['full', 'compact', 'upper']:
             if not self.silent:
-                print >> sys.stderr, ("Unrecognized or inappropriate array type. No data returned.\n"),
+                print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
             return None
+        if dynamically_binned and arraytype == 'full':
+            dynamic_arraytype = 'upper'
+        else:
+            dynamic_arraytype = arraytype
         # determine if data is to be dynamically binned
         if not dynamically_binned:
             data = hic_binning.find_cis_signal(self, chrom, binsize=binsize, binbounds=binbounds, start=start,
@@ -1685,17 +1687,23 @@ class HiC(object):
             expansion, exp_mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop,
                                                                 startfend=startfend, stopfend=stopfend,
                                                                 binsize=expansion_binsize, binbounds=None,
-                                                                datatype=datatype, arraytype=arraytype,
+                                                                datatype=datatype, arraytype=dynamic_arraytype,
                                                                 maxdistance=maxdistance, returnmapping=True,
                                                                 silent=self.silent)
             binned, mapping = hic_binning.bin_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
                                                          stopfend=stopfend, binsize=binsize, binbounds=binbounds,
-                                                         datatype=datatype, arraytype=arraytype,
+                                                         datatype=datatype, arraytype=dynamic_arraytype,
                                                          maxdistance=maxdistance, returnmapping=True,
                                                          silent=self.silent)
             hic_binning.dynamically_bin_cis_array(expansion, exp_mapping, binned, mapping,
                                                   minobservations=minobservations, searchdistance=searchdistance,
                                                   removefailed=removefailed, silent=self.silent)
+            if arraytype == 'full':
+                indices = numpy.triu_indices(mapping.shape[0], 1)
+                full_binned = numpy.zeros((mapping.shape[0], mapping.shape[0], 2), dtype=numpy.float32)
+                full_binned[indices[0], indices[1], :] = binned
+                full_binned[indices[1], indices[0], :] = binned
+                binned = full_binned
             if returnmapping:
                 data = [binned, mapping]
             else:
@@ -1775,13 +1783,10 @@ class HiC(object):
         :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
         """
         # check that all values are acceptable
-        datatypes = {'raw': 0, 'fend': 1, 'distance': 2, 'enrichment': 3, 'expected': 4}
-        if datatype not in datatypes:
+        if datatype not in ['raw', 'fend', 'distance', 'enrichment', 'expected']:
             if not self.silent:
                 print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
             return None
-        else:
-            datatype_int = datatypes[datatype]
         # determine if data is to be dynamically binned
         if not dynamically_binned:
             data = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,

@@ -1,8 +1,7 @@
 # distutils: language = c++
 
-"""These functions provide increased speed in handling the distance-
-dependent signal functions necessary for supporting fivec analysis using
-HiFive.
+"""These functions provide increased speed in handling the correction
+optimization functions necessary for supporting fivec analysis using HiFive.
 """
 
 import cython
@@ -29,54 +28,32 @@ cdef extern from "math.h":
     double ceil(double x) nogil
 
 cdef extern from "_normal.hpp":
-    double stdnorm_cdf( double z ) nogil
-    double stdnorm_pdf( double z ) nogil
+    double stdnorm_pdf(double x) nogil
+    double stdnorm_cdf(double x) nogil
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_max_frag(
-        np.ndarray[DTYPE_int_t, ndim=1] max_fragment not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_int_t, ndim=1] starts not None,
-        np.ndarray[DTYPE_int_t, ndim=1] stops not None,
-        int maxdistance):
-    cdef long long int i, j, k
-    cdef long long int num_regions = starts.shape[0]
+def find_regression_correction_adjustment(
+        np.ndarray[DTYPE_t, ndim=1] corrections not None,
+        np.ndarray[DTYPE_int_t, ndim=2] indices not None,
+        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
+        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_t, ndim=2] map_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] map_indices):
+    cdef long long int i, frag1, frag2
+    cdef long long int num_frags = corrections.shape[0]
     with nogil:
-        for i in range(num_regions):
-            k = starts[i] + 1
-            for j in range(starts[i], stops[i]):
-                if maxdistance == 0:
-                    max_fragment[j] = stops[i]
-                else:
-                    while k < stops[i] and mids[k] - mids[j] < maxdistance:
-                        k += 1
-                    max_fragment[j] = k
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def find_fragment_interactions(
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int64_t, ndim=1] indices not None,
-        np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fragment not None):
-    cdef long long int i, j, k
-    cdef long long int num_frags = filter.shape[0]
-    with nogil:
-        for i in range(num_frags - 1):
-            if filter[i] == 0:
-                continue
-            for j in range(indices[i], indices[i + 1]):
-                k = data[j, 1]
-                if filter[k] > 0 and k < max_fragment[i]:
-                    interactions[i] += 1
-                    interactions[k] += 1
+        for i in range(num_frags):
+            frag1 = indices[i, 0]
+            frag2 = indices[i, 1]
+            if not gc_indices is None:
+                corrections[i] += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
+            if not len_indices is None:
+                corrections[i] += len_corrections[len_indices[frag1], len_indices[frag2]]
     return None
 
 
@@ -150,15 +127,26 @@ def update_corrections(
 @cython.cdivision(True)
 def find_fragment_means(
         np.ndarray[DTYPE_t, ndim=1] distance_means,
+        np.ndarray[DTYPE_t, ndim=1] trans_means,
         np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
         np.ndarray[DTYPE_64_t, ndim=1] fragment_means not None,
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_t, ndim=1] log_counts not None,
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_t, ndim=1] log_counts,
+        np.ndarray[DTYPE_t, ndim=1] trans_log_counts,
         np.ndarray[DTYPE_t, ndim=1] corrections not None):
-    cdef long long int i, frag1, frag2
+    cdef long long int i, frag1, frag2, num_data, num_trans
     cdef double cost, temp
     cdef long long int num_frags = interactions.shape[0]
-    cdef long long int num_data = data.shape[0]
+    if not data is None:
+        num_data = data.shape[0]
+    else:
+        num_data = 0
+    if not trans_data is None:
+        num_trans = trans_data.shape[0]
+    else:
+        num_trans = 0
+
     with nogil:
         cost = 0.0
         for i in range(num_frags):
@@ -170,6 +158,15 @@ def find_fragment_means(
                 temp = log_counts[i] - corrections[frag1] - corrections[frag2]
             else:
                 temp = log_counts[i] - distance_means[i] - corrections[frag1] - corrections[frag2]
+            fragment_means[frag1] += temp
+            fragment_means[frag2] += temp
+        for i in range(num_trans):
+            frag1 = trans_data[i, 0]
+            frag2 = trans_data[i, 1]
+            if trans_means is None:
+                temp = trans_log_counts[i] - corrections[frag1] - corrections[frag2]
+            else:
+                temp = trans_log_counts[i] - trans_means[i] - corrections[frag1] - corrections[frag2]
             fragment_means[frag1] += temp
             fragment_means[frag2] += temp
         for i in range(num_frags):

@@ -31,252 +31,163 @@ cdef extern from "math.h":
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_fragment_coverage(
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int64_t, ndim=1] data_indices not None,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_int_t, ndim=1] starts not None,
-        np.ndarray[DTYPE_int_t, ndim=1] stops not None,
-        np.ndarray[DTYPE_int_t, ndim=1] coverage not None,
-        int mincoverage):
-    cdef long long int i, j, frag1, valid
-    cdef long long int num_regions = starts.shape[0]
-    cdef long long int num_frags = filter.shape[0]
+def find_cis_compact_observed(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_t, ndim=3] signal not None):
+    cdef long long int frag1, frag2, i, map1, map2
+    cdef long long int num_frags = mapping.shape[0]
     with nogil:
-        valid = 0
-        for i in range(num_regions):
-            for frag1 in range(starts[i], stops[i] - 1):
-                if filter[frag1] == 0:
+        for frag1 in range(num_frags - 1):
+            map1 = mapping[frag1]
+            if map1 == 0:
+                continue
+            if map1 < 0:
+                map1 = -1 - map1
+            else:
+                map1 = map1 - 1
+            for i in range(indices[frag1], indices[frag1 + 1]):
+                frag2 = data[i, 1]
+                if frag2 >= num_frags:
                     continue
-                for j in range(data_indices[frag1], data_indices[frag1 + 1]):
-                    if filter[data[j, 1]] == 0:
-                        continue
-                    coverage[frag1] += 1
-                    coverage[data[j, 1]] += 1
-        for i in range(num_frags):
-            if coverage[i] < mincoverage:
-                filter[i] = 0
-            elif filter[i] > 0:
-                valid += 1
-    return valid
+                map2 = mapping[frag2]
+                if map2 == 0:
+                    continue
+                if map2 < 0:
+                    signal[map1, -1 - map2, 0] += data[i, 2]
+                else:
+                    signal[map2 - 1, map1, 0] += data[i, 2]
+    return None
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def unbinned_signal_compact(
+def find_cis_upper_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
+        np.ndarray[DTYPE_t, ndim=2] signal not None):
+    cdef long long int frag1, frag2, i, index, map1, map2
+    cdef long long int num_frags = mapping.shape[0]
+    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    with nogil:
+        for frag1 in range(num_frags - 1):
+            map1 = mapping[frag1]
+            if map1 == -1:
+                continue
+            index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
+            for i in range(indices[frag1], indices[frag1 + 1]):
+                frag2 = data[i, 1]
+                if frag2 >= num_frags:
+                    continue
+                map2 = mapping[frag2]
+                if map2 == -1 or map2 == map1:
+                    continue
+                signal[index + map2, 0] += data[i, 2]
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_cis_compact_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
+        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_int_t, ndim=1] strands,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
-        double mu,
         double gamma,
-        double sigma,
-        int datatype):
-    cdef long long int frag1, frag2, i, j, distance, num_data
+        double region_mean):
+    cdef long long int frag1, frag2, map1, map2, strand1
+    cdef double distance, value
     cdef long long int num_frags = mapping.shape[0]
-    cdef long long int xdim = signal.shape[0]
-    cdef long long int ydim = signal.shape[1]
-    if not data is None:
-        num_data = data.shape[0]
-    else:
-        num_data = 0
+    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
     with nogil:
-        # if finding anything but expected, fill in actual signal
-        if datatype < 4:
-            for i in range(num_data):
-                if data[i, 1] >= num_frags or mapping[data[i, 0]] == 0 or mapping[data[i, 1]] == 0:
-                    continue
-                if filter[data[i, 0]] == 0 or filter[data[i, 1]] == 0:
-                    continue
-                if mapping[data[i, 0]] > 0:
-                    frag1 = mapping[data[i, 0]] - 1
-                    frag2 = -mapping[data[i, 1]] - 1
-                else:
-                    frag1 = mapping[data[i, 1]] - 1
-                    frag2 = -mapping[data[i, 0]] - 1
-                signal[frag1, frag2, 0] = data[i, 2]
-        # fill in expected signal
-        frag1 = 0
-        for i in range(xdim):
-            while frag1 < num_frags - 1 and mapping[frag1] - 1 != i:
-                frag1 += 1
-            if filter[frag1] == 0:
+        for frag1 in range(num_frags - 1):
+            map1 = mapping[frag1]
+            if map1 == 0:
                 continue
-            frag2 = 0
-            for j in range(ydim):
-                while frag2 < num_frags - 1 and -mapping[frag2] - 1 != j:
-                    frag2 += 1
-                if filter[frag2] == 0:
+            if map1 < 0:
+                map1 = -1 - map1
+            else:
+                map1 = map1 - 1
+            strand1 = strands[frag1]
+            for frag2 in range(frag1 + 1, num_frags):
+                map2 = mapping[frag2]
+                if strands[frag2] == strand1 or map2 == 0:
                     continue
-                # give starting expected value
-                if datatype > 1:
-                    signal[i, j, 1] = exp(mu)
-                else:
-                    signal[i, j, 1] = 1.0
-                # if finding fragment, enrichment, or expected, correct for fragment
-                if datatype > 0 and datatype != 2:
-                    signal[i, j, 1] *= exp(corrections[frag1] + corrections[frag2])
+                 # give starting expected value
+                value = 0.0
+                # if finding frag, enrichment, or expected, and using express or probability bias correction, correct for frag
+                if not corrections is None:
+                    value += corrections[frag1] + corrections[frag2]
+                # if finding frag, enrichment, or expected, and using regression bias correction, correct for frag
+                if not gc_indices is None:
+                    value += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
+                if not len_indices is None:
+                    value += len_corrections[len_indices[frag1], len_indices[frag2]]
                 # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    if frag1 < frag2:
-                        distance = mids[frag2] - mids[frag1]
-                    else:
-                        distance = mids[frag1] - mids[frag2]
-                    signal[i, j, 1] *= exp(-gamma * log(distance))
-                # if finding expected only, fill in filter values for observed signal
-                if datatype == 4:
-                    signal[i, j, 0] = 1.0
-                # if finding enrichment, scale both observed and expected values by sigma
-                if datatype == 3:
-                    signal[i, j, 0] = pow(signal[i, j, 0], 1.0 / sigma)
-                    signal[i, j, 1] = pow(signal[i, j, 1], 1.0 / sigma)
+                if gamma != 0.0:
+                    distance = log(mids[frag2] - mids[frag1])
+                    value += region_mean - distance * gamma
+                if strand1 == 0:
+                    signal[map1, -1 - map2, 1] += exp(value)
+                else:
+                    signal[map2 - 1, map1, 1] += exp(value)
     return None
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def unbinned_signal_upper(
-        np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int64_t, ndim=1] indices,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_int_t, ndim=1] strands not None,
+def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
+        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_int_t, ndim=1] strands,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
-        double mu,
         double gamma,
-        double sigma,
-        int num_bins,
-        int datatype):
-    cdef long long int frag1, frag2, i, j, k, index, distance, num_data
+        double region_mean):
+    cdef long long int frag1, frag2, index, map1, map2, strand1
+    cdef double distance, value
     cdef long long int num_frags = mapping.shape[0]
-    if not data is None:
-        num_data = data.shape[0]
-    else:
-        num_data = 0
+    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
     with nogil:
-        # if finding anything but expected, fill in actual signal
-        if datatype < 4:
-            for frag1 in range(num_frags - 1):
-                if filter[frag1] == 0:
-                    continue
-                i = mapping[frag1]
-                index = i * num_bins - i * (i + 1) / 2 - i - 1
-                for k in range(indices[frag1], indices[frag1 + 1]):
-                    frag2 = data[k, 1]
-                    if frag2 >= num_frags or filter[frag2] == 0:
-                        continue
-                    j = mapping[frag2]
-                    signal[index + j, 0] = data[k, 2]
-        # fill in expected signal
         for frag1 in range(num_frags - 1):
-            if filter[frag1] == 0:
+            map1 = mapping[frag1]
+            if map1 == -1:
                 continue
-            i = mapping[frag1]
-            index = i * num_bins - i * (i + 1) / 2 - i - 1
+            strand1 = strands[frag1]
+            index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
             for frag2 in range(frag1 + 1, num_frags):
-                if filter[frag2] == 0 or strands[frag1] == strands[frag2]:
+                map2 = mapping[frag2]
+                if strands[frag2] == strand1 or map2 == -1 or map2 == map1:
                     continue
-                j = mapping[frag2]
-                # give starting expected value
-                if datatype > 1:
-                    signal[index + j, 1] = exp(mu)
-                else:
-                    signal[index + j, 1] = 1.0
-                # if finding fragment, enrichment, or expected, correct for fragment
-                if datatype > 0 and datatype != 2:
-                    signal[index + j, 1] *= exp(corrections[frag1] + corrections[frag2])
+                 # give starting expected value
+                value = 0.0
+                # if finding frag, enrichment, or expected, and using express or probability bias correction, correct for frag
+                if not corrections is None:
+                    value += corrections[frag1] + corrections[frag2]
+                # if finding frag, enrichment, or expected, and using regression bias correction, correct for frag
+                if not gc_indices is None:
+                    value += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
+                if not len_indices is None:
+                    value += len_corrections[len_indices[frag1], len_indices[frag2]]
                 # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    distance = mids[frag2] - mids[frag1]
-                    signal[index + j, 1] *= exp(-gamma * log(distance))
-                # if finding expected only, fill in filter values for observed signal
-                if datatype == 4:
-                    signal[index + j, 0] = 1.0
-                # if finding enrichment, scale both observed and expected values by sigma
-                if datatype == 3:
-                    signal[index + j, 0] = pow(signal[index + j, 0], 1.0 / sigma)
-                    signal[index + j, 1] = pow(signal[index + j, 1], 1.0 / sigma)
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def binned_signal_upper(
-        np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int64_t, ndim=1] indices,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
-        np.ndarray[DTYPE_int_t, ndim=1] strands not None,
-        np.ndarray[DTYPE_t, ndim=2] signal not None,
-        double mu,
-        double gamma,
-        double sigma,
-        int datatype,
-        int num_bins):
-    cdef long long int frag1, frag2, i, j, k, index, distance, num_data
-    cdef double observed, expected
-    cdef long long int num_frags = mapping.shape[0]
-    if not data is None:
-        num_data = data.shape[0]
-    else:
-        num_data = 0
-    with nogil:
-        # if finding anything but expected, fill in actual signal
-        if datatype < 4:
-            for frag1 in range(num_frags - 1):
-                if filter[frag1] == 0:
-                    continue
-                i = mapping[frag1]
-                index = i * num_bins - i * (i + 1) / 2 - i - 1
-                for k in range(indices[frag1], indices[frag1 + 1]):
-                    frag2 = data[k, 1]
-                    if frag2 >= num_frags or filter[frag2] == 0 or strands[frag1] == strands[frag2]:
-                        continue
-                    j = mapping[frag2]
-                    if i == j:
-                        continue
-                    observed = data[k, 2]
-                    if datatype == 3:
-                        observed = pow(observed, 1.0 / sigma)
-                    signal[index + j, 0] += observed
-        # fill in expected signal
-        for frag1 in range(num_frags - 1):
-            if filter[frag1] == 0:
-                continue
-            i = mapping[frag1]
-            index = i * num_bins - i * (i + 1) / 2 - i - 1
-            for frag2 in range(frag1 + 1, num_frags):
-                j = mapping[frag2]
-                if filter[frag2] == 0 or strands[frag1] == strands[frag2] or i == j:
-                    continue
-                # give starting expected value
-                if datatype > 1:
-                    expected = exp(mu)
-                else:
-                    expected = 1.0
-                # if finding fragment, enrichment, or expected, correct for fragment
-                if datatype > 0 and datatype != 2:
-                    expected *= exp(corrections[frag1] + corrections[frag2])
-                # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    distance = mids[frag2] - mids[frag1]
-                    expected *= exp(-gamma * log(distance))
-                # if finding expected only, fill in filter values for observed signal
-                if datatype == 4:
-                    signal[index + j, 0] += 1.0
-                # if finding enrichment, scale both observed and expected values by sigma
-                if datatype == 3:
-                    expected = pow(expected, 1.0 / sigma)
-                signal[index + j, 1] += expected
+                if gamma != 0.0:
+                    distance = log(mids[frag2] - mids[frag1])
+                    value += region_mean - distance * gamma
+                signal[index + map2, 1] += exp(value)
     return None
 
 
@@ -405,194 +316,74 @@ def dynamically_bin_upper_from_upper(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def unbinned_signal_trans_full(
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] strands not None,
+def find_trans_observed(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
-        np.ndarray[DTYPE_t, ndim=3] signal not None,
-        double trans_mu,
-        double sigma,
-        int startfrag1,
-        int startfrag2,
-        int datatype):
-    cdef long long int frag1, frag2, i, j
+        np.ndarray[DTYPE_t, ndim=3] signal not None):
+    cdef long long int frag1, frag2, i, map1, map2
     cdef long long int num_frags1 = mapping1.shape[0]
-    cdef long long int num_frags2 = mapping2.shape[0]
-    cdef long long int num_data = data.shape[0]
+    cdef long long int num_frags2 = mapping2.shape[1]
     with nogil:
-        # if finding anything but expected, fill in actual signal
-        for i in range(num_data):
-            frag1 = data[i, 0] - startfrag1
-            frag2 = data[i, 1] - startfrag2
-            if frag2 >= num_frags2 or frag2 < 0 or filter[frag1 + startfrag1] == 0 or filter[frag2 + startfrag2] == 0:
+        for frag1 in range(num_frags1 - 1):
+            map1 = mapping1[frag1]
+            if map1 == -1:
                 continue
-            signal[mapping1[frag1], mapping2[frag2], 0] = data[i, 2]
-        # fill in expected signal
-        for frag1 in range(num_frags1):
-            if filter[frag1 + startfrag1] == 0:
-                continue
-            i = mapping1[frag1]
-            for frag2 in range(num_frags2):
-                if filter[frag2 + startfrag2] == 0 or strands[frag1 + startfrag1] == strands[frag2 + startfrag2]:
+            for i in range(indices[frag1], indices[frag1 + 1]):
+                frag2 = data[i, 1]
+                if frag2 >= num_frags2:
                     continue
-                j = mapping2[frag2]
-                # give starting expected value
-                signal[i, j, 1] = 1.0
-                # if finding fragment, enrichment, or expected, correct for fragment
-                if datatype > 0 and datatype != 2:
-                    signal[i, j, 1] *= exp(corrections[frag1 + startfrag1] + corrections[frag2 + startfrag2])
-                # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    signal[i, j, 1] *= trans_mu
-                # if finding expected only, fill in filter values for observed signal
-                if datatype == 4:
-                    signal[i, j, 0] = 1.0
-                # if finding enrichment, scale both observed and expected values by sigma
-                if datatype == 3:
-                    signal[i, j, 0] = pow(signal[i, j, 0], 1.0 / sigma)
-                    signal[i, j, 1] = pow(signal[i, j, 1], 1.0 / sigma)
+                map2 = mapping2[frag2]
+                if map2 == -1:
+                    continue
+                signal[map1, map2, 0] += data[i, 2]
     return None
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def unbinned_signal_trans_compact(
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] strands not None,
+def find_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
-        np.ndarray[DTYPE_t, ndim=3] signal1 not None,
-        np.ndarray[DTYPE_t, ndim=3] signal2 not None,
-        double trans_mu,
-        double sigma,
-        int startfrag1,
-        int startfrag2,
-        int datatype):
-    cdef long long int frag1, frag2, i, j
-    cdef long long int num_frags1 = mapping1.shape[0]
-    cdef long long int num_frags2 = mapping2.shape[0]
-    cdef long long int num_data = data.shape[0]
-    with nogil:
-        # if finding anything but expected, fill in actual signal
-        for i in range(num_data):
-            frag1 = data[i, 0] - startfrag1
-            frag2 = data[i, 1] - startfrag2
-            if frag2 >= num_frags2 or frag2 < 0 or filter[frag1 + startfrag1] == 0 or filter[frag2 + startfrag2] == 0:
-                continue
-            if mapping1[frag1] > 0:
-                signal1[mapping1[frag1] - 1, -mapping2[frag2] - 1, 0] = data[i, 2]
-            else:
-                signal2[mapping2[frag2] - 1, -mapping1[frag1] - 1, 0] = data[i, 2]
-        # fill in expected signal
-        for frag1 in range(num_frags1):
-            if filter[frag1 + startfrag1] == 0:
-                continue
-            if mapping1[frag1] > 0:
-                i = mapping1[frag1] - 1
-            else:
-                i = -mapping1[frag1] - 1
-            for frag2 in range(num_frags2):
-                if filter[frag2 + startfrag2] == 0 or strands[frag1 + startfrag1] == strands[frag2 + startfrag2]:
-                    continue
-                if mapping2[frag2] > 0:
-                    j = mapping2[frag2] - 1
-                    # give starting expected value
-                    signal2[j, i, 1] = 1.0
-                    # if finding fragment, enrichment, or expected, correct for fragment
-                    if datatype > 0 and datatype != 2:
-                        signal2[j, i, 1] *= exp(corrections[frag1 + startfrag1] + corrections[frag2 + startfrag2])
-                    # if finding distance, enrichment, or expected, correct for distance
-                    if datatype > 1:
-                        signal2[j, i, 1] *= trans_mu
-                    # if finding expected only, fill in filter values for observed signal
-                    if datatype == 4:
-                        signal2[j, i, 0] = 1.0
-                    # if finding enrichment, scale both observed and expected values by sigma
-                    if datatype == 3:
-                        signal2[j, i, 0] = pow(signal2[j, i, 0], 1.0 / sigma)
-                        signal2[j, i, 1] = pow(signal2[j, i, 1], 1.0 / sigma)
-                else:
-                    j = -mapping2[frag2] - 1
-                    # give starting expected value
-                    signal1[i, j, 1] = 1.0
-                    # if finding fragment, enrichment, or expected, correct for fragment
-                    if datatype > 0 and datatype != 2:
-                        signal1[i, j, 1] *= exp(corrections[frag1 + startfrag1] + corrections[frag2 + startfrag2])
-                    # if finding distance, enrichment, or expected, correct for distance
-                    if datatype > 1:
-                        signal1[i, j, 1] *= trans_mu
-                    # if finding expected only, fill in filter values for observed signal
-                    if datatype == 4:
-                        signal1[i, j, 0] = 1.0
-                    # if finding enrichment, scale both observed and expected values by sigma
-                    if datatype == 3:
-                        signal1[i, j, 0] = pow(signal1[i, j, 0], 1.0 / sigma)
-                        signal1[i, j, 1] = pow(signal1[i, j, 1], 1.0 / sigma)
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def binned_signal_trans(
-        np.ndarray[DTYPE_int_t, ndim=2] data not None,
-        np.ndarray[DTYPE_int_t, ndim=1] filter not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None,
-        np.ndarray[DTYPE_int_t, ndim=1] strands not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections1,
+        np.ndarray[DTYPE_t, ndim=1] corrections2,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices1,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices2,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices1,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices2,
+        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
+        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] strands1,
+        np.ndarray[DTYPE_int_t, ndim=1] strands2,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
-        double trans_mu,
-        double sigma,
-        int startfrag1,
-        int startfrag2,
-        int datatype):
-    cdef long long int frag1, frag2, i, j
-    cdef double observed, expected
+        double trans_mean):
+    cdef long long int frag1, frag2, map1, map2, strand1
+    cdef double distance, value
     cdef long long int num_frags1 = mapping1.shape[0]
     cdef long long int num_frags2 = mapping2.shape[0]
-    cdef long long int num_data = data.shape[0]
     with nogil:
-        # if finding anything but expected, fill in actual signal
-        for i in range(num_data):
-            frag1 = data[i, 0] - startfrag1
-            frag2 = data[i, 1] - startfrag2
-            if frag2 >= num_frags2 or frag2 < 0 or filter[frag1 + startfrag1] == 0 or filter[frag2 + startfrag2] == 0:
-                continue
-            observed = data[i, 2]
-            if datatype == 3:
-                observed = pow(observed, 1.0 / sigma)
-            signal[mapping1[frag1], mapping2[frag2], 0] += sigma
-        # fill in expected signal
         for frag1 in range(num_frags1):
-            if filter[frag1 + startfrag1] == 0:
+            map1 = mapping1[frag1]
+            if map1 == -1:
                 continue
-            i = mapping1[frag1]
+            strand1 = strands1[frag1]
             for frag2 in range(num_frags2):
-                if filter[frag2 + startfrag2] == 0 or strands[frag1 + startfrag1] == strands[frag2 + startfrag2]:
+                map2 = mapping2[frag2]
+                if strands2[frag2] == strand1 or map2 == -1:
                     continue
-                j = mapping2[frag2]
-                # give starting expected value
-                expected = 1.0
-                # if finding fragment, enrichment, or expected, correct for fragment
-                if datatype > 0 and datatype != 2:
-                    expected *= exp(corrections[frag1 + startfrag1] + corrections[frag2 + startfrag2])
-                # if finding distance, enrichment, or expected, correct for distance
-                if datatype > 1:
-                    expected *= trans_mu
-                # if finding expected only, fill in filter values for observed signal
-                if datatype == 4:
-                    expected = 1.0
-                # if finding enrichment, scale both observed and expected values by sigma
-                if datatype == 3:
-                    expected = pow(expected, 1.0 / sigma)
-                signal[i, j, 1] += expected
+                 # give starting expected value
+                value = trans_mean
+                # if finding frag, enrichment, or expected, and using express or probability bias correction, correct for frag
+                if not corrections1 is None:
+                    value += corrections1[frag1] + corrections2[frag2]
+                # if finding frag, enrichment, or expected, and using regression bias correction, correct for frag
+                if not gc_indices1 is None:
+                    value += gc_corrections[gc_indices1[frag1], gc_indices2[frag2]]
+                if not len_indices1 is None:
+                    value += len_corrections[len_indices1[frag1], len_indices2[frag2]]
+                signal[map1, map2, 1] += exp(value)
     return None
 
 
@@ -690,4 +481,170 @@ def dynamically_bin_trans(
                 if binned[x, y, 0] < minobservations and removefailed == 1:
                     binned[x, y, 0] = 0
                     binned[x, y, 1] = 0
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def regression_bin_observed(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_int64_t, ndim=2] counts,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
+        int gc_div,
+        int len_div,
+        int distance_div,
+        int gc_bins,
+        int len_bins,
+        int distance_bins,
+        int mindistance,
+        int maxdistance):
+    cdef long long int i, k, distance, frag1, frag2, index, bin1, bin2, prev_frag, num_data, num_trans
+    if not data is None:
+        num_data = data.shape[0]
+    else:
+        num_data = 0
+    if not trans_data is None:
+        num_trans = trans_data.shape[0]
+    else:
+        num_trans = 0
+    with nogil:
+        prev_frag = -1
+        for i in range(num_data):
+            frag1 = data[i, 0]
+            if frag1 != prev_frag:
+                prev_frag = frag1
+                k = 0
+            frag2 = data[i, 1]
+            distance = mids[frag2] - mids[frag1]
+            if distance < mindistance or distance > maxdistance:
+                continue
+            index = 0
+            if gc_div > 0:
+                bin1 = min(gc_indices[frag1], gc_indices[frag2])
+                bin2 = max(gc_indices[frag1], gc_indices[frag2])
+                index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
+            if len_div > 0:
+                bin1 = min(len_indices[frag1], len_indices[frag2])
+                bin2 = max(len_indices[frag1], len_indices[frag2])
+                index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+            if distance_div > 0:
+                while distance > distance_cutoffs[k]:
+                    k += 1
+                index += k * distance_div
+            counts[index, 0] += 1
+        for i in range(num_trans):
+            frag1 = trans_data[i, 0]
+            frag2 = trans_data[i, 1]
+            index = 0
+            if gc_div > 0:
+                bin1 = min(gc_indices[frag1], gc_indices[frag2])
+                bin2 = max(gc_indices[frag1], gc_indices[frag2])
+                index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
+            if len_div > 0:
+                bin1 = min(len_indices[frag1], len_indices[frag2])
+                bin2 = max(len_indices[frag1], len_indices[frag2])
+                index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+            if distance_div > 0:
+                index += (distance_bins - 1) * distance_div
+            counts[index, 0] += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def regression_bin_cis_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] filt,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_int_t, ndim=1] strands,
+        np.ndarray[DTYPE_int64_t, ndim=2] counts,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
+        int gc_div,
+        int len_div,
+        int distance_div,
+        int gc_bins,
+        int len_bins,
+        int distance_bins,
+        int mindistance,
+        int maxdistance,
+        int startfrag,
+        int stopfrag):
+    cdef long long int i, j, k, distance, frag1, frag2, index, bin1, bin2
+    with nogil:
+        for frag1 in range(startfrag, stopfrag - 1):
+            if filt[frag1] == 0:
+                continue
+            k = 0
+            for frag2 in range(frag1 + 1, stopfrag):
+                if filt[frag2] == 0 or strands[frag1] == strands[frag2]:
+                    continue
+                distance = mids[frag2] - mids[frag1]
+                if distance < mindistance or distance > maxdistance:
+                    continue
+                index = 0
+                if gc_div > 0:
+                    bin1 = min(gc_indices[frag1], gc_indices[frag2])
+                    bin2 = max(gc_indices[frag1], gc_indices[frag2])
+                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
+                if len_div > 0:
+                    bin1 = min(len_indices[frag1], len_indices[frag2])
+                    bin2 = max(len_indices[frag1], len_indices[frag2])
+                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                if distance_div > 0:
+                    while distance > distance_cutoffs[k]:
+                        k += 1
+                    index += k * distance_div
+                counts[index, 1] += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def regression_bin_trans_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] filt,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_int_t, ndim=1] strands,
+        np.ndarray[DTYPE_int64_t, ndim=2] counts,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        int gc_div,
+        int len_div,
+        int distance_div,
+        int gc_bins,
+        int len_bins,
+        int distance_bins,
+        int mindistance,
+        int maxdistance,
+        int startfrag1,
+        int stopfrag1,
+        int startfrag2,
+        int stopfrag2):
+    cdef long long int i, j, k, frag1, frag2, index, bin1, bin2
+    with nogil:
+        for frag1 in range(startfrag1, stopfrag1):
+            if filt[frag1] == 0:
+                continue
+            for frag2 in range(startfrag2, stopfrag2):
+                if filt[frag2] == 0 or strands[frag1] == strands[frag2]:
+                    continue
+                index = 0
+                if gc_div > 0:
+                    bin1 = min(gc_indices[frag1], gc_indices[frag2])
+                    bin2 = max(gc_indices[frag1], gc_indices[frag2])
+                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
+                if len_div > 0:
+                    bin1 = min(len_indices[frag1], len_indices[frag2])
+                    bin2 = max(len_indices[frag1], len_indices[frag2])
+                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                if distance_div > 0:
+                    index += (distance_bins - 1) * distance_div
+                counts[index, 1] += 1
     return None
