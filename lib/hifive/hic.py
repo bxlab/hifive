@@ -759,9 +759,17 @@ class HiC(object):
                     elif iteration >= burnin_iterations and change <= minchange:
                         cont = False
                     iteration += 1
+            del counts, nonzero_indices0, nonzero_indices1, nonzero_means, zero_indices0, zero_indices1, zero_means
+            self.corrections[rev_mapping + start_fend] = corrections
             # calculate chromosome mean
-            count_sum = numpy.sum(counts).astype(numpy.int64)
-            corrected_sum = numpy.sum(counts / (corrections[nonzero_indices0] * corrections[nonzero_indices1])).astype(numpy.float64)
+            start_index = self.data['cis_indices'][startfend]
+            stop_index = self.data['cis_indices'][stopfend]
+            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
+            data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
+            data = data[numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0], :]
+            count_sum = numpy.sum(data[:, 2]).astype(numpy.int64)
+            corrected_sum = numpy.sum(data[:, 2] / (self.corrections[data[:, 0]] *
+                                                    self.corrections[data[:, 1]])).astype(numpy.float64)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     count_sum += self.comm.recv(source=i, tag=11)
@@ -1123,17 +1131,19 @@ class HiC(object):
             else:
                 self.comm.Send(fend_means, dest=0, tag=13)
                 self.comm.Recv(corrections, source=0, tag=13)
+        count_sums = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.int64)
+        corrected_sums = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float64)
         # calculate chromosome mean
-        if data is None:
-            node_ranges = numpy.round(numpy.linspace(0, self.data['cis_data'].shape[0], self.num_procs + 1)
-                                     ).astype(numpy.int32)
+        for chrom in chroms:
+            chrint = self.chr2int[chrom]
+            start_index = self.data['cis_indices'][chr_indices[chrint]]
+            stop_index = self.data['cis_indices'][chr_indices[chrint + 1]]
+            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
             data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
-            data = data[numpy.where((filt[data[:, 0]] == 1) * (filt[data[:, 1]] == 1))[0], :]
-        chroms = self.fends['fends']['chr'][data[:, 0]]
-        count_sums = numpy.bincount(chroms, weights=data[:, 2],
-                                    minlength=self.fends['chromosomes'].shape[0]).astype(numpy.int64)
-        corrected_sums = numpy.bincount(chroms, weights=(data[:, 2] / (corrections[data[:, 0]] *
-                         corrections[data[:, 1]])), minlength=self.fends['chromosomes'].shape[0]).astype(numpy.float64)
+            data = data[numpy.where(filt[data[:, 0]] * filt[data[:, 1]])[0], :]
+            count_sums[chrint] = numpy.sum(data[:, 2])
+            corrected_sums[chrint] = numpy.sum(data[:, 2] / (corrections[data[:, 0]] *
+                                                             corrections[data[:, 1]]).astype(numpy.float64))
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 count_sums += self.comm.recv(source=i, tag=11)
