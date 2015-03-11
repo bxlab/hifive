@@ -1132,7 +1132,7 @@ def dynamically_bin_trans(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_observed(
+def regression_bin_cis_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
@@ -1192,7 +1192,7 @@ def regression_bin_observed(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_expected(
+def regression_bin_cis_expected(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
@@ -1263,5 +1263,100 @@ def regression_bin_expected(
                     while distance > distance_cutoffs[k]:
                         k += 1
                     index += k * distance_div
+                counts[index, 1] += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def regression_bin_trans_observed(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=1] filt,
+        np.ndarray[DTYPE_int64_t, ndim=2] counts,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        int gc_div,
+        int map_div,
+        int len_div,
+        int distance_div,
+        int gc_bins,
+        int map_bins,
+        int len_bins,
+        int distance_bins):
+    cdef long long int i, fend1, fend2, index, bin1, bin2
+    cdef long long int num_data = data.shape[0]
+    with nogil:
+        for i in range(num_data):
+            fend1 = data[i, 0]
+            if filt[fend1] == 0:
+                continue
+            fend2 = data[i, 1]
+            if filt[fend2] == 0:
+                continue
+            index = 0
+            if gc_div > 0:
+                bin1 = min(gc_indices[fend1], gc_indices[fend2])
+                bin2 = max(gc_indices[fend1], gc_indices[fend2])
+                index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
+            if map_div > 0:
+                bin1 = min(map_indices[fend1], map_indices[fend2])
+                bin2 = max(map_indices[fend1], map_indices[fend2])
+                index += (bin1 * map_bins - bin1 * (bin1 + 1) / 2 + bin2) * map_div
+            if len_div > 0:
+                bin1 = min(len_indices[fend1], len_indices[fend2])
+                bin2 = max(len_indices[fend1], len_indices[fend2])
+                index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+            if distance_div > 0:
+                index += (distance_bins - 1) * distance_div
+            counts[index, 0] += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def regression_bin_trans_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] filt,
+        np.ndarray[DTYPE_int64_t, ndim=2] counts,
+        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        int gc_div,
+        int map_div,
+        int len_div,
+        int distance_div,
+        int gc_bins,
+        int map_bins,
+        int len_bins,
+        int distance_bins,
+        int startfend1,
+        int stopfend2,
+        int startfend2,
+        int stopfend2):
+    cdef long long int i, j, fend1, fend2, index, bin1, bin2
+    with nogil:
+        for fend1 in range(startfend1, stopfend1):
+            if filt[fend1] == 0:
+                continue
+            for fend2 in range(startfend2, stopfend2):
+                if filt[fend2] == 0:
+                    continue
+                index = 0
+                if gc_div > 0:
+                    bin1 = min(gc_indices[fend1], gc_indices[fend2])
+                    bin2 = max(gc_indices[fend1], gc_indices[fend2])
+                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
+                if map_div > 0:
+                    bin1 = min(map_indices[fend1], map_indices[fend2])
+                    bin2 = max(map_indices[fend1], map_indices[fend2])
+                    index += (bin1 * map_bins - bin1 * (bin1 + 1) / 2 + bin2) * map_div
+                if len_div > 0:
+                    bin1 = min(len_indices[fend1], len_indices[fend2])
+                    bin2 = max(len_indices[fend1], len_indices[fend2])
+                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                if distance_div > 0:
+                    index += (distance_bins - 1) * distance_div
                 counts[index, 1] += 1
     return None

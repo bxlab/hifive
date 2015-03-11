@@ -482,7 +482,10 @@ class HiC(object):
                 (len(chroms) == 1 and chroms[0] == ''))) or
                 chroms == ''):
             chroms = self.chr2int.keys()
-            chroms.sort()
+        chrints = numpy.zeros(len(chroms)):
+        for i in range(len(chroms)):
+            chrints[i] = self.chr2int[chroms[i]]
+        chroms = chroms[numpy.argsort(chrints)]
         if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
             binned = 1
         else:
@@ -875,9 +878,12 @@ class HiC(object):
                 (len(chroms) == 1 and chroms[0] == ''))) or
                 chroms == ''):
             chroms = self.chr2int.keys()
-            chroms.sort()
         elif not chroms is None and isinstance(chroms, str):
             chroms = [chroms]
+        chrints = numpy.zeros(len(chroms)):
+        for i in range(len(chroms)):
+            chrints[i] = self.chr2int[chroms[i]]
+        chroms = chroms[numpy.argsort(chrints)]
         for chrm, i in self.chr2int.iteritems():
             if chrm not in chroms:
                 filt[chr_indices[i]:chr_indices[i + 1]] = 0
@@ -1156,8 +1162,9 @@ class HiC(object):
             self.normalization = 'express'
         return None
 
-    def find_regression_fend_corrections(self, mindistance=0, maxdistance=0, chroms=None, num_bins=[20, 20, 20],
-                                         model=['gc', 'len', 'distance'], learning_threshold=1.0, max_iterations=10):
+    def find_regression_fend_corrections(self, mindistance=0, maxdistance=0, chroms=[], num_bins=[20, 20, 20],
+                                         model=['gc', 'len', 'distance'], learning_threshold=1.0, max_iterations=10,
+                                         usereads='cis'):
         """
         Using multinomial regression, learn correction values for combinations of model parameter bins. This function is MPI compatible.
 
@@ -1171,12 +1178,14 @@ class HiC(object):
         :type num_bins: int.
         :param remove_distance: Use distance dependence curve in prior probability calculation for each observation.
         :type remove_distance: bool.
-        :param model: A list of fend features to be used in model. Valid values are 'gc', 'len', 'distance', and 'mappability'.
+        :param model: A list of fend features to be used in model. Valid values are 'gc', 'len', 'distance', and 'mappability'. The 'distance' parameter is only good with 'cis' or 'all' reads. If used with 'all', distances will be partitioned into n - 1 bins and the final distance bin will contain all trans data.
         :type model: list
         :param learning_threshold: The minimum change in log-likelihood needed to continue iterative learning process.
         :type learning_threshold: float
         :param max_iterations: The maximum number of iterations to use for learning model parameters.
         :type max_iterations: int.
+        :param usereads: Specifies which set of interactions to use, 'cis', 'trans', or 'all'.
+        :type usereads: str.
         :returns: None
         """
         present = True
@@ -1185,9 +1194,18 @@ class HiC(object):
                 if not self.silent:
                     print >> sys.stderr, ("Fend feature %s not found in fend object. Try removing it from model or creating a new fend object with feature data.\n"),
                 return None
+        if 'distance' in model and usereads == 'trans':
+            if not self.silent:
+                print >> sys.stderr, ("The 'distance' parameter can only be used in conjuction with 'cis' or 'all' reads.\n"),
+            return None
         if len(model) != len(num_bins):
             if not self.silent:
                 print >> sys.stderr, ("The number of items in the 'model' parameter must be the same as the number in the 'num_bins' parameter.\n"),
+            return None
+        # make sure usereads has a valid value
+        if usereads not in ['cis', 'trans', 'all']:
+            if not self.silent:
+                print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
             return None
         if (chroms is None or
                 (isinstance(chroms, list) and
@@ -1195,7 +1213,10 @@ class HiC(object):
                 (len(chroms) == 1 and chroms[0] == ''))) or
                 chroms == ''):
             chroms = self.chr2int.keys()
-            chroms.sort()
+        chrints = numpy.zeros(len(chroms)):
+        for i in range(len(chroms)):
+            chrints[i] = self.chr2int[chroms[i]]
+        chroms = chroms[numpy.argsort(chrints)]
         # Create requested bin cutoffs for each feature of the regression model
         if not self.silent:
             print >> sys.stderr, ("\r%s\rPartitioning features into bins...") % (' ' * 80),
@@ -1268,8 +1289,12 @@ class HiC(object):
                     max_dist = max(max_dist, dists[self.chr2int[chrom]])
             else:
                 max_dist = maxdistance
-            distance_cutoffs = numpy.ceil(numpy.exp(numpy.linspace(numpy.log(max(1, mindistance)),
-                                          numpy.log(max_dist), distance_bins + 1))[1:]).astype(numpy.int32)
+            if usereads == 'all':
+                distance_cutoffs = numpy.ceil(numpy.exp(numpy.linspace(numpy.log(max(1, mindistance)),
+                                              numpy.log(max_dist), distance_bins))[1:]).astype(numpy.int32)
+            else:
+                distance_cutoffs = numpy.ceil(numpy.exp(numpy.linspace(numpy.log(max(1, mindistance)),
+                                              numpy.log(max_dist), distance_bins + 1))[1:]).astype(numpy.int32)
             distance_cutoffs[-1] += 1
             distance_corrections = numpy.zeros(distance_bins, dtype=numpy.float64)
             distance_div = total_bins
@@ -1284,76 +1309,122 @@ class HiC(object):
             temp_counts = numpy.copy(bin_counts)
         else:
             temp_counts = None
-        for chrom in chroms:
+        for h, chrom in enumerate(chroms):
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rFinding bin counts... chr%s") % (' ' * 80, chrom),
-            # Find number of observations in each bin
             chrint = self.chr2int[chrom]
-            start_index = self.data['cis_indices'][chr_indices[chrint]]
-            stop_index = self.data['cis_indices'][chr_indices[chrint + 1]]
-            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
-            data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
-            _binning.regression_bin_observed(data,
-                                             filt,
-                                             mids,
-                                             bin_counts,
-                                             gc_indices,
-                                             map_indices,
-                                             len_indices,
-                                             distance_cutoffs,
-                                             gc_div,
-                                             map_div,
-                                             len_div,
-                                             distance_div,
-                                             gc_bins,
-                                             map_bins,
-                                             len_bins,
-                                             distance_bins,
-                                             mindistance,
-                                             maxdistance)
-            # Find number of possible interactions in each bin
-            maxfend = chr_indices[chrint + 1]
-            if self.num_procs == 1:
-                startfend = chr_indices[chrint]
-                stopfend = maxfend
-            else:
-                numfends = maxfend - chr_indices[chrint]
-                fend_sizes = numpy.r_[0, numfends - numpy.arange(1, numfends)]
-                for i in range(1, fend_sizes.shape[0]):
-                    fend_sizes[i] += fend_sizes[i - 1]
-                node_targets = numpy.round(numpy.linspace(0, numfends * (numfends - 1) / 2,
-                                           self.num_procs + 1)).astype(numpy.int64)
-                node_ranges = numpy.searchsorted(fend_sizes[1:], node_targets).astype(numpy.int32)
-                if (node_ranges[self.rank] < fend_sizes.shape[0] - 1 and
-                    node_targets[self.rank] - fend_sizes[node_ranges[self.rank]] > 
-                    fend_sizes[node_ranges[self.rank] + 1] - node_targets[self.rank]):
-                    node_ranges[self.rank] += 1
-                if (node_ranges[self.rank + 1] < fend_sizes.shape[0] - 1 and
-                    node_targets[self.rank + 1] - fend_sizes[node_ranges[self.rank + 1]] > 
-                    fend_sizes[node_ranges[self.rank + 1] + 1] - node_targets[self.rank + 1]):
-                    node_ranges[self.rank + 1] += 1
-                startfend = node_ranges[self.rank] + chr_indices[chrint]
-                stopfend = node_ranges[self.rank + 1] + chr_indices[chrint]
-            _binning.regression_bin_expected(filt,
-                                             mids,
-                                             bin_counts,
-                                             gc_indices,
-                                             map_indices,
-                                             len_indices,
-                                             distance_cutoffs,
-                                             gc_div,
-                                             map_div,
-                                             len_div,
-                                             distance_div,
-                                             gc_bins,
-                                             map_bins,
-                                             len_bins,
-                                             distance_bins,
-                                             mindistance,
-                                             maxdistance,
-                                             startfend,
-                                             stopfend,
-                                             maxfend)
+            if usereads in ['cis', 'all']:
+                # Find number of observations in each bin
+                start_index = self.data['cis_indices'][chr_indices[chrint]]
+                stop_index = self.data['cis_indices'][chr_indices[chrint + 1]]
+                node_ranges = numpy.round(numpy.linspace(start_index, stop_index,
+                                          self.num_procs + 1)).astype(numpy.int32)
+                data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
+                _binning.regression_bin_cis_observed(data,
+                                                     filt,
+                                                     mids,
+                                                     bin_counts,
+                                                     gc_indices,
+                                                     map_indices,
+                                                     len_indices,
+                                                     distance_cutoffs,
+                                                     gc_div,
+                                                     map_div,
+                                                     len_div,
+                                                     distance_div,
+                                                     gc_bins,
+                                                     map_bins,
+                                                     len_bins,
+                                                     distance_bins,
+                                                     mindistance,
+                                                     maxdistance)
+                # Find number of possible interactions in each bin
+                maxfend = chr_indices[chrint + 1]
+                if self.num_procs == 1:
+                    startfend = chr_indices[chrint]
+                    stopfend = maxfend
+                else:
+                    numfends = maxfend - chr_indices[chrint]
+                    fend_sizes = numpy.r_[0, numfends - numpy.arange(1, numfends)]
+                    for i in range(1, fend_sizes.shape[0]):
+                        fend_sizes[i] += fend_sizes[i - 1]
+                    node_targets = numpy.round(numpy.linspace(0, numfends * (numfends - 1) / 2,
+                                               self.num_procs + 1)).astype(numpy.int64)
+                    node_ranges = numpy.searchsorted(fend_sizes[1:], node_targets).astype(numpy.int32)
+                    if (node_ranges[self.rank] < fend_sizes.shape[0] - 1 and
+                        node_targets[self.rank] - fend_sizes[node_ranges[self.rank]] > 
+                        fend_sizes[node_ranges[self.rank] + 1] - node_targets[self.rank]):
+                        node_ranges[self.rank] += 1
+                    if (node_ranges[self.rank + 1] < fend_sizes.shape[0] - 1 and
+                        node_targets[self.rank + 1] - fend_sizes[node_ranges[self.rank + 1]] > 
+                        fend_sizes[node_ranges[self.rank + 1] + 1] - node_targets[self.rank + 1]):
+                        node_ranges[self.rank + 1] += 1
+                    startfend = node_ranges[self.rank] + chr_indices[chrint]
+                    stopfend = node_ranges[self.rank + 1] + chr_indices[chrint]
+                _binning.regression_bin_cis_expected(filt,
+                                                     mids,
+                                                     bin_counts,
+                                                     gc_indices,
+                                                     map_indices,
+                                                     len_indices,
+                                                     distance_cutoffs,
+                                                     gc_div,
+                                                     map_div,
+                                                     len_div,
+                                                     distance_div,
+                                                     gc_bins,
+                                                     map_bins,
+                                                     len_bins,
+                                                     distance_bins,
+                                                     mindistance,
+                                                     maxdistance,
+                                                     startfend,
+                                                     stopfend,
+                                                     maxfend)
+            if usereads in ['trans', 'all']:
+                # Find number of observations in each bin
+                start_index = self.data['trans_indices'][chr_indices[chrint]]
+                stop_index = self.data['trans_indices'][chr_indices[chrint + 1]]
+                node_ranges = numpy.round(numpy.linspace(start_index, stop_index,
+                                          self.num_procs + 1)).astype(numpy.int32)
+                data = self.data['trans_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
+                _binning.regression_bin_trans_observed(data,
+                                                       filt,
+                                                       bin_counts,
+                                                       gc_indices,
+                                                       map_indices,
+                                                       len_indices,
+                                                       gc_div,
+                                                       map_div,
+                                                       len_div,
+                                                       distance_div,
+                                                       gc_bins,
+                                                       map_bins,
+                                                       len_bins,
+                                                       distance_bins)
+                valid = numpy.where(filt[chr_indices[chrint]:chr_indices[chrint + 1]] == 1)[0] + chr_indices[chrint]
+                node_ranges = numpy.round(numpy.linspace(0, valid.shape[0], self.num_procs + 1)).astype(numpy.int32)
+                startfend = valid[node_ranges[self.rank]]
+                stopfend = valid[node_ranges[self.rank + 1] - 1] + 1
+                for chrom2 in chroms[(h + 1):]:
+                    chrint2 = self.chr2int[chrom2]
+                    _binning.regression_bin_trans_expected(filt,
+                                                           bin_counts,
+                                                           gc_indices,
+                                                           map_indices,
+                                                           len_indices,
+                                                           gc_div,
+                                                           map_div,
+                                                           len_div,
+                                                           distance_div,
+                                                           gc_bins,
+                                                           map_bins,
+                                                           len_bins,
+                                                           distance_bins,
+                                                           startfend,
+                                                           stopfend,
+                                                           chr_indices[chrint2],
+                                                           chr_indices[chrint2 + 1])
         # Exchange bin_counts
         if self.rank == 0:
             for i in range(1, self.num_procs):
