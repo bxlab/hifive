@@ -40,6 +40,7 @@ class HiCData(object):
         """
         self.file = os.path.abspath(filename)
         self.silent = silent
+        self.history = ''
         if mode != "w":
             self.load()
         return None
@@ -60,6 +61,7 @@ class HiCData(object):
 
         :returns: None
         """
+        self.history.replace("'None'", "None")
         datafile = h5py.File(self.file, 'w')
         for key in self.__dict__.keys():
             if key in ['file', 'chr2int', 'fends', 'silent']:
@@ -122,16 +124,19 @@ class HiCData(object):
         :type maxinsert: int.
         :returns: None
         """
+        self.history += "HiCData.load_data_from_raw(fendfilename='%s', filelist=%s, maxinsert=%i) - " % (fendfilename, str(filelist), maxinsert)
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
                 print >> sys.stderr, \
                 ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
+            self.history += "Error: '%s' not found\n" % fendfilename
             return None
         self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
                                        os.path.dirname(self.file)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
+        self.history = self.fends['/'].attrs['history'] + self.history
         self.chr2int = {}
         for i, j in enumerate(self.fends['chromosomes'][:]):
             self.chr2int[j] = i
@@ -146,6 +151,7 @@ class HiCData(object):
             if not os.path.exists(fname):
                 if not self.silent:
                     print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
+                self.history += "'%s' not found, " % fname
                 continue
             if not self.silent:
                 print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
@@ -169,12 +175,14 @@ class HiCData(object):
         if len(fend_pairs) == 0:
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
+            self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
             print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
                              (total_reads,len(fend_pairs)),
         # write fend pairs to h5dict
         self._parse_fend_pairs(fend_pairs)
+        self.history += 'Success\n'
         return None
 
     def load_data_from_bam(self, fendfilename, filelist, maxinsert):
@@ -189,19 +197,23 @@ class HiCData(object):
         :type maxinsert: int.
         :returns: None
         """
+        self.history += "HiCData.load_data_from_bam(fendfilename='%s', filelist=%s, maxinsert=%i) - " % (fendfilename, str(filelist), maxinsert)
         if 'pysam' not in sys.modules.keys():
             if not self.silent:
                 print >> sys.stderr, ("The pysam module must be installed to use this function.")
+            self.history += 'Error: pysam module missing\n'
             return None
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
                 print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
+            self.history += "Error: '%s' not found\n" % fendfilename
             return None
         self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
                                        os.path.dirname(self.file)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
+        self.history = self.fends['/'].attrs['history'] + self.history
         self.chr2int = {}
         for i, j in enumerate(self.fends['chromosomes'][:]):
             self.chr2int[j] = i
@@ -217,10 +229,12 @@ class HiCData(object):
             if not os.path.exists(filepair[0]):
                 if not self.silent:
                     print >> sys.stderr, ("%s could not be located.") % (filepair[0]),
+                self.history += "'%s' not found, " % fname
                 present = False
             if not os.path.exists(filepair[1]):
                 if not self.silent:
                     print >> sys.stderr, ("%s could not be located.") % (filepair[1]),
+                self.history += "'%s' not found, " % fname
                 present = False
             if not present:
                 if not self.silent:
@@ -292,11 +306,13 @@ class HiCData(object):
         if len(fend_pairs) == 0:
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
+            self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
             print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
                                  (total_reads, len(fend_pairs)),
         self._parse_fend_pairs(fend_pairs)
+        self.history += "Success\n"
         return None
 
     def load_data_from_mat(self, fendfilename, filename, maxinsert=0):
@@ -311,21 +327,25 @@ class HiCData(object):
         :type maxinsert: int.
         :returns: None
         """
+        self.history += "HiCData.load_data_from_mat(fendfilename='%s', filename='%s', maxinsert=%i) - " % (fendfilename, filename, maxinsert)
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
                 print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
+            self.history += "Error: '%s' not found\n" % fendfilename
             return None
         self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
                                        os.path.dirname(self.file)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
+        self.history = self.fends['/'].attrs['history'] + self.history
         # load data from mat file. This assumes that the mat data was mapped
         # using the same fend numbering as in the fend file.
         fend_pairs = {}
         if not os.path.exists(filename):
             if not self.silent:
                 print >> sys.stderr, ("%s not found... no data loaded.\n") % (filename.split('/')[-1]),
+            self.history += "Error: '%s' not found\n" % fendfilename
             return None
         if not self.silent:
             print >> sys.stderr, ("Loading data from mat file..."),
@@ -342,11 +362,13 @@ class HiCData(object):
         if len(fend_pairs) == 0:
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
+            self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
             print >> sys.stderr, ("%i valid fend pairs loaded.\n") % (len(fend_pairs)),
         # write fend pairs to h5dict
         self._parse_fend_pairs(fend_pairs)
+        self.history += "Success\n"
         return None
 
     def _find_fend_pairs(self, data, fend_pairs):
@@ -513,6 +535,7 @@ class HiCData(object):
         :type outfilename: str.
         :returns: None
         """
+        history = self.history + "HiCData.convert_to_binned(binnedfilename='%s', outfilename='%s') - Success\n" % (binnedfilename, outfilename)
         # determine if binned fend file exists and if so, load it
         if not os.path.exists(binnedfilename):
             if not self.silent:
@@ -520,6 +543,7 @@ class HiCData(object):
                 ("The fend file %s was not found. No data was loaded.\n") % (binnedfilename),
             return None
         bins = h5py.File(binnedfilename, 'r')
+        history = bins['/'].attrs['history'] + history
         outfile = h5py.File(outfilename, 'w')
         outfile.attrs['fendfilename'] = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(binnedfilename)),
                                                    os.path.dirname(os.path.abspath(outfilename))),
@@ -596,6 +620,7 @@ class HiCData(object):
             trans_indices[i + 1] += trans_indices[i]
         outfile.create_dataset(name='trans_data', data=trans_data)
         outfile.create_dataset(name='trans_indices', data=trans_indices)
+        outfile['history'] = history
         del trans_data
         del trans_indices
         outfile.close()

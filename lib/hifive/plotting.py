@@ -319,9 +319,9 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
         return pilImage
 
 
-def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True, chroms=[],
-                          min_color="0000ff", mid_color="ffffff", max_color="ff0000",
-                          returnscale=False, **kwargs):
+def plot_hic_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True, chroms=[],
+                     min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                     returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap from a HiC heatmap h5dict file.
 
@@ -444,13 +444,11 @@ def plot_hic_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscali
         return pilImage
 
 
-def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
-                                 regions=[], min_color="0000ff", mid_color="ffffff", max_color="ff0000",
-                                 returnscale=False, **kwargs):
+def plot_fivec_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
+                       regions=[], min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                       returnscale=False, **kwargs):
     """
     Fill in and rescale bitmap in a full format from a 5C heatmap h5dict file.
-
-    This plots the data in a full format such that the rows and columns contain both orientations of primers.
 
     :param filename: Location of a heatmap h5dict containing 5C data arrays.
     :type data: str.
@@ -495,40 +493,79 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
     if len(regions) == 0:
         regions = []
         for key in input.keys():
-            if key.count('positions') > 0 or key.count('fragments') > 0:
+            if key.count('positions') > 0 and key.count('reverse') == 0:
                 regions.append(int(key.split('.')[0]))
         regions.sort()
-    starts = [0]
+    else:
+        for i in range(len(regions))[::-1]:
+            if ("%i.positions" % regions[i] not in input.keys() and
+                "%i.forward_positions" % regions[i] not in input.keys()):
+                if not silent:
+                    print >> sys.stderr, ("Region %i not in heatmap, skipping\n"),
+                del regions[i]
+    if len(regions) == 0:
+        if not silent:
+            print >> sys.stderr, ("No valid data found.\n"),
+        return None
+    if "%i.positions" % regions[0] in input.keys():
+        starts = [0]
+    else:
+        starts = [[0, 0]]
     sizes = []
     for region in regions:
         if "%i.positions" % region in input:
             sizes.append(input['%i.positions' % region].shape[0])
+            starts.append(starts[-1] + sizes[-1] + 1)
         else:
-            sizes.append(input['%i.fragments' % region].shape[0])
-        starts.append(starts[-1] + sizes[-1] + 1)
-    data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float64)
+            sizes.append([input['%i.forward_positions' % region].shape[0],
+                          input['%i.reverse_positions' % region].shape[0]])
+            starts.append([starts[-1][0] + sizes[-1][0] + 1, starts[-1][1] + sizes[-1][1] + 1])
+    sizes = numpy.array(sizes, dtype=numpy.int32)
+    starts = numpy.array(starts, dtype=numpy.int32)
+    if len(sizes.shape) == 1:
+        data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float64)
+    else:
+        data = numpy.zeros((starts[-1, 0] - 1, starts[-1, 1] - 1, 2), dtype=numpy.float64)
     for i in range(len(regions)):
         if '%i.counts' % regions[i] in input and '%i.expected' % regions[i] in input:
-            data[starts[i]:(starts[i + 1] - 1), starts[i]:(starts[i + 1]  - 1), 0] = input['%i.counts' % \
-                regions[i]][...]
-            data[starts[i]:(starts[i + 1] - 1), starts[i]:(starts[i + 1]  - 1), 1] = input['%i.expected' % \
-                regions[i]][...]
+            if len(sizes.shape) == 1:
+                data[starts[i]:(starts[i + 1] - 1),
+                     starts[i]:(starts[i + 1]  - 1), 0] = input['%i.counts' % regions[i]][...]
+                data[starts[i]:(starts[i + 1] - 1),
+                     starts[i]:(starts[i + 1] - 1), 1] = input['%i.expected' % regions[i]][...]
+            else:
+                data[starts[i, 0]:(starts[i + 1, 0] - 1),
+                     starts[i, 1]:(starts[i + 1, 1]  - 1), 0] = input['%i.counts' % regions[i]][...]
+                data[starts[i, 0]:(starts[i + 1, 0] - 1),
+                     starts[i, 1]:(starts[i + 1, 1] - 1), 1] = input['%i.expected' % regions[i]][...]
     for i in range(len(regions) - 1):
         for j in range(i + 1, len(regions)):
             if '%i_by_%i.counts' % (regions[i], regions[j]) in input.keys():
-                data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), 0] = (
-                    input['%i_by_%i.counts' % (regions[i], regions[j])][:, :])
-                data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), 1] = (
-                    input['%i_by_%i.expected' % (regions[i], regions[j])][:, :])
-                data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), :] = numpy.transpose(
-                    data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), :], axes=[1, 0, 2])
-            elif '%i_by_%i.counts' % (regions[j], regions[i]) in input.keys():
-                data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), 0] = (
-                    input['%i_by_%i.counts' % (regions[j], regions[i])][:, :])
-                data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), 1] = (
-                    input['%i_by_%i.expected' % (regions[j], regions[i])][:, :])
-                data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), :] = numpy.transpose(
-                    data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), :], axes=[1, 0, 2])
+                if len(sizes.shape) == 1:
+                    data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), 0] = (
+                        input['%i_by_%i.counts' % (regions[i], regions[j])][:, :])
+                    data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), 1] = (
+                        input['%i_by_%i.expected' % (regions[i], regions[j])][:, :])
+                    data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), :] = numpy.transpose(
+                        data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), :], axes=[1, 0, 2])
+                else:
+                    data[starts[i, 0]:(starts[i + 1, 0] - 1), starts[j, 1]:(starts[j + 1, 1] - 1), 0] = (
+                        input['%i_by_%i.counts' % (regions[i], regions[j])][:, :])
+                    data[starts[i, 0]:(starts[i + 1, 0] - 1), starts[j, 1]:(starts[j + 1, 1] - 1), 1] = (
+                        input['%i_by_%i.expected' % (regions[i], regions[j])][:, :])
+            if '%i_by_%i.counts' % (regions[j], regions[i]) in input.keys():
+                if len(sizes.shape) == 1:
+                    data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), 0] = (
+                        input['%i_by_%i.counts' % (regions[j], regions[i])][:, :])
+                    data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), 1] = (
+                        input['%i_by_%i.expected' % (regions[j], regions[i])][:, :])
+                    data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), :] = numpy.transpose(
+                        data[starts[j]:(starts[j + 1] - 1), starts[i]:(starts[i + 1] - 1), :], axes=[1, 0, 2])
+                else:
+                    data[starts[j, 0]:(starts[j + 1, 0] - 1), starts[i, 1]:(starts[i + 1, 1] - 1), 0] = (
+                        input['%i_by_%i.counts' % (regions[j], regions[i])][:, :])
+                    data[starts[j, 0]:(starts[j + 1, 0] - 1), starts[i, 1]:(starts[i + 1, 1] - 1), 1] = (
+                        input['%i_by_%i.expected' % (regions[j], regions[i])][:, :])
     where = numpy.where(data[:, :, 1] > 0)
     data[where[0], where[1], 0] /= data[where[0], where[1], 1]
     if logged:
@@ -565,16 +602,21 @@ def plot_fivec_full_heatmap_dict(filename, maxscore=None, minscore=None, symmetr
         numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
         numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
     data = numpy.round(data).astype(numpy.uint32)
-    img = numpy.empty((data.shape[0], data.shape[0]), dtype=numpy.uint32)
+    img = numpy.empty((data.shape[0], data.shape[1]), dtype=numpy.uint32)
+    img.shape = (img.shape[1], img.shape[0])
     img[:, :] = int('ff999999', 16)
     where = numpy.where(data[:, :, 1] > 0)
-    img[where] = data[where[0], where[1], 0]
-    img[where[1], where[0]] = img[where]
+    img[where[1], where[0]] = data[where[0], where[1], 0]
     black = int('ff000000', 16)
-    for i in range(1, len(starts) - 1):
-        img[starts[i] - 1, :] = black
-        img[:, starts[i] - 1] = black
-    pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[0]), img, 'raw', 'RGBA', 0, 1)
+    if len(sizes.shape) == 1:
+        for i in range(1, starts.shape[0] - 1):
+            img[starts[i] - 1, :] = black
+            img[:, starts[i] - 1] = black
+    else:
+        for i in range(1, starts.shape[0] - 1):
+            img[starts[i, 1] - 1, :] = black
+            img[:, starts[i, 0] - 1] = black
+    pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[1]), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
     if returnscale:

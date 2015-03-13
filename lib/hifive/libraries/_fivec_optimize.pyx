@@ -40,10 +40,8 @@ def find_regression_correction_adjustment(
         np.ndarray[DTYPE_int_t, ndim=2] indices not None,
         np.ndarray[DTYPE_t, ndim=2] gc_corrections,
         np.ndarray[DTYPE_t, ndim=2] len_corrections,
-        np.ndarray[DTYPE_t, ndim=2] map_corrections,
         np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices):
+        np.ndarray[DTYPE_int_t, ndim=1] len_indices):
     cdef long long int i, frag1, frag2
     cdef long long int num_frags = corrections.shape[0]
     with nogil:
@@ -68,8 +66,7 @@ def calculate_gradients(
         np.ndarray[DTYPE_t, ndim=1] distance_signal not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_t, ndim=1] gradients not None,
-        double sigma,
-        int find_cost):
+        double sigma):
     cdef long long int frag1, frag2, h, i
     cdef double value0, value, cost, expected, z_p, z_n, pdf_p, pdf_n, cdf_p, cdf_n
     cdef long long int num_data = data.shape[0]
@@ -91,15 +88,13 @@ def calculate_gradients(
                 value = (pdf_p - pdf_n) / value0
                 gradients[frag1] += value
                 gradients[frag2] += value
-                if find_cost:
-                    cost -= log(cdf_p - cdf_n)
+                cost -= log(cdf_p - cdf_n)
             else:
                 value = (expected - log_counts[i]) / sigma_2
                 gradients[frag1] += value
                 gradients[frag2] += value
-                if find_cost:
-                    value0 = pow(log_counts[i] - expected, 2.0) / sigma_2
-                    cost += value0 * 0.5
+                value0 = pow(log_counts[i] - expected, 2.0) / sigma_2
+                cost += value0 * 0.5
     return cost
 
 

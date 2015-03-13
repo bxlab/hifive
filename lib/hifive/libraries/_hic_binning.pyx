@@ -1332,7 +1332,7 @@ def regression_bin_trans_expected(
         int len_bins,
         int distance_bins,
         int startfend1,
-        int stopfend2,
+        int stopfend1,
         int startfend2,
         int stopfend2):
     cdef long long int i, j, fend1, fend2, index, bin1, bin2

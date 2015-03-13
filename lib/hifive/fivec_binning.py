@@ -73,7 +73,7 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
         if not silent:
             print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
-    if arratype == 'compact' and (binsize > 0 or not binbounds is None):
+    if arraytype == 'compact' and (binsize > 0 or not binbounds is None):
         if not silent:
             print >> sys.stderr, ("'Compact' array can only be used with unbinned data. No data returned.\n"),
         return None
@@ -136,14 +136,18 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
     strands = fivec.frags['fragments']['strand'][startfrag:stopfrag]
     mapping = numpy.zeros(stopfrag - startfrag, dtype=numpy.int32) - 1
     valid = numpy.where(fivec.filter[startfrag:stopfrag] > 0)[0]
+    if valid.shape[0] == 0:
+        if not silent:
+            print >> sys.stderr, ("Insufficient data\n"),
+        return None
     if binsize == 0 and binbounds is None:
         if arraytype == 'compact':
-            for_valid = numpy.where((strand == 0) * (fivec.filter[startfrag:stopfrag] > 0))[0]
-            rev_valid = numpy.where((strand == 1) * (fivec.filter[startfrag:stopfrag] > 0))[0]
+            for_valid = numpy.where((strands == 0) * (fivec.filter[startfrag:stopfrag] > 0))[0]
+            rev_valid = numpy.where((strands == 1) * (fivec.filter[startfrag:stopfrag] > 0))[0]
             mapping.fill(0)
             if skipfiltered:
-                mapping[for_valid] = numpy.arange(for_valid) + 1
-                mapping[rev_valid] = -1 - numpy.arange(rev_valid)
+                mapping[for_valid] = numpy.arange(for_valid.shape[0]) + 1
+                mapping[rev_valid] = -1 - numpy.arange(rev_valid.shape[0])
                 num_for_bins = for_valid.shape[0]
                 num_rev_bins = rev_valid.shape[0]
             else:
@@ -167,7 +171,7 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
     else:
         mapping[valid] = (mids[valid] - start) / binsize
         num_bins = (stop - start) / binsize
-    if num_bins < 2:
+    if arraytype != 'compact' and num_bins < 2:
         if not silent:
             print >> sys.stderr, ("Insufficient data\n"),
         return None
@@ -534,12 +538,12 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
         if not silent:
             print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
-    if arratype == 'compact' and (binsize > 0 or not binbounds1 is None or not binbounds2 is None):
+    if arraytype == 'compact' and (binsize > 0 or not binbounds1 is None or not binbounds2 is None):
         if not silent:
             print >> sys.stderr, ("'Compact' array can only be used with unbinned data. No data returned.\n"),
         return None
     # Determine start, stop, startfrag, and stopfrag
-    chrom1 = fivec.frags['regions']['chromosome'][region]
+    chrom1 = fivec.frags['regions']['chromosome'][region1]
     chrint1 = fivec.chr2int[chrom1]
     if not binbounds1 is None:
         start1 = binbounds1[0, 0]
@@ -571,7 +575,7 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             if binsize > 0:
                 stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
             stopfrag1 = _find_frag_from_coord(fivec, chrint1, stop1)
-    chrom2 = fivec.frags['regions']['chromosome'][region]
+    chrom2 = fivec.frags['regions']['chromosome'][region2]
     chrint2 = fivec.chr2int[chrom2]
     if not binbounds2 is None:
         start2 = binbounds2[0, 0]
@@ -603,7 +607,7 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             if binsize > 0:
                 stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
             stopfrag2 = _find_frag_from_coord(fivec, chrint2, stop2)
-    if stopfrag1 - startfrag1 == 0 or stopfrag2 - startfrag2:
+    if stopfrag1 - startfrag1 == 0 or stopfrag2 - startfrag2 == 0:
         if not silent:
             print >> sys.stderr, ("Insufficient data, no data returned.\n"),
         return None
@@ -611,33 +615,6 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
         print >> sys.stderr, ("Finding %s %s array for %s:%i-%i by %s:%i-%i...") % (datatype, arraytype, chrom1,
                                                                                     start1, stop1, chrom2, start2,
                                                                                     stop2),
-    # Copy needed data from h5dict for faster access
-    if datatype != 'expected':
-        if startfrag1 < startfrag2:
-            start_index = fivec.data['trans_indices'][startfrag1]
-            stop_index = fivec.data['trans_indices'][stopfrag1]
-        else:
-            start_index = fivec.data['trans_indices'][startfrag2]
-            stop_index = fivec.data['trans_indices'][stopfrag2]
-        if stop_index - start_index == 0:
-            if not silent:
-                print >> sys.stderr, ("Insufficient data, no data returned.\n"),
-            return None
-        if startfrag1 < startfrag2:
-            data_indices = fivec.data['trans_indices'][startfrag1:(stopfrag1 + 1)]
-        else:
-            data_indices = fivec.data['trans_indices'][startfrag2:(stopfrag2 + 1)]
-        data_indices -= data_indices[0]
-        data = fivec.data['trans_data'][start_index:stop_index, :]
-        if startfrag1 < startfrag2:
-            data[:, 0] -= startfrag1
-            data[:, 1] -= startfrag2
-        else:
-            data[:, 0] -= startfrag2
-            data[:, 1] -= startfrag1
-    else:
-        data_indices = None
-        data = None
     # Determine mapping of valid fends to bins
     mids1 = fivec.frags['fragments']['mid'][startfrag1:stopfrag1]
     mids2 = fivec.frags['fragments']['mid'][startfrag2:stopfrag2]
@@ -647,20 +624,24 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
     mapping2 = numpy.zeros(stopfrag2 - startfrag2, dtype=numpy.int32) - 1
     valid1 = numpy.where(fivec.filter[startfrag1:stopfrag1] > 0)[0]
     valid2 = numpy.where(fivec.filter[startfrag2:stopfrag2] > 0)[0]
-    if binsize1 == 0 and binbounds1 is None and binbounds2 is None:
+    if binsize == 0 and binbounds1 is None and binbounds2 is None:
         if arraytype == 'compact':
-            valid1 = numpy.where((strand1 == 0) * (fivec.filter[startfrag1:stopfrag1] > 0))[0]
-            valid2 = numpy.where((strand2 == 1) * (fivec.filter[startfrag2:stopfrag2] > 0))[0]
+            forward = numpy.where(strands1 == 0)[0]
+            valid1 = numpy.where((fivec.filter[startfrag1:stopfrag1] > 0) * (strands1 == 0))[0]
+            for_valid = numpy.where(fivec.filter[startfrag1 + forward] > 0)[0]
+            reverse = numpy.where(strands2 == 1)[0]
+            valid2 = numpy.where((fivec.filter[startfrag2:stopfrag2] > 0) * (strands2 == 1))[0]
+            rev_valid = numpy.where(fivec.filter[startfrag2 + reverse] > 0)[0]
             if skipfiltered:
-                mapping1[valid1] = numpy.arange(valid1)
+                mapping1[valid1] = numpy.arange(valid1.shape[0])
                 num_bins1 = valid1.shape[0]
-                mapping2[valid2] = numpy.arange(valid2)
+                mapping2[valid2] = numpy.arange(valid2.shape[0])
                 num_bins2 = valid2.shape[0]
             else:
-                num_bins1 = numpy.sum(strands1 == 0)
-                mapping1[valid1] = numpy.arange(num_bins1)
-                num_bins2 = numpy.sum(strands2 == 1)
-                mapping2[valid2] = numpy.arange(num_bins2)
+                num_bins1 = forward.shape[0]
+                mapping1[valid1] = for_valid
+                num_bins2 = reverse.shape[0]
+                mapping2[valid2] = rev_valid
         else:
             if skipfiltered:
                 mapping1[valid1] = numpy.arange(valid1.shape[0])
@@ -695,6 +676,33 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
         if not silent:
             print >> sys.stderr, ("Insufficient data\n"),
         return None
+    # Copy needed data from h5dict for faster access
+    if datatype != 'expected':
+        if startfrag1 < startfrag2:
+            start_index = fivec.data['trans_indices'][startfrag1]
+            stop_index = fivec.data['trans_indices'][stopfrag1]
+        else:
+            start_index = fivec.data['trans_indices'][startfrag2]
+            stop_index = fivec.data['trans_indices'][stopfrag2]
+        if stop_index - start_index == 0:
+            if not silent:
+                print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+            return None
+        if startfrag1 < startfrag2:
+            data_indices = fivec.data['trans_indices'][startfrag1:(stopfrag1 + 1)]
+        else:
+            data_indices = fivec.data['trans_indices'][startfrag2:(stopfrag2 + 1)]
+        data_indices -= data_indices[0]
+        data = fivec.data['trans_data'][start_index:stop_index, :]
+        if startfrag1 < startfrag2:
+            data[:, 0] -= startfrag1
+            data[:, 1] -= startfrag2
+        else:
+            data[:, 0] -= startfrag2
+            data[:, 1] -= startfrag1
+    else:
+        data_indices = None
+        data = None
     # If correction is required, determine what type and get appropriate data
     corrections1 = None
     corrections2 = None
@@ -732,6 +740,8 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
                                fivec.frags['fragments']['stop'][startfrag2:stopfrag2] -
                                fivec.frags['fragments']['start'][startfrag2:stopfrag2]).astype(numpy.int32)
     if datatype in ['distance', 'enrichment', 'expected']:
+        if fivec.trans_mean is None:
+            fivec.find_trans_mean()
         trans_mean = fivec.trans_mean
     else:
         trans_mean = 0.0
@@ -757,11 +767,11 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
                                                len_corrections, strands2, strands1, data_array,
                                                trans_mean)
     else:
-        where = numpy.where(data_array[:, 0] > 0.0)
-        data_array[where[0], 1] = 1.0
+        where = numpy.where(data_array[:, :, 0] > 0.0)
+        data_array[where[0], where[1], 1] = 1.0
     if datatype == 'expected':
-        where = numpy.where(data_array[:, 1] > 0.0)
-        data_array[where[0], 0] = 1.0
+        where = numpy.where(data_array[:, :, 1] > 0.0)
+        data_array[where[0], where[1], 0] = 1.0
     # if startfrag2 < startfrag1, transpose data_array
     if startfrag1 > startfrag2:
         data_array = numpy.transpose(data_array, (1, 0, 2))
@@ -922,9 +932,9 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     if len(regions) == 0:
         regions = list(numpy.arange(fivec.frags['regions'].shape[0]))
     if binsize > 0:
-        output['resolution'] = binsize
+        output.attrs['resolution'] = binsize
     else:
-        output['resolution'] = 'fragment'
+        output.attrs['resolution'] = 'fragment'
     # Find cis heatmaps
     remove = []
     for region in regions:
@@ -951,19 +961,21 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
             for j in range(i + 1, len(regions)):
                 if arraytype == 'compact':
                     results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
-                                                arraytype=arraytype, silent=silent)
+                                                arraytype=arraytype, skipfiltered=True, silent=silent)
                     output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
                     output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
                     results = find_trans_signal(fivec, regions[j], regions[i], binsize=binsize, datatype=datatype,
-                                                arraytype=arraytype, silent=silent)
+                                                arraytype=arraytype, skipfiltered=True, silent=silent)
                     output.create_dataset('%s_by_%s.counts' % (regions[j], regions[i]), data=results[:, :, 0])
                     output.create_dataset('%s_by_%s.expected' % (regions[j], regions[i]), data=results[:, :, 1])
                 else:
                     results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
-                                                arraytype=arraytype, silent=silent)
+                                                arraytype=arraytype, skipfiltered=True, silent=silent)
                     output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
                     output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
-    output.close
+    if 'history' in kwargs:
+        output.attrs['history'] = kwargs['history']
+    output.close()
     if not silent:
         print >> sys.stderr, ("Creating binned heatmap...Done\n"),
     return None

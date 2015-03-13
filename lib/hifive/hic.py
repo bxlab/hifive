@@ -74,6 +74,7 @@ class HiC(object):
         self.distance_parameters = None
         self.chromosome_means = None
         self.normalization = 'none'
+        self.history = ''
         if mode != 'w':
             self.load()
         return None
@@ -96,6 +97,7 @@ class HiC(object):
         :type filename: str.
         :returns: None
         """
+        self.history += "HiC.load_data(filename='%s') - " % (filename)
         if self.rank > 0:
             return None
         filename = os.path.abspath(filename)
@@ -103,10 +105,12 @@ class HiC(object):
         if not os.path.exists(filename):
             if not self.silent:
                 print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
+            self.history += "Error: '%s' not found\n" % filename
             return None
         self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
                                        os.path.dirname(self.file)), os.path.basename(filename))
         self.data = h5py.File(filename, 'r')
+        self.history = self.data['/'].attrs['history'] + self.history
         fendfilename = self.data['/'].attrs['fendfilename']
         if fendfilename[:2] == './':
             fendfilename = fendfilename[2:]
@@ -119,6 +123,7 @@ class HiC(object):
         if not os.path.exists(fendfilename):
             if not self.silent:
                 print >> sys.stderr, ("Could not find %s.\n") % (fendfilename),
+            self.history += "Error: '%s' not found\n" % fendfilename
             return None
         self.fends = h5py.File(fendfilename, 'r')
         # create dictionary for converting chromosome names to indices
@@ -127,6 +132,7 @@ class HiC(object):
             self.chr2int[chrom] = i
         # create arrays
         self.filter = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.int32)
+        self.history += "Succcess\n"
         return None
 
     def save(self, out_fname=None):
@@ -137,6 +143,7 @@ class HiC(object):
         :type filename: str.
         :returns: None
         """
+        self.history.replace("'None'", "None")
         if self.rank > 0:
             return None
         if not out_fname is None:
@@ -225,7 +232,9 @@ class HiC(object):
 
         :returns: None
         """
+        self.history += "HiC.reset_filter() - "
         self.filter.fill(1)
+        self.history += "Success\n"
         return None
 
     def filter_fends(self, mininteractions=10, mindistance=0, maxdistance=0):
@@ -242,8 +251,7 @@ class HiC(object):
         :type maxdistance: int.
         :returns: None
         """
-        if self.rank > 0:
-            return None
+        self.history += "HiC.filter_fends(mininteractions=%i, mindistance=%i, maxdistance=%i) - " % (mininteractions, mindistance, maxdistance)
         if not self.silent:
             print >> sys.stderr, ("Filtering fends..."),
         self.mininteractions = mininteractions
@@ -284,6 +292,7 @@ class HiC(object):
             current_valid = numpy.sum(self.filter)
         if not self.silent:
             print >> sys.stderr, ("Removed %i of %i fends\n") % (original_count - current_valid, original_count),
+        self.history += "Success\n"
         return None
 
     def find_distance_parameters(self, numbins=90, minsize=200, maxsize=0, corrected=False):
@@ -302,6 +311,7 @@ class HiC(object):
         :type corrected: bool.
         :returns: None
         """
+        self.history += "HiC.find_distance_parameters(numbins=%i, minsize=%i, maxsize=%i, corrected=%s) - " % (numbins, minsize, maxsize, corrected)
         if not self.silent:
             print >> sys.stderr, ('Finding distance arrays...'),
         # determine max distance range of data
@@ -409,36 +419,11 @@ class HiC(object):
             self.comm.send(logdistance_sum, dest=0, tag=11)
             distance_parameters = self.comm.recv(source=0, tag=11)
         self.distance_parameters = distance_parameters
-        if not 'chromosome_means' in self.__dict__.keys():
+        if self.chromosome_means is None:
             self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
         if not self.silent:
             print >> sys.stderr, ('\r%s\rFinding distance curve... Done\n') % (' ' * 80),
-        return None
-
-    def _smooth_distance_means(self, smoothed):
-        """Smooth distance curve in log-space using triangular smoothing of
-        smoothed+1 degree."""
-        if not self.silent:
-            print >> sys.stderr, ("Smoothing distance bin means..."),
-        where = numpy.where(self.distance_means > 0)[0]
-        log_means = numpy.log(self.distance_means[where])
-        new_means = numpy.copy(log_means)
-        for i in range(1, smoothed):
-            factor = 1
-            for j in range(1, i + 1):
-                scaling = (i + 1 - j) / float(i + 1)
-                new_means[i] += (log_means[i - j] + log_means[i + j]) * scaling
-                new_means[-i] += (log_means[-i - j] + log_means[new_means.shape[0] - 1 - i + j]) * scaling
-            new_means[i] /= i + 1
-            new_means[-i] /= i + 1
-        for i in range(1, smoothed + 1):
-            new_means[smoothed:(-smoothed)] += ((log_means[(smoothed - i):(-smoothed - i)] +
-                                                log_means[(smoothed + i):(new_means.shape[0] - smoothed + i)]) *
-                                                (smoothed + 1 - i) / (smoothed + 1))
-        new_means[smoothed:(-smoothed)] /= smoothed + 1
-        self.distance_means[where] = numpy.exp(new_means)
-        if not self.silent:
-            print >> sys.stderr, ("Done\n"),
+        self.history += "Success\n"
         return None
 
     def find_probability_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0001,
@@ -470,10 +455,18 @@ class HiC(object):
         :type precorrect: bool.
         :returns: None
         """
+        self.history += "HiC.find_probability_fend_corrections(mindistance=%i, maxdistance=%i, minchange=%f, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, display=%i, chroms=%s, precalculate=%s, precorrect=%s) - " % (mindistance, maxdistance, minchange, burnin_iterations, annealing_iterations, learningrate, display, str(chroms), precalculate, precorrect)
         if (precorrect and self.gc_corrections is None and
             self.map_corrections is None and self.len_corrections is None):
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_regression_fend_corrections'.\n"),
+            self.history += "Error: 'find_regression_fend_corrections()' not run yet\n"
+            return None
+        # make sure distance parameters have been calculated
+        if self.distance_parameters is None:
+            if not self.silent:
+                print >> sys.stderr, ("This normalization requires a project that has already had 'find_distance_parameters' run.\n"),
+            self.history += "Error: 'find_distance_parameters()' not run yet\n"
             return None
         self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
         if (chroms is None or
@@ -482,10 +475,10 @@ class HiC(object):
                 (len(chroms) == 1 and chroms[0] == ''))) or
                 chroms == ''):
             chroms = self.chr2int.keys()
-        chrints = numpy.zeros(len(chroms)):
+        chrints = numpy.zeros(len(chroms), dtype=numpy.int32)
         for i in range(len(chroms)):
             chrints[i] = self.chr2int[chroms[i]]
-        chroms = chroms[numpy.argsort(chrints)]
+        chroms = list(numpy.array(chroms)[numpy.argsort(chrints)])
         if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
             binned = 1
         else:
@@ -518,6 +511,8 @@ class HiC(object):
             else:
                 map_corrections = None
                 map_indices = None
+        if self.chromosome_means is None:
+            self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
         for chrom in chroms:
             chrint = self.chr2int[chrom]
             if self.rank == 0:
@@ -760,32 +755,11 @@ class HiC(object):
                         cont = False
                     iteration += 1
             del counts, nonzero_indices0, nonzero_indices1, nonzero_means, zero_indices0, zero_indices1, zero_means
-            self.corrections[rev_mapping + start_fend] = corrections
             # calculate chromosome mean
-            start_index = self.data['cis_indices'][startfend]
-            stop_index = self.data['cis_indices'][stopfend]
-            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
-            data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
-            data = data[numpy.where(self.filter[data[:, 0]] * self.filter[data[:, 1]])[0], :]
-            count_sum = numpy.sum(data[:, 2]).astype(numpy.int64)
-            corrected_sum = numpy.sum(data[:, 2] / (self.corrections[data[:, 0]] *
-                                                    self.corrections[data[:, 1]])).astype(numpy.float64)
-            if self.rank == 0:
-                for i in range(1, self.num_procs):
-                    count_sum += self.comm.recv(source=i, tag=11)
-                    corrected_sum += self.comm.recv(source=i, tag=11)
-                chrom_mean = numpy.log(count_sum / corrected_sum)
-                corrections /= (count_sum / corrected_sum) ** 0.5
-                for i in range(1, self.num_procs):
-                    self.comm.send(chrom_mean, dest=i, tag=11)
-                    self.comm.Send(corrections, dest=i, tag=13)
-            else:
-                self.comm.send(count_sum, dest=0, tag=11)
-                self.comm.send(corrected_sum, dest=0, tag=11)
-                chrom_mean = self.comm.recv(source=0, tag=11)
-                self.comm.Recv(corrections, source=0, tag=13)
-            self.chromosome_means[self.chr2int[chrom]] = chrom_mean
-            self.corrections[rev_mapping + start_fend] = corrections
+            chrom_mean = numpy.sum(corrections)
+            chrom_mean = chrom_mean ** 2.0 - numpy.sum(corrections ** 2.0)
+            chrom_mean /= corrections.shape[0] * (corrections.shape[0] - 1)
+            self.chromosome_means[self.chr2int[chrom]] += numpy.log(chrom_mean)
             cost = _optimize.calculate_prob_cost(zero_indices0,
                                                  zero_indices1,
                                                  nonzero_indices0,
@@ -794,6 +768,7 @@ class HiC(object):
                                                  zero_means,
                                                  counts,
                                                  corrections)
+            self.corrections[rev_mapping + start_fend] = corrections / (chrom_mean ** 0.5)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     cost += self.comm.recv(source=i, tag=11)
@@ -808,6 +783,7 @@ class HiC(object):
             self.normalization = 'regression-probability'
         else:
             self.normalization = 'probabilistic'
+        self.history += "Success\n"
         return None
 
     def _exchange_gradients(self, gradients, temp):
@@ -858,6 +834,7 @@ class HiC(object):
         :type precorrect: bool.
         :returns: None
         """
+        self.history += "HiC.find_express_fend_corrections(iterations, mindistance=%i, maxdistance=%i, remove_distance=%s, usereads='%s', mininteractions=%i, chroms=%s, precorrect=%s) - " % (iterations, mindistance, maxdistance, remove_distance, usereads, mininteractions, str(chroms), precorrect)
         if mininteractions is None:
             if 'mininteractions' in self.__dict__.keys():
                 mininteractions = self.mininteractions
@@ -867,6 +844,25 @@ class HiC(object):
         if usereads not in ['cis', 'trans', 'all']:
             if not self.silent:
                 print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
+            self.history += "Error: '%s' not a valid value for 'usereads'\n" % usereads
+            return None
+        if usereads == 'cis':
+            useread_int = 0
+        elif usereads == 'all':
+            useread_int = 1
+        else:
+            useread_int = 2
+        # make sure distance parameters have been calculated, if removing distance
+        if remove_distance and self.distance_parameters is None:
+            if not self.silent:
+                print >> sys.stderr, ("'remove_distance' requires a project that has already had 'find_distance_parameters' run.\n"),
+            self.history += "Error: 'find_distance_parameters()' not run yet\n"
+            return None
+        if (precorrect and self.gc_corrections is None and
+            self.map_corrections is None and self.len_corrections is None):
+            if not self.silent:
+                print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_regression_fend_corrections'.\n"),
+            self.history += "Error: 'find_regression_fend_corrections()' not run yet\n"
             return None
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
@@ -888,16 +884,16 @@ class HiC(object):
             chroms = self.chr2int.keys()
         elif not chroms is None and isinstance(chroms, str):
             chroms = [chroms]
-        chrints = numpy.zeros(len(chroms)):
+        chrints = numpy.zeros(len(chroms), dtype=numpy.int32)
         for i in range(len(chroms)):
             chrints[i] = self.chr2int[chroms[i]]
-        chroms = chroms[numpy.argsort(chrints)]
+        chroms = list(numpy.array(chroms)[numpy.argsort(chrints)])
         for chrm, i in self.chr2int.iteritems():
             if chrm not in chroms:
                 filt[chr_indices[i]:chr_indices[i + 1]] = 0
         all_valid = numpy.sum(filt)
         # copy needed arrays from h5dict
-        if useread_int < 2:
+        if usereads in ['cis', 'all']:
             cis_ranges = numpy.round(numpy.linspace(0, self.data['cis_data'].shape[0],
                                                     self.num_procs + 1)).astype(numpy.int64)
             data = self.data['cis_data'][cis_ranges[self.rank]:cis_ranges[self.rank + 1], :]
@@ -917,7 +913,7 @@ class HiC(object):
             data = data[valid, :]
         else:
             data = None
-        if useread_int > 0:
+        if usereads in ['trans', 'all']:
             trans_ranges = numpy.round(numpy.linspace(0, self.data['trans_data'].shape[0],
                                                       self.num_procs + 1)).astype(numpy.int64)
             trans_data = self.data['trans_data'][trans_ranges[self.rank]:trans_ranges[self.rank + 1], :]
@@ -950,6 +946,7 @@ class HiC(object):
             if not self.silent:
                 print >> sys.stderr, ("\nInsufficient interactions for one or more fends.\n"),
                 print >> sys.stderr, ("Try resetting and refiltering fends or expanding distance range.\n"),
+            self.history += "Error: Too few interactions for give settings\n"
             return None
         if self.rank == 0:
             chrints = [self.chr2int[chrom] for chrom in chroms]
@@ -1134,35 +1131,17 @@ class HiC(object):
         count_sums = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.int64)
         corrected_sums = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float64)
         # calculate chromosome mean
+        if self.chromosome_means is None:
+            self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
         for chrom in chroms:
             chrint = self.chr2int[chrom]
-            start_index = self.data['cis_indices'][chr_indices[chrint]]
-            stop_index = self.data['cis_indices'][chr_indices[chrint + 1]]
-            node_ranges = numpy.round(numpy.linspace(start_index, stop_index, self.num_procs + 1)).astype(numpy.int32)
-            data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
-            data = data[numpy.where(filt[data[:, 0]] * filt[data[:, 1]])[0], :]
-            count_sums[chrint] = numpy.sum(data[:, 2])
-            corrected_sums[chrint] = numpy.sum(data[:, 2] / (corrections[data[:, 0]] *
-                                                             corrections[data[:, 1]]).astype(numpy.float64))
-        if self.rank == 0:
-            for i in range(1, self.num_procs):
-                count_sums += self.comm.recv(source=i, tag=11)
-                corrected_sums += self.comm.recv(source=i, tag=11)
-            chrom_means = numpy.zeros(count_sums.shape[0], dtype=numpy.float32)
-            for i in range(chrom_means.shape[0]):
-                if count_sums[i] > 0:
-                    chrom_means[i] = numpy.log(count_sums[i] / corrected_sums[i])
-                    where = numpy.where(filt[chr_indices[i]:chr_indices[i + 1]] == 1)[0] + chr_indices[i]
-                    corrections[where] /= (count_sums[i] / corrected_sums[i]) ** 0.5
-            for i in range(1, self.num_procs):
-                self.comm.send(chrom_means, dest=i, tag=11)
-                self.comm.Send(corrections, dest=i, tag=13)
-        else:
-            self.comm.send(count_sums, dest=0, tag=11)
-            self.comm.send(corrected_sums, dest=0, tag=11)
-            chrom_means = self.comm.recv(source=0, tag=11)
-            self.comm.Recv(corrections, source=0, tag=13)
-        self.chromosome_means = chrom_means
+            valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0] + chr_indices[chrint]
+            chrom_mean = numpy.sum(corrections[valid])
+            chrom_mean = chrom_mean ** 2.0 - numpy.sum(corrections[valid] ** 2.0)
+            chrom_mean /= valid.shape[0] * (valid.shape[0] - 1)
+            if remove_distance:
+                self.chromosome_means[chrint] += numpy.log(chrom_mean)
+            corrections[valid] /= chrom_mean ** 0.5
         self.corrections = corrections
         if not self.silent and self.rank == 0:
             print >> sys.stderr, ("\r%s\rCompleted learning express corrections. Final cost: %f\n") % (' ' * 80, cost),
@@ -1170,6 +1149,7 @@ class HiC(object):
             self.normalization = 'regression-express'
         else:
             self.normalization = 'express'
+        self.history += "Succcess\n"
         return None
 
     def find_regression_fend_corrections(self, mindistance=0, maxdistance=0, chroms=[], num_bins=[20, 20, 20],
@@ -1202,20 +1182,24 @@ class HiC(object):
         for parameter in model:
             if not parameter in ['len', 'distance'] and parameter not in self.fends['fends'].dtype.names:
                 if not self.silent:
-                    print >> sys.stderr, ("Fend feature %s not found in fend object. Try removing it from model or creating a new fend object with feature data.\n"),
+                    print >> sys.stderr, ("Fend feature %s not found in fend object. Try removing it from model or creating a new fend object with feature data.\n") % (parameter),
+                self.history += "Error: model parameter '%s' not found in fend data\n" % parameter
                 return None
         if 'distance' in model and usereads == 'trans':
             if not self.silent:
                 print >> sys.stderr, ("The 'distance' parameter can only be used in conjuction with 'cis' or 'all' reads.\n"),
+            self.history += "Error: model parameter 'distance' cannot be used with 'trans'\n"
             return None
         if len(model) != len(num_bins):
             if not self.silent:
                 print >> sys.stderr, ("The number of items in the 'model' parameter must be the same as the number in the 'num_bins' parameter.\n"),
+            self.history += "Error: mismatch between lengths of 'num_bins' and 'model'\n"
             return None
         # make sure usereads has a valid value
         if usereads not in ['cis', 'trans', 'all']:
             if not self.silent:
                 print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
+            self.history += "Error: '%s' not a valid value for 'usereads'\n" % usereads
             return None
         if (chroms is None or
                 (isinstance(chroms, list) and
@@ -1223,10 +1207,10 @@ class HiC(object):
                 (len(chroms) == 1 and chroms[0] == ''))) or
                 chroms == ''):
             chroms = self.chr2int.keys()
-        chrints = numpy.zeros(len(chroms)):
+        chrints = numpy.zeros(len(chroms), dtype=numpy.int32)
         for i in range(len(chroms)):
             chrints[i] = self.chr2int[chroms[i]]
-        chroms = chroms[numpy.argsort(chrints)]
+        chroms = list(numpy.array(chroms)[numpy.argsort(chrints)])
         # Create requested bin cutoffs for each feature of the regression model
         if not self.silent:
             print >> sys.stderr, ("\r%s\rPartitioning features into bins...") % (' ' * 80),
@@ -1620,6 +1604,7 @@ class HiC(object):
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning regression corrections... Final ll:%f\n") % (' ' * 80, ll),
         self.normalization = 'regression'
+        self.history += "Success\n"
         return None
 
     def find_trans_means(self):
@@ -1628,6 +1613,7 @@ class HiC(object):
 
         :returns: None
         """
+        self.history += "HiC.find_trans_mean() - "
         if not self.silent:
             print >> sys.stderr, ("Finding mean signals across trans interactions..."),
         chr_indices = self.fends['chr_indices'][...]
@@ -1654,6 +1640,7 @@ class HiC(object):
         self.trans_means = actual / numpy.maximum(1.0, possible.astype(numpy.float32))
         if not self.silent:
             print >> sys.stderr, ('Done\n'),
+        self.history += "Success\n"
         return None
 
     def learn_fend_3D_model(self, chrom, minobservations=10):
@@ -1676,7 +1663,7 @@ class HiC(object):
             print >> sys.stderr, ("Learning fend-resolution 3D model..."),
         unbinned, mapping = hic_binning.unbinned_cis_signal(self, chrom, datatype='fend', arraytype='upper',
                                                             skipfiltered=True, returnmapping=True)
-        mids = self.fends['fends']['mid'][mapping]
+        mids = (mapping[:, 0] + mapping[:, 1]) / 2
         if not self.silent:
             print >> sys.stderr, ("Dynamically binning data..."),
         dynamic = numpy.copy(unbinned)
@@ -1931,6 +1918,8 @@ class HiC(object):
         :type chroms: list
         :returns: None
         """
+        history = self.history
+        history += "HiC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', chroms=%s)" % (filename, binsize, includetrans, datatype, str(chroms))
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -1939,5 +1928,5 @@ class HiC(object):
             chroms = self.chr2int.keys()
             chroms.sort()
         hic_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
-                                       datatype=datatype, chroms=chroms, silent=self.silent)
+                                       datatype=datatype, chroms=chroms, silent=self.silent, history=history)
         return None

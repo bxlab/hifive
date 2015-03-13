@@ -31,8 +31,21 @@ class Fend(object):
         """
         Create a Fend object.
         """
-        self.fends = h5py.File(filename, mode)
+        self.file = filename
         self.silent = silent
+        self.history = ''
+        if mode != 'w':
+            self.load()
+        return None
+
+    def __getitem__(self, key):
+        if key in self.__dict__:
+            return self.__dict__[key]
+        else:
+            return None
+
+    def __setitem__(self, key, value):
+        self.__dict__[key] = value
         return None
 
     def save(self):
@@ -41,7 +54,32 @@ class Fend(object):
 
         :returns: None
         """
-        self.fends.close()
+        self.history.replace("'None'", "None")
+        fendfile = h5py.File(self.file, 'w')
+        for key in self.__dict__.keys():
+            if key in ['file', 'silent']:
+                continue
+            elif isinstance(self[key], numpy.ndarray):
+                fendfile.create_dataset(key, data=self[key])
+            elif not isinstance(self[key], dict):
+                fendfile.attrs[key] = self[key]
+        fendfile.close()
+        return None
+
+    def load(self):
+        """
+        Load fend data from h5dict specified at object creation.
+
+        Any call of this function will overwrite current object data with values from the last :func:`save` call.
+
+        :returns: None
+        """
+        fendfile = h5py.File(self.file, 'r')
+        for key in fendfile.keys():
+            self[key] = numpy.copy(fendfile[key])
+        for key in fendfile['/'].attrs.keys():
+            self[key] = fendfile['/'].attrs[key]
+        fendfile.close()
         return None
 
     def load_fends(self, filename, genome_name=None, re_name=None, format=None):
@@ -58,9 +96,11 @@ class Fend(object):
         :type format: str.
         :returns: None
         """
+        self.history += "Fend.load_fends(filename='%s', genome_name='%s', re_name='%s', format='%s') - " % (filename, genome_name, re_name, format)
         if not os.path.exists(filename):
             if not self.silent:
                 print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
+            self.history += "Error: '%s' no located\n" % filename
             return None
         # if no genome name given, determine from filename
         if genome_name is None:
@@ -75,6 +115,7 @@ class Fend(object):
         else:
             if not self.silent:
                 print >> sys.stderr, ("Unrecognized format.")
+            self.history += "Error: Unrecognized fend format\n"
             return None
         # make note of chromosome positions in fend array
         chr_indices = numpy.zeros(chromosomes.shape[0] + 1, dtype=numpy.int32)
@@ -82,11 +123,12 @@ class Fend(object):
         for i in range(1, chr_indices.shape[0]):
             chr_indices[i] += chr_indices[i - 1]
         # write all data to h5dict
-        self.fends.create_dataset(name='fends', data=fends)
-        self.fends.attrs['re_name'] = re_name
-        self.fends.attrs['genome_name'] = genome_name
-        self.fends.create_dataset(name='chr_indices', data=chr_indices)
-        self.fends.create_dataset(name='chromosomes', data=chromosomes)
+        self.fends = fends
+        self.re_name = re_name
+        self.genome_name = genome_name
+        self.chr_indices = chr_indices
+        self.chromosomes = chromosomes
+        self.history += "Success\n"
         return None
 
     def _load_from_fend(self, fname):

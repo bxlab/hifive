@@ -40,6 +40,7 @@ class FiveCData(object):
         """
         self.file = os.path.abspath(filename)
         self.silent = silent
+        self.history = ''
         if mode != 'w':
             self.load()
         return None
@@ -60,6 +61,7 @@ class FiveCData(object):
 
         :returns: None
         """
+        self.history.replace("'None'", "None")
         datafile = h5py.File(self.file, 'w')
         for key in self.__dict__.keys():
             if key in ['file', 'chr2int', 'frags', 'silent']:
@@ -114,15 +116,18 @@ class FiveCData(object):
         :type filelist: list
         :returns: None
         """
+        self.history += "FiveCData.load_data_from_counts(fragfilename='%s', filelist=%s) - " % (fragfilename, str(filelist))
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
             if not self.silent:
                 print >> sys.stderr, \
                 ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
+            self.history += "Error: '%s' not found\n" % fragfilename
             return None
         self.fragfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
                                        os.path.dirname(self.file)), os.path.basename(fragfilename))
         self.frags = h5py.File(fragfilename, 'r')
+        self.history = self.frags['/'].attrs['history'] + self.history
         strands = self.frags['fragments']['strand'][...]
         chr2int = {}
         for i, j in enumerate(self.frags['chromosomes'][:]):
@@ -141,6 +146,7 @@ class FiveCData(object):
             if not os.path.exists(fname):
                 if not self.silent:
                     print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
+                self.history += "Error: '%s' not found, " % fname
                 continue
             if not self.silent:
                 print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
@@ -167,11 +173,13 @@ class FiveCData(object):
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
             return None
+            self.history += "Error: no valid data loaded\n"
         if not self.silent:
             print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
                              (total_reads,len(data)),
         # write fragment pairs to h5dict
         self._parse_fragment_pairs(data)
+        self.history += "Success\n"
         return None
 
     def load_data_from_bam(self, fragfilename, filelist):
@@ -184,14 +192,17 @@ class FiveCData(object):
         :type filelist: list
         :returns: None
         """
+        self.history += "FiveCData.load_data_from_counts(fragfilename='%s', filelist=%s) - " % (fragfilename, str(filelist))
         if 'pysam' not in sys.modules.keys():
             if not self.silent:
                 print >> sys.stderr, ("The pysam module must be installed to use this function.")
+            self.history += 'Error: pysam module missing\n'
             return None
         # determine if fragment file exists and if so, load it
         if not os.path.exists(fragfilename):
             if not self.silent:
                 print >> sys.stderr, ("The fragment file %s was not found. No data was loaded.\n") % (fragfilename),
+            self.history += "Error: '%s' not found\n" % fragfilename
             return None
         self.fragfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
                                        os.path.dirname(self.file)), os.path.basename(fragfilename))
@@ -215,10 +226,12 @@ class FiveCData(object):
             if not os.path.exists(filepair[0]):
                 if not self.silent:
                     print >> sys.stderr, ("%s could not be located.") % (filepair[0]),
+                self.history += "'%s' not found, " % filepair[0]
                 present = False
             if not os.path.exists(filepair[1]):
                 if not self.silent:
                     print >> sys.stderr, ("%s could not be located.") % (filepair[1]),
+                self.history += "'%s' not found, " % filepair[1]
                 present = False
             if not present:
                 if not self.silent:
@@ -284,11 +297,13 @@ class FiveCData(object):
         if len(data) == 0:
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
+            self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
             print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
                              (total_reads,len(data)),
         self._parse_fragment_pairs(data)
+        self.history += 'Success\n'
         return None
 
     def _parse_fragment_pairs(self, frag_pairs):

@@ -31,8 +31,21 @@ class Fragment(object):
         """
         Create a Fragment object.
         """
-        self.fragments = h5py.File(filename, mode)
+        self.file = filename
         self.silent = silent
+        self.history = ""
+        if mode != 'w':
+            self.load()
+        return None
+
+    def __getitem__(self, key):
+        if key in self.__dict__:
+            return self.__dict__[key]
+        else:
+            return None
+
+    def __setitem__(self, key, value):
+        self.__dict__[key] = value
         return None
 
     def save(self):
@@ -41,7 +54,32 @@ class Fragment(object):
 
         :returns: None
         """
-        self.fragments.close()
+        self.history.replace("'None'", "None")
+        fragfile = h5py.File(self.file, 'w')
+        for key in self.__dict__.keys():
+            if key in ['file', 'silent']:
+                continue
+            elif isinstance(self[key], numpy.ndarray):
+                fragfile.create_dataset(key, data=self[key])
+            elif not isinstance(self[key], dict):
+                fragfile.attrs[key] = self[key]
+        fragfile.close()
+        return None
+
+    def load(self):
+        """
+        Load fragment data from h5dict specified at object creation.
+
+        Any call of this function will overwrite current object data with values from the last :func:`save` call.
+
+        :returns: None
+        """
+        fragfile = h5py.File(self.file, 'r')
+        for key in fragfile.keys():
+            self[key] = numpy.copy(fragfile[key])
+        for key in fragfile['/'].attrs.keys():
+            self[key] = fragfile['/'].attrs[key]
+        fragfile.close()
         return None
 
     def load_fragments(self, filename, fastafile=None, genome_name=None, re_name=None, regions=[],
@@ -63,9 +101,11 @@ class Fragment(object):
         :type minregionspacing: int.
         :returns: None
         """
+        self.history += "Fragment.load_fragments(filename='%s', fastafile='%s', genome_name='%s', re_name='%s', regions=%s, minregionspacing=%i) - " % (filename, fastafile, genome_name, re_name, str(regions), minregionspacing)
         if not os.path.exists(filename):
             if not self.silent:
                 print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
+            self.history += "Error: '%s' not found\n" % filename
             return None
         chromosomes = []
         chr2int = {}
@@ -95,8 +135,8 @@ class Fragment(object):
         data.sort()
         if not fastafile is None:
             dtypes = numpy.dtype([('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32),
-                                  ('mid', numpy.int32), ('strand', numpy.int32), ('name', 'S32'),
-                                  ('gc', numpy.float32)])
+                                  ('mid', numpy.int32), ('strand', numpy.int32), ('region', numpy.int32),
+                                  ('name', 'S32'), ('gc', numpy.float32)])
             input = open(fastafile, 'r')
             gc = {}
             name = input.readline()
@@ -107,7 +147,8 @@ class Fragment(object):
             input.close()
         else:
             dtypes = numpy.dtype([('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32),
-                                  ('mid', numpy.int32), ('strand', numpy.int32), ('name', 'S32')])
+                                  ('mid', numpy.int32), ('strand', numpy.int32), ('region', numpy.int32),
+                                  ('name', 'S32')])
         fragments = numpy.empty(len(data), dtype=dtypes)
         for i in range(len(data)):
             # make an entry for each fragment
@@ -163,19 +204,21 @@ class Fragment(object):
             regions['stop_frag'][i] = region_array[i][2]
             regions['start'][i] = region_array[i][3]
             regions['stop'][i] = region_array[i][4]
+            fragments['region'][region_array[i][1]:region_array[i][2]] = i
         # write all data to h5dict
-        self.fragments.create_dataset(name='fragments', data=fragments)
+        self.fragments = fragments 
         if not re_name is None:
-            self.fragments.attrs['re_name'] = re_name
+            self.re_name = re_name
         if not genome_name is None:
-            self.fragments.attrs['genome_name'] = genome_name
-        self.fragments.create_dataset(name='chr_indices', data=chr_indices)
-        self.fragments.create_dataset(name='chromosomes', data=chromosomes)
-        self.fragments.create_dataset(name='regions', data=regions)
+            self.genome_name = genome_name
+        self.chr_indices = chr_indices
+        self.chromosomes = chromosomes
+        self.regions = regions
+        self.history += 'Success\n'
         return None
 
 if __name__ == '__main__':
     filename = sys.argv[1]
-    fragment = Fragment('.'.join(filename.split('.')[:-1] + ['.hdf5']), 'w')
+    fragment = Fragment('.'.join(filename.split('.')[:-1] + ['.frags']), 'w')
     fragment.load_fragments(filename)
-    fragment.fragments.close()
+    fragment.save()

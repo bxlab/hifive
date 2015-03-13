@@ -53,7 +53,8 @@ def main():
     if options.algorithm in ['regression', 'regression-express', 'regression-probability']:
         hic.find_regression_fend_corrections(mindistance=options.mindist, maxdistance=options.maxdist,
                                              chroms=options.chroms, num_bins=options.modelbins, model=options.model,
-                                             learning_threshold=options.threshold, max_iterations=options.regiter)
+                                             learning_threshold=options.threshold, max_iterations=options.regiter,
+                                             usereads=options.regreads)
         precorrect = True
     if options.algorithm in ['probability', 'regression-probability']:
         hic.find_probability_fend_corrections(mindistance=options.mindist, maxdistance=options.maxdist,
@@ -64,7 +65,7 @@ def main():
     elif options.algorithm in ['express', 'regression-express']:
         hic.find_express_fend_corrections(iterations=options.expiter, mindistance=options.mindist,
                                           maxdistance=options.maxdist, remove_distance=options.nodist,
-                                          usereads=options.reads, mininteractions=options.minint,
+                                          usereads=options.expreads, mininteractions=options.minint,
                                           chroms=options.chroms, precorrect=precorrect)
     if rank == 0:
         hic.save()
@@ -98,9 +99,10 @@ def setup_parser():
         "-i":"number of iterations to wait before explicitly calculating cost and updating display (zero indicates off) [default: %default]",
         "-e":"number of iterations to run express learning for [default: %default]",
         "-d":"remove the distant-dependent portion of the signal prior to learning corrections in express algorithm [default: %default]",
-        "-w":"which set of reads, 'cis', 'trans', or 'all', to use for learning [default: %default]",
+        "-w":"which set of reads, 'cis', 'trans', or 'all', to use for express learning [default: %default]",
         "-r":"maximum number of iterations to run regression modeling for [default: %default]",
         "-t":"learning threshold cutoff for regression algorithm [default %default]",
+        "-y":"which set of reads, 'cis', 'trans', or 'all', to use for regression learning [default: %default]",
         "-v":"comma-separated list of parameters to include in regression model (valid parameters are 'gc', 'len', 'distance', and 'mappability') [default: %default]",
         "-n":"comma-separated list of numbers of bins to partition model parameter values into [default: %default]",
     }
@@ -163,7 +165,7 @@ def setup_parser():
                       help=help["-e"], action="store")
     group.add_option("-d", "--remove-dist", dest="nodist", default=False, metavar="REMOVE",
                       help=help["-d"], action="store_true")
-    group.add_option("-w", "--reads", dest="reads", default="cis", metavar="READS", type="choice",
+    group.add_option("-w", "--express-reads", dest="expreads", default="cis", metavar="E-READS", type="choice",
                       help=help["-w"], choices=["cis", "trans", "all"])
     parser.add_option_group(group)
     group = optparse.OptionGroup(parser, "Regression Algorithm-Specific Options")
@@ -171,6 +173,8 @@ def setup_parser():
                       help=help["-r"], action="store")
     group.add_option("-t", "--learning-threshold", dest="threshold", default=1.0, metavar="THRESHOLD", type="float",
                       help=help["-t"], action="store")
+    group.add_option("-y", "--regression-reads", dest="regreads", default="cis", metavar="R-READS", type="choice",
+                      help=help["-w"], choices=["cis", "trans", "all"])
     group.add_option("-v", "--model", dest="model", default="gc,len,distance", metavar="MODEL", type="string",
                       help=help["-v"], action="store")
     group.add_option("-n", "--model-bins", dest="modelbins", default="20,20,15", metavar="NUMBINS", type="string",
@@ -202,7 +206,8 @@ def check_options(parser, options, args):
     options.modelbins = options.modelbins.split(',')
     for i in range(len(options.modelbins)):
         options.modelbins[i] = int(options.modelbins[i])
-    if len(options.model) != len(options.modelbins):
+    if (len(options.model) != len(options.modelbins) and
+        options.algorithm in ['regression', 'regression-express', 'regression-probability']):
         if rank == 0:
             parser.error("'model' and 'model-bins' options must be the same length")
         else:
@@ -250,7 +255,7 @@ def display_options(options, args):
     if options.chroms == "":
         chroms = "all"
     else:
-        temp = options.chroms.split(',')
+        temp = options.chroms
         chroms = "%s" % (temp[0])
         if len(temp) == 2:
             chroms += " and %s" % (temp[1])
@@ -266,12 +271,13 @@ def display_options(options, args):
         for i in range(1, len(options.modelbins)):
             temp += ',%i' % options.modelbins[i]
         settings += "Regression model bin sizes:     %s\n" % temp
+        settings += "Reads to include in learning:   %s\n" % options.regreads
         settings += "Number of regression iterations:%i\n" % options.regiter
         settings += "Regression learning cutoff:     %i\n" % options.threshold
     if options.algorithm in ['express', 'regression-express']:
         settings += "Express Algorithm Settings\n"
         settings += "Remove distance-dependence:     %s\n" % str(options.nodist)
-        settings += "Reads to include in learning:   %s\n" % options.reads
+        settings += "Reads to include in learning:   %s\n" % options.expreads
         settings += "Number of learning iterations:  %i\n" % options.expiter
     if options.algorithm in ['probability', 'regression-probability']:
         settings += "Probability Algorithm Settings\n"

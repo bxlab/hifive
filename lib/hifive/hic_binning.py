@@ -1017,7 +1017,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
         if not silent:
             print >> sys.stderr, ("Creating binned heatmap...\n"),
         output = h5py.File(filename, 'w')
-        output['resolution'] = binsize
+        output.attrs['resolution'] = binsize
         # If chromosomes not specified, fill list
         if len(chroms) == 0:
             chroms = list(hic.fends['chromosomes'][...])
@@ -1075,6 +1075,8 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
                 output.create_dataset('%s_by_%s.counts' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 0])
                 output.create_dataset('%s_by_%s.expected' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 1])
         output.create_dataset('chromosomes', data=numpy.array(chroms))
+        if 'history' in kwargs:
+            output.attrs['history'] = kwargs['history']
         output.close()
         if not silent:
             print >> sys.stderr, ("Creating binned heatmap...Done\n"),

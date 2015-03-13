@@ -17,8 +17,10 @@ def main():
     out_fname = os.path.abspath(out_fname)
     data = []
     in_fnames = in_fnames.split(',')
+    history = ""
     for fname in in_fnames:
         data.append(h5py.File(fname, 'r'))
+        history += data[-1]['/'].attrs['history']
     fendfilename = data[0]['/'].attrs['fendfilename']
     if fendfilename[:2] == './':
         fendfilename = fendfilename[2:]
@@ -72,6 +74,8 @@ def main():
     if trans_data.shape[0] > 0:
         output.create_dataset('trans_data', data=trans_data)
         output.create_dataset('trans_indices', data=trans_indices)
+    history += "Combined replicates - Succes\n"
+    output.attrs['history'] = history
     output.close()
     for i in range(len(data)):
         data[i].close()

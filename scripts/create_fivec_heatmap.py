@@ -23,8 +23,8 @@ def main():
     parser.add_option("-t", "--trans", dest="trans", default=False,
                       help="calculate and include trans interactions in heatmaps [default: %default]", action="store_true")
     parser.add_option("-d", "--datatype", dest="datatype", default=False, action="store",
-                      help="which corrections (if any) to apply to counts (raw, distance, fragment, or enrichment) [default: %default]",
-                      type="choice", choices=['raw', 'distance', 'fragment', 'enrichment'])
+                      help="which corrections (if any) to apply to counts (raw, distance, fragment, enrichment, or expected) [default: %default]",
+                      type="choice", choices=['raw', 'distance', 'fragment', 'enrichment', 'expected'])
     parser.add_option("-r", "--regions", dest="regions", default="", metavar="REGIONS", type="string",
                       help="comma-separated list of regions to include in heatmaps [default: all regions]", action="store")
     parser.add_option("-a", "--array-type", dest="atype", action="store", default="full",
@@ -49,9 +49,12 @@ def main():
         parser.error("-p/--pdf requires the package 'pyx'")
     if options.binsize > 0:
         options.atype = 'full'
+    options.regions = options.regions.split(',')
+    if len(options.regions) == 1 and options.regions[0] == '':
+        options.regions = []
     fivec = hifive.FiveC(args[0], 'r', silent=options.silent)
-    fivec.write_heatmap_dict(args[1], binsize=options.binsize, includetrans=options.trans, arraytype=options.atype,
-                             datatype=options.datatype, regions=options.regions.split(','))
+    fivec.write_heatmap(args[1], binsize=options.binsize, includetrans=options.trans, arraytype=options.atype,
+                        datatype=options.datatype, regions=options.regions)
     if not options.imagefile is None:
         kwargs = {}
         for arg in options.keywords:
@@ -83,12 +86,8 @@ def main():
                 kwargs['symmetricscaling'] = True
             else:
                 kwargs['symmetricscaling'] = False
-        if options.atype == 'full':
-            img, minscore, maxscore = hifive.plotting.plot_fivec_full_heatmap_dict(args[1], returnscale=True,
-                                                                                   silent=options.silent, **kwargs)
-        else:
-            img, minscore, maxscore = hifive.plotting.plot_fivec_compact_heatmap_dict(args[1], returnscale=True,
-                                                                                      silent=options.silent, **kwargs)
+        img, minscore, maxscore = hifive.plotting.plot_fivec_heatmap(args[1], returnscale=True,
+                                                                     silent=options.silent, **kwargs)
         if not options.pdf:
             img.save(options.imagefile, format='png')
         else:

@@ -83,10 +83,8 @@ def main():
     output = open(args[1], 'w')
     if options.binsize == 0:
         data = temp[0]
-        xmapping = numpy.hstack((fivec.frags['fragments']['start'][temp[1]].reshape(-1, 1),
-                                fivec.frags['fragments']['stop'][temp[1]].reshape(-1, 1)))
-        ymapping = numpy.hstack((fivec.frags['fragments']['start'][temp[2]].reshape(-1, 1),
-                                fivec.frags['fragments']['stop'][temp[2]].reshape(-1, 1)))
+        xmapping = temp[1][:, :2]
+        ymapping = temp[2][:, :2]
         all_data = []
         for i in range(xmapping.shape[0]):
             for j in range(ymapping.shape[0]):
@@ -108,7 +106,7 @@ def main():
                                                                    all_data['value'][i])
     else:
         data = temp[0]
-        mapping = temp[1][:, 2:]
+        mapping = temp[1][:, :2]
         pos = 0
         for i in range(mapping.shape[0] - 1):
             for j in range(i + 1, mapping.shape[0]):

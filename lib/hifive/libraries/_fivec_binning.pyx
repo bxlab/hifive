@@ -324,20 +324,33 @@ def find_trans_observed(
         np.ndarray[DTYPE_t, ndim=3] signal not None):
     cdef long long int frag1, frag2, i, map1, map2
     cdef long long int num_frags1 = mapping1.shape[0]
-    cdef long long int num_frags2 = mapping2.shape[1]
+    cdef long long int num_frags2 = mapping2.shape[0]
+    cdef long long int num_data = data.shape[0]
     with nogil:
-        for frag1 in range(num_frags1 - 1):
+        for frag1 in range(num_frags1):
             map1 = mapping1[frag1]
             if map1 == -1:
                 continue
             for i in range(indices[frag1], indices[frag1 + 1]):
                 frag2 = data[i, 1]
-                if frag2 >= num_frags2:
+                if frag2 < 0 or frag2 >= num_frags2:
                     continue
                 map2 = mapping2[frag2]
                 if map2 == -1:
                     continue
                 signal[map1, map2, 0] += data[i, 2]
+        """
+        for i in range(num_data):
+            frag1 = data[i, 0]
+            frag2 = data[i, 1]
+            if frag2 < 0 or frag2 >= num_frags2:
+                continue
+            map1 = mapping1[frag1]
+            map2 = mapping2[frag2]
+            if map1 == -1 or map2 == -1:
+                continue
+            signal[map1, map2, 0] += data[i, 2]
+        """
     return None
 
 

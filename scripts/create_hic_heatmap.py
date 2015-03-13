@@ -79,9 +79,13 @@ def main():
             parser.error("-p/--pdf requires the package 'pyx'")
         else:
             sys.exit(1)
+    options.regions = options.chroms.split(',')
+    if len(options.chroms) == 1 and options.chroms[0] == '':
+        options.chroms = []
+    fivec = hifive.FiveC(args[0], 'r', silent=options.silent)
     hic = hifive.HiC(args[0], 'r', silent=options.silent)
-    hic.write_heatmap_dict(args[1], binsize=options.binsize, includetrans=options.trans,
-                           datatype=options.datatype, chroms=options.chroms.split(','))
+    hic.write_heatmap(args[1], binsize=options.binsize, includetrans=options.trans,
+                      datatype=options.datatype, chroms=options.chroms)
     if rank > 0:
         sys.exit(0)
     if not options.imagefile is None:
@@ -115,8 +119,8 @@ def main():
                 kwargs['symmetricscaling'] = True
             else:
                 kwargs['symmetricscaling'] = False
-        img, minscore, maxscore = hifive.plotting.plot_hic_heatmap_dict(args[1], returnscale=True,
-                                                                        silent=options.silent, **kwargs)
+        img, minscore, maxscore = hifive.plotting.plot_hic_heatmap(args[1], returnscale=True,
+                                                                   silent=options.silent, **kwargs)
         if not options.pdf:
             img.save(options.imagefile, format='png')
         else:
