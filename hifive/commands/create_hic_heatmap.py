@@ -13,8 +13,8 @@ except:
     pass
 import h5py
 
-from .hic import HiC
-from .plotting import plot_hic_heatmap, plot_key
+from ..hic import HiC
+from ..plotting import plot_hic_heatmap, plot_key
 
 
 def run(args):

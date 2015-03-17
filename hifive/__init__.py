@@ -1,6 +1,5 @@
 import sys
 
-#import bi
 import fend
 import fragment
 import fivec_data
@@ -13,7 +12,6 @@ import plotting
 
 from hic import HiC
 from fivec import FiveC
-#from bi import BI
 from fend import Fend
 from fragment import Fragment
 from hic_data import HiCData

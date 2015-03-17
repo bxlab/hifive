@@ -40,10 +40,12 @@ class FiveCBinning(unittest.TestCase):
         self.compare_arrays(self.data['fivec_mapping2'][...], mapping2, 'trans mappings')
 
     def test_generate_heatmap(self):
-        self.project.write_heatmap_dict("%s/tests/data/test_temp.fch" % self.basedir, 50000, includetrans=True,
-                                        datatype='fragment')
+        self.project.write_heatmap("%s/tests/data/test_temp.fch" % self.basedir, 50000, includetrans=True,
+                                   datatype='fragment')
         heatmap = h5py.File("%s/tests/data/test_temp.fch" % self.basedir)
         for name in self.heatmap['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in heatmap['/'].attrs,
                 "%s missing from heatmap attributes" % name)
             self.assertTrue(self.heatmap['/'].attrs[name] == heatmap['/'].attrs[name],

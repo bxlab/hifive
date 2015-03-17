@@ -10,9 +10,9 @@ try:
 except:
     pass
 
-from .hic import HiC
-from .plotting import plot_compact_array, plot_upper_array, plot_diagonal_from_compact_array
-from .plotting import plot_diagonal_from_upper_array, plot_key
+from ..hic import HiC
+from ..plotting import plot_compact_array, plot_upper_array, plot_diagonal_from_compact_array
+from ..plotting import plot_diagonal_from_upper_array, plot_key
 
 
 def run(args):

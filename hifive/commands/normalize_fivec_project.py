@@ -2,7 +2,7 @@
 
 import sys
 
-from .fivec import FiveC
+from ..fivec import FiveC
 
 
 def run(args):

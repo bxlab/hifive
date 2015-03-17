@@ -20,10 +20,12 @@ class Fends(unittest.TestCase):
 
     def test_fend_creation(self):
         fends = fend.Fend('%s/tests/data/test_temp.fends' % self.basedir, 'w', silent=True)
-        fends.load_fends(self.bed_fname, genome_name="HG19", re_name='HindIII')
+        fends.load_fends(self.bed_fname, genome_name="hg19", re_name='HindIII')
         fends.save()
         fends = h5py.File('%s/tests/data/test_temp.fends' % self.basedir, 'r')
         for name in self.fends['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in fends['/'].attrs,
                 "%s missing from fend attributes" % name)
             self.assertTrue(self.fends['/'].attrs[name] == fends['/'].attrs[name],

@@ -9,8 +9,8 @@ try:
 except:
     pass
 
-from .fivec import FiveC
-from .plotting import plot_fivec_heatmap, plot_key
+from ..fivec import FiveC
+from ..plotting import plot_fivec_heatmap, plot_key
 
 
 def run(args):

@@ -20,10 +20,12 @@ class Frags(unittest.TestCase):
 
     def test_fragment_creation(self):
         frags = fragment.Fragment('%s/tests/data/test_temp.frags' % self.basedir, 'w', silent=True)
-        frags.load_fragments(self.bed_fname, genome_name="HG19", re_name='HindIII')
+        frags.load_fragments(self.bed_fname, genome_name="mm9", re_name='HindIII')
         frags.save()
         frags = h5py.File('%s/tests/data/test_temp.frags' % self.basedir, 'r')
         for name in self.frags['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in frags['/'].attrs,
                 "%s missing from fragment attributes" % name)
             self.assertTrue(self.frags['/'].attrs[name] == frags['/'].attrs[name],

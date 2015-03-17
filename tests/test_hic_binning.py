@@ -44,6 +44,8 @@ class HiCBinning(unittest.TestCase):
                                         datatype='fend')
         heatmap = h5py.File("%s/tests/data/test_temp.hch" % self.basedir)
         for name in self.heatmap['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in heatmap['/'].attrs,
                 "%s missing from heatmap attributes" % name)
             self.assertTrue(self.heatmap['/'].attrs[name] == heatmap['/'].attrs[name],

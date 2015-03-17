@@ -602,9 +602,9 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
                 stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
             stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
     if not silent:
-        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i by %s:%i-%i...") % (datatype, arraytype, chrom1,
-                                                                                    start1, stop1, chrom2, start2,
-                                                                                    stop2),
+        print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") % (datatype,  chrom1,
+                                                                                 start1, stop1, chrom2, start2,
+                                                                                 stop2),
     # If datatype is not 'expected', pull the needed slice of data
     if datatype != 'expected':
         if chrint1 < chrint2:
@@ -743,16 +743,14 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         if datatype != 'raw':
             _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, gc_indices1, gc_indices2,
                                              len_indices1, len_indices2, map_indices1, map_indices2, gc_corrections,
-                                             len_corrections, map_corrections, mids, distance_parameters, data_array,
-                                             trans_mean)
+                                             len_corrections, map_corrections, data_array, trans_mean)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping1, mapping2, data_array)
     else:
         if datatype != 'raw':
             _hic_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, gc_indices2, gc_indices1,
                                              len_indices2, len_indices1, map_indices2, map_indices1, gc_corrections,
-                                             len_corrections, map_corrections, mids, distance_parameters, data_array,
-                                             trans_mean)
+                                             len_corrections, map_corrections, data_array, trans_mean)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping2, mapping1, data_array)
     if chrint2 < chrint1:
@@ -956,17 +954,17 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     if not silent:
         print >> sys.stderr, ("Dynamically binning data..."),
     # Determine bin edges relative to unbinned positions
+    unbinnedmids1 = (unbinnedpositions1[:, 0] + unbinnedpositions1[:, 1]) / 2
+    unbinnedmids2 = (unbinnedpositions2[:, 0] + unbinnedpositions2[:, 1]) / 2
     binedges1 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
-    binedges1[:, 0] = numpy.searchsorted(unbinnedpositions1, binbounds1[:, 0])
-    binedges1[:, 1] = numpy.searchsorted(unbinnedpositions1, binbounds1[:, 1])
+    binedges1[:, 0] = numpy.searchsorted(unbinnedmids1, binbounds1[:, 0])
+    binedges1[:, 1] = numpy.searchsorted(unbinnedmids1, binbounds1[:, 1])
     binedges2 = numpy.zeros(binbounds2.shape, dtype=numpy.int32)
-    binedges2[:, 0] = numpy.searchsorted(unbinnedpositions2, binbounds2[:, 0])
-    binedges2[:, 1] = numpy.searchsorted(unbinnedpositions2, binbounds2[:, 1])
+    binedges2[:, 0] = numpy.searchsorted(unbinnedmids2, binbounds2[:, 0])
+    binedges2[:, 1] = numpy.searchsorted(unbinnedmids2, binbounds2[:, 1])
     # Determine bin midpoints
     mids1 = (binbounds1[:, 0] + binbounds1[:, 1]) / 2
     mids2 = (binbounds2[:, 0] + binbounds2[:, 1]) / 2
-    unbinnedmids1 = (unbinnedpositions1[:, 0] + unbinnedpositions1[:, 1]) / 2
-    unbinnedmids2 = (unbinnedpositions2[:, 0] + unbinnedpositions2[:, 1]) / 2
     # Dynamically bin using appropriate array type combination
     _hic_binning.dynamically_bin_trans(unbinned, unbinnedmids1, unbinnedmids2, binned, binedges1,
                                    binedges2, mids1, mids2, minobservations, searchdistance, int(removefailed))

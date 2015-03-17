@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from .hic_data import HiCData
+from ..hic_data import HiCData
 
 
 def run(args):

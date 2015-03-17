@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from .fragment import Fragment
+from ..fragment import Fragment
 
 
 def run(args):

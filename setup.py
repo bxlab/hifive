@@ -60,10 +60,6 @@ def get_extension_modules():
                                 "hifive/libraries/_normal.cpp"],
                                 include_dirs=[numpy.get_include()], language="c++",
                                 extra_compile_args=[]))
-    # Boundary Index functions
-    #extensions.append(Extension("hifive.libraries._bi", ["hifive/_bi.pyx"],
-    #                            include_dirs=[numpy.get_include()], language="c++",
-    #                            extra_compile_args=["-Wno-cpp"]))
     return extensions
 
 if __name__ == "__main__":

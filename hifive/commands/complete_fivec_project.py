@@ -2,9 +2,9 @@
 
 import sys
 
-from .fragment import Fragment
-from .fivec_data import FiveCData
-from .fivec import FiveC
+from ..fragment import Fragment
+from ..fivec_data import FiveCData
+from ..fivec import FiveC
 
 
 def run(args):

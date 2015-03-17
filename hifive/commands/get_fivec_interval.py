@@ -10,8 +10,8 @@ try:
 except:
     pass
 
-from .fivec import FiveC
-from .plotting import plot_full_array, plot_upper_array, plot_diagonal_from_upper_array, plot_key
+from ..fivec import FiveC
+from ..plotting import plot_full_array, plot_upper_array, plot_diagonal_from_upper_array, plot_key
 
 
 def run(args):

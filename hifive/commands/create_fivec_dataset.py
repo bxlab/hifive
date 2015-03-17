@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from .fivec_data import FiveCData
+from ..fivec_data import FiveCData
 
 
 def run(args):

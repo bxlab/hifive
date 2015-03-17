@@ -5,7 +5,7 @@ try:
 except:
     pass
 
-from .hic import HiC
+from ..hic import HiC
 
 
 def run(args):

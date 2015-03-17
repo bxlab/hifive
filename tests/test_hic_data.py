@@ -28,10 +28,12 @@ class HiCData(unittest.TestCase):
 
     def test_hic_raw_data_creation(self):
         data = hic_data.HiCData('%s/tests/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_raw(self.fend_fname, self.raw_fname, 1000)
+        data.load_data_from_raw(self.fend_fname, self.raw_fname, 500)
         data.save()
         data = h5py.File('%s/tests/data/test_temp.hcd' % self.basedir, 'r')
         for name in self.data['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in data['/'].attrs,
                 "%s missing from data attributes" % name)
             self.assertTrue(self.data['/'].attrs[name] == data['/'].attrs[name],
@@ -43,10 +45,12 @@ class HiCData(unittest.TestCase):
 
     def test_hic_mat_data_creation(self):
         data = hic_data.HiCData('%s/tests/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_mat(self.fend_fname, self.mat_fname, 1000)
+        data.load_data_from_mat(self.fend_fname, self.mat_fname, 500)
         data.save()
         data = h5py.File('%s/tests/data/test_temp.hcd' % self.basedir, 'r')
         for name in self.data['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in data['/'].attrs,
                 "%s missing from data attributes" % name)
             self.assertTrue(self.data['/'].attrs[name] == data['/'].attrs[name],
@@ -61,10 +65,12 @@ class HiCData(unittest.TestCase):
             print >> sys.stderr, "pysam required for bam import"
             return None
         data = hic_data.HiCData('%s/tests/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_bam(self.fend_fname, [self.bam_fname1, self.bam_fname2], 1000)
+        data.load_data_from_bam(self.fend_fname, [self.bam_fname1, self.bam_fname2], 500)
         data.save()
         data = h5py.File('%s/tests/data/test_temp.hcd' % self.basedir, 'r')
         for name in self.data['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in data['/'].attrs,
                 "%s missing from data attributes" % name)
             self.assertTrue(self.data['/'].attrs[name] == data['/'].attrs[name],
@@ -76,7 +82,7 @@ class HiCData(unittest.TestCase):
 
     def test_hic_mat_export(self):
         data = hic_data.HiCData('%s/tests/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_raw(self.fend_fname, self.raw_fname, 1000)
+        data.load_data_from_raw(self.fend_fname, self.raw_fname, 500)
         data.export_to_mat('%s/tests/data/test_temp.mat' % self.basedir)
         data1 = []
         for line in open('%s/tests/data/test.mat' % self.basedir, 'r'):

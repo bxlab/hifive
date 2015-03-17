@@ -19,8 +19,7 @@ import h5py
 class FiveCData(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.data1 = h5py.File('%s/tests/data/test_import.fcd' % self.basedir, 'r')
-        self.data2 = h5py.File('%s/tests/data/test_import.fcd' % self.basedir, 'r')
+        self.data = h5py.File('%s/tests/data/test_import.fcd' % self.basedir, 'r')
         self.frag_fname = '%s/tests/data/test.frags' % self.basedir
         self.count_fname = '%s/tests/data/test.counts' % self.basedir
         self.bam_fname1 = '%s/tests/data/test_fivec_1.bam' % self.basedir
@@ -31,15 +30,17 @@ class FiveCData(unittest.TestCase):
         data.load_data_from_counts(self.frag_fname, self.count_fname)
         data.save()
         data = h5py.File('%s/tests/data/test_temp.fcd' % self.basedir, 'r')
-        for name in self.data1['/'].attrs.keys():
+        for name in self.data['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in data['/'].attrs,
                 "%s missing from data attributes" % name)
-            self.assertTrue(self.data1['/'].attrs[name] == data['/'].attrs[name],
+            self.assertTrue(self.data['/'].attrs[name] == data['/'].attrs[name],
                 "%s doesn't match target value" % name)
-        for name in self.data1.keys():
+        for name in self.data.keys():
             self.assertTrue(name in data,
                 "%s missing from data arrays" % name)
-            self.compare_arrays(self.data1[name][...], data[name][...], name)
+            self.compare_arrays(self.data[name][...], data[name][...], name)
 
     def test_fivec_bam_data_creation(self):
         if 'pysam' not in sys.modules.keys():
@@ -49,15 +50,17 @@ class FiveCData(unittest.TestCase):
         data.load_data_from_bam(self.frag_fname, [self.bam_fname1, self.bam_fname2])
         data.save()
         data = h5py.File('%s/tests/data/test_temp.fcd' % self.basedir, 'r')
-        for name in self.data2['/'].attrs.keys():
+        for name in self.data['/'].attrs.keys():
+            if name == 'history':
+                continue
             self.assertTrue(name in data['/'].attrs,
                 "%s missing from data attributes" % name)
-            self.assertTrue(self.data2['/'].attrs[name] == data['/'].attrs[name],
+            self.assertTrue(self.data['/'].attrs[name] == data['/'].attrs[name],
                 "%s doesn't match target value" % name)
-        for name in self.data2.keys():
+        for name in self.data.keys():
             self.assertTrue(name in data,
                 "%s missing from data arrays" % name)
-            self.compare_arrays(self.data2[name][...], data[name][...], name)
+            self.compare_arrays(self.data[name][...], data[name][...], name)
 
     def tearDown(self):
         subprocess.call('rm -f %s/tests/data/test_temp.fcd' % self.basedir, shell=True)

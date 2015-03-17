@@ -7,9 +7,9 @@ try:
 except:
     pass
 
-from .fend import Fend
-from .hic_data import HiCData
-from .hic import HiC
+from ..fend import Fend
+from ..hic_data import HiCData
+from ..hic import HiC
 
 
 def run(args):

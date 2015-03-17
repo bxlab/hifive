@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from .fend import Fend
+from ..fend import Fend
 
 
 def run(args):

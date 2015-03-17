@@ -5,7 +5,6 @@ dist
 ez_setup.pyc
 hifive.egg-info
 hifive/__init__.pyc
-hifive/bi.pyc
 hifive/fend.pyc
 hifive/fivec.pyc
 hifive/fivec_binning.pyc
@@ -16,8 +15,6 @@ hifive/hic_binning.pyc
 hifive/hic_data.pyc
 hifive/plotting.pyc
 hifive/libraries/__init__.pyc
-hifive/libraries/_bi.cpp
-hifive/libraries/_bi.so
 hifive/libraries/_fivec_binning.cpp
 hifive/libraries/_fivec_binning.so
 hifive/libraries/_fivec_optimize.cpp
@@ -30,6 +27,7 @@ hifive/libraries/_hic_interactions.cpp
 hifive/libraries/_hic_interactions.so
 hifive/libraries/_hic_optimize.cpp
 hifive/libraries/_hic_optimize.so
+hifive/commands/__init__.pyc
 hifive/commands/combine_fivec_replicates.pyc
 hifive/commands/complete_fivec_project.pyc
 hifive/commands/create_fragmentset.pyc
@@ -52,3 +50,4 @@ tests/test_frag.pyc
 tests/test_hic_binning.pyc
 tests/test_hic_data.pyc
 tests/test_hic_project.pyc
+tests/generate_test_data.py

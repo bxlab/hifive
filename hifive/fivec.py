@@ -437,7 +437,7 @@ class FiveC(object):
             region_mean /= forward.shape[0] * reverse.shape[0]
             self.corrections[forward] -= region_mean / 2.0
             self.corrections[reverse] -= region_mean / 2.0
-            self.region_means += region_mean
+            self.region_means[i] += region_mean
         if precorrect:
             self.normalization = 'regression-probability'
         else:
@@ -616,7 +616,7 @@ class FiveC(object):
             self.corrections[forward] -= region_mean / 2.0
             self.corrections[reverse] -= region_mean / 2.0
             if remove_distance:
-                self.region_means += region_mean
+                self.region_means[i] += region_mean
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning corrections... Final Cost: %f  Done\n") % (' ' * 80, cost),
         if precorrect:
@@ -924,7 +924,7 @@ class FiveC(object):
                                    args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2))
                     new_gc_corrections[i] = x[0]
             if not self.len_corrections is None:
-                new_len_corrections = numpy.zeros(self.gc_corrections.shape[0], dtype=numpy.float64)
+                new_len_corrections = numpy.zeros(self.len_corrections.shape[0], dtype=numpy.float64)
                 for i in range(self.len_corrections.shape[0]):
                     where = numpy.where(len_indices == i)[0]
                     temp_bin_counts = bin_counts[where, :]
