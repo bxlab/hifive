@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import sys
-import optparse
 import subprocess
 
 import h5py
@@ -10,54 +9,31 @@ try:
 except:
     pass
 
-import hifive
+from .fivec import FiveC
+from .plotting import plot_fivec_heatmap, plot_key
 
 
-def main():
-    usage = "usage: %prog [options] <project_file> <out_file>\n\nArguments:"
-    usage += "\n<project_file>  HiFive 5C project file"
-    usage += "\n<out_file>      destination for 5C heatmaps file"
-    parser = optparse.OptionParser(usage=usage)
-    parser.add_option("-b", "--bin-size", dest="binsize", default=10000, metavar="BIN", type="int",
-                      help="size of bins, in base pairs, to group data into [default: %default]", action="store")
-    parser.add_option("-t", "--trans", dest="trans", default=False,
-                      help="calculate and include trans interactions in heatmaps [default: %default]", action="store_true")
-    parser.add_option("-d", "--datatype", dest="datatype", default=False, action="store",
-                      help="which corrections (if any) to apply to counts (raw, distance, fragment, enrichment, or expected) [default: %default]",
-                      type="choice", choices=['raw', 'distance', 'fragment', 'enrichment', 'expected'])
-    parser.add_option("-r", "--regions", dest="regions", default="", metavar="REGIONS", type="string",
-                      help="comma-separated list of regions to include in heatmaps [default: all regions]", action="store")
-    parser.add_option("-a", "--array-type", dest="atype", action="store", default="full",
-                      help="type of array layout ('full' or 'compact') to store data in (only used for unbinned data) [default: %default]",
-                      type="choice", choices=["full", "compact"])
-    parser.add_option("-i", "--image-file", dest="imagefile", default=None, metavar="IMAGE", type="string",
-                      help="save the data as an image to this file", action="store")
-    parser.add_option("-p", "--pdf", dest="pdf", default=False,
-                      help="format image in PDF file [default %default]", action="store_true")
-    parser.add_option("-l", "--add-legend", dest="legend", default=False,
-                      help="add color scale to plot (pdf format only) [default %default]", action="store_true")
-    parser.add_option("-n", "--names", dest="names", default=False,
-                      help="add region labels to plot (pdf format only) [default %default]", action="store_true")
-    parser.add_option("-k", "--keyword", dest="keywords", default=[], metavar="KEYWORD", type="string",
-                      help="additional keyword arguments to pass function", action="append")
-    parser.add_option("-q", "--quiet", dest="silent", action="store_true", default=False,
-                      help="silence output messages [default: %default]")
-    options, args = parser.parse_args()
-    if len(args) < 2:
-        parser.error('incorrect number of arguments')
-    if not options.imagefile is None and options.pdf and "pyx" not in sys.modules.keys():
-        parser.error("-p/--pdf requires the package 'pyx'")
-    if options.binsize > 0:
-        options.atype = 'full'
-    options.regions = options.regions.split(',')
-    if len(options.regions) == 1 and options.regions[0] == '':
-        options.regions = []
-    fivec = hifive.FiveC(args[0], 'r', silent=options.silent)
-    fivec.write_heatmap(args[1], binsize=options.binsize, includetrans=options.trans, arraytype=options.atype,
-                        datatype=options.datatype, regions=options.regions)
-    if not options.imagefile is None:
+def run(args):
+    if not args.image is None and options.pdf and "pyx" not in sys.modules.keys():
+        print >> sys.stderr, ("-p/--pdf requires the package 'pyx'"),
+        return 1
+    if args.binsize > 0:
+        args.arraytype = 'full'
+    regions = args.regions.split(',')
+    if len(regions) == 1 and regions[0] == '':
+        regions = []
+    for i in range(len(regions)):
+        try:
+            regions[i] = int(regions[i])
+        except:
+            print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
+            return 1
+    fivec = FiveC(args.project, 'r', silent=args.silent)
+    fivec.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans, arraytype=args.arraytype,
+                        datatype=args.datatype, regions=regions)
+    if not args.image is None:
         kwargs = {}
-        for arg in options.keywords:
+        for arg in args.keywords:
             temp = arg.split("=")
             if temp[1] in ["True", "TRUE", "true"]:
                 temp[1] = True
@@ -82,14 +58,13 @@ def main():
                         temp[1] = temp[1].replace('__pd__','')
             kwargs[temp[0]] = temp[1]
         if 'symmetricscaling' not in kwargs:
-            if options.datatype == 'enrichment':
+            if args.datatype == 'enrichment':
                 kwargs['symmetricscaling'] = True
             else:
                 kwargs['symmetricscaling'] = False
-        img, minscore, maxscore = hifive.plotting.plot_fivec_heatmap(args[1], returnscale=True,
-                                                                     silent=options.silent, **kwargs)
-        if not options.pdf:
-            img.save(options.imagefile, format='png')
+        img, minscore, maxscore = plot_fivec_heatmap(args[1], returnscale=True, silent=args.silent, **kwargs)
+        if not args.pdf:
+            img.save(args.image)
         else:
             unit.set(defaultunit="cm")
             text.set(mode="latex")
@@ -97,7 +72,7 @@ def main():
             text.preamble(r"\usepackage{sansmath}")
             text.preamble(r"\sansmath")
             text.preamble(r"\renewcommand*\familydefault{\sfdefault}")
-            hm = h5py.File(args[1], 'r')
+            hm = h5py.File(args.output, 'r')
             totalx = 0
             totaly = 0
             minsize = 999999999
@@ -141,7 +116,7 @@ def main():
                 sizes[i] = sizes[i] / totaly * height
             c = canvas.canvas()
             c.insert(bitmap.bitmap(0, 0, img, width=width))
-            if options.legend:
+            if args.legend:
                 if 'min_color' in kwargs:
                     min_color = kwargs['min_color']
                 else:
@@ -158,32 +133,27 @@ def main():
                     logged = kwargs['logged']
                 else:
                     logged = True
-                c.insert(hifive.plotting.plot_key(min_score=minscore, max_score=maxscore, height=(height * 0.05),
-                                                  width=width, orientation='top', num_ticks=5, min_color=min_color,
-                                                  mid_color=mid_color, max_color=max_color, log_display=False),
-                                                 [trafo.translate(0, height * 1.05)])
+                c.insert(plot_key(min_score=minscore, max_score=maxscore, height=(height * 0.05),
+                                  width=width, orientation='top', num_ticks=5, min_color=min_color,
+                                  mid_color=mid_color, max_color=max_color, log_display=False),
+                                  [trafo.translate(0, height * 1.05)])
                 if logged:
                     label = "Log2 "
                 else:
                     label = ""
-                if options.datatype == 'enrichment':
+                if args.datatype == 'enrichment':
                     c.text(width * 0.5, height * 1.1 + 0.75, "%sEnrichment" % (label),
                            [text.halign.center, text.valign.bottom, text.size(-2)])
-                elif options.datatype == 'raw':
+                elif args.datatype == 'raw':
                     c.text(width * 0.5, height * 1.1 + 0.75, "%sCounts" % (label),
                            [text.halign.center, text.valign.bottom, text.size(-2)])
                 else:
                     c.text(width * 0.5, height * 1.1 + 0.75, "%sNormalized Counts" % (label),
                            [text.halign.center, text.valign.bottom, text.size(-2)])
-            if options.names:
+            if args.names:
                 for i, name in enumerate(names):
                     c.text(width + 0.25, height - (sizes[i] + sizes[i + 1]) / 2, name,
                            [text.halign.left, text.valign.middle, text.size(-2)])
-            c.writePDFfile(options.imagefile)
-            if len(options.imagefile.split('.')) <= 1 or options.imagefile.split('.')[-1] != 'pdf':
-                subprocess.call('mv %s.pdf %s' % (options.imagefile, options.imagefile), shell=True)
-
-
-
-if __name__ == "__main__":
-    main()
+            c.writePDFfile(args.image)
+            if len(args.image.split('.')) <= 1 or args.image.split('.')[-1] != 'pdf':
+                subprocess.call('mv %s.pdf %s' % (args.image, args.image), shell=True)

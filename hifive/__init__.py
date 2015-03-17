@@ -1,6 +1,6 @@
 import sys
 
-import bi
+#import bi
 import fend
 import fragment
 import fivec_data
@@ -13,14 +13,14 @@ import plotting
 
 from hic import HiC
 from fivec import FiveC
-from bi import BI
+#from bi import BI
 from fend import Fend
 from fragment import Fragment
 from hic_data import HiCData
 from fivec_data import FiveCData
 
 
-__version__ = '2.0.0'
+__version__ = '2.2.0'
 __author__ = 'Michael Sauria'
 
 #------------------------------------------------

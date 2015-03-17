@@ -20,8 +20,8 @@ Functionality                     Module
 Restriction enzyme information    :class:`Fragment <hifive.fragment.Fragment>` / :class:`Fend <hifive.fend.Fend>`
 Read counts and orientations      :class:`FiveCData <hifive.fivec_data.FiveCData>` / :class:`HiCData <hifive.hic_data.HiCData>`
 Model parameters and filtering    :class:`FiveC <hifive.fivec.FiveC>` / :class:`HiC <hifive.hic.HiC>`
-Boundary index                    :class:`BI <hifive.bi.BI>`
 Plotting functions                :mod:`plotting <hifive.plotting>`
+Boundary index                    :class:`BI <hifive.bi.BI>`
 ================================  ====================================
 
 The classes :class:`Fragment <hifive.fragment.Fragment>`, :class:`Fend <hifive.fend.Fend>`, :class:`FiveCData <hifive.fivec_data.FiveCData>`, :class:`HiCData <hifive.hic_data.HiCData>`, :class:`FiveC <hifive.fivec.FiveC>`, :class:`HiC <hifive.hic.HiC>`, and :class:`BI <hifive.bi.BI>` are all available from the top level of the :mod:`HiFive` namespace and can be imported using::

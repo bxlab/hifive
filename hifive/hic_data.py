@@ -98,7 +98,7 @@ class HiCData(object):
                 if not self.silent:
                     print >> sys.stderr, ("Could not find %s. No fends loaded.\n") % (fendfilename),
             else:
-                self.fends = Fend(fendfilename).fends
+                self.fends = h5py.File(fendfilename, 'r')
                 # create dictionary for converting chromosome names to indices
                 self.chr2int = {}
                 for i, chrom in enumerate(self.fends['chromosomes']):

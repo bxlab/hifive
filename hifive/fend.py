@@ -99,7 +99,7 @@ class Fend(object):
         self.history += "Fend.load_fends(filename='%s', genome_name='%s', re_name='%s', format='%s') - " % (filename, genome_name, re_name, format)
         if not os.path.exists(filename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
+                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
             self.history += "Error: '%s' no located\n" % filename
             return None
         # if no genome name given, determine from filename

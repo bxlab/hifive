@@ -1,0 +1,665 @@
+#!/usr/bin/env python
+
+import sys
+import os
+import argparse as ap
+
+try:
+    from mpi4py import MPI
+except:
+    pass
+
+import hifive
+
+"""Description: HiFive v2 main executable.
+
+Copyright (c) 2015 Michael Sauria <mike.sauria@jhu.edu>
+
+This code is free software; you can redistribute it and/or modify it
+under the terms of the BSD License (see the file LICENSE included with
+the distribution).
+"""
+
+def main():
+    """The main function/pipeline for HiFive.
+    """
+    parser = generate_parser()
+    args = None
+    if not comm is None:
+        try:
+            if rank == 0:
+                args = parser.parse_args()
+        finally:
+            args = comm.bcast(args, root=0)
+    else:
+        args = parser.parse_args()
+
+    subcommand = args.subcommand
+
+    if subcommand == "fragments" and rank == 0:
+        from hifive.commands.create_fragmentset import run
+        run(args)
+    elif subcommand == "5c-data" and rank == 0:
+        from hifive.commands.create_fivec_dataset import run
+        run(args)
+    elif subcommand == "5c-project" and rank == 0:
+        from hifive.commands.create_fivec_project import run
+        run(args)
+    elif subcommand == "5c-normalize" and rank == 0:
+        from hifive.commands.normalize_fivec_project import run
+        run(args)
+    elif subcommand == "5c-complete":
+        from hifive.commands.complete_fivec_project import run
+        run(args)
+    elif subcommand == "5c-heatmap":
+        from hifive.commands.create_fivec_heatmap import run
+        run(args)
+    elif subcommand == "5c-interval":
+        from hifive.commands.get_fivec_interval import run
+        run(args)
+    elif subcommand == "combine-5c-replicates" and rank == 0:
+        from hifive.commands.combine_fivec_replicates import run
+        run(args)
+    elif subcommand == "fends" and rank == 0:
+        from hifive.commands.create_fendset import run
+        run(args)
+    elif subcommand == "hic-data" and rank == 0:
+        from hifive.commands.create_hic_dataset import run
+        run(args)
+    elif subcommand == "hic-project":
+        from hifive.commands.create_hic_project import run
+        run(args)
+    elif subcommand == "hic-normalize":
+        from hifive.commands.normalize_hic_project import run
+        run(args)
+    elif subcommand == "hic-complete":
+        from hifive.commands.complete_hic_project import run
+        run(args)
+    elif subcommand == "hic-heatmap":
+        from hifive.commands.create_hic_heatmap import run
+        run(args)
+    elif subcommand == "hic-interval":
+        from hifive.commands.get_hic_interval import run
+        run(args)
+    elif subcommand == "combine-hic-replicates" and rank == 0:
+        from hifive.commands.combine_hic_replicates import run
+        run(args)
+
+def generate_parser():
+    """Generate an argument parser.
+    """
+    description = "%(prog)s -- Data handling, normalization, manipulation, and plotting for HiC and 5C experimental data"
+    epilog = "For command line options of each command, type: %(prog)s COMMAND -h"
+    parser = ap.ArgumentParser(description=description, epilog=epilog)
+    parser.add_argument("--version", action="version", version="%(prog)s 2.2")
+    subparsers = parser.add_subparsers(dest='subcommand')
+
+    add_fragments_subparser(subparsers)
+    add_fivecdataset_subparser(subparsers)
+    add_fivecproject_subparser(subparsers)
+    add_fivecnormalize_subparser(subparsers)
+    add_complete_fivec_subparser(subparsers)
+    add_fivec_heatmap_subparser(subparsers)
+    add_fivec_interval_subparser(subparsers)
+    add_combine_fivec_replicates_subparser(subparsers)
+    add_fends_subparser(subparsers)
+    add_hicdataset_subparser(subparsers)
+    add_hicproject_subparser(subparsers)
+    add_hicnormalize_subparser(subparsers)
+    add_complete_hic_subparser(subparsers)
+    add_hic_heatmap_subparser(subparsers)
+    add_hic_interval_subparser(subparsers)
+    add_combine_hic_replicates_subparser(subparsers)
+    return parser
+
+def add_fragments_subparser(subparsers):
+    """Add command 'fragments' arguments to parser.
+    """
+    parser = subparsers.add_parser("fragments", help="HiFive Fragment Creation Function: Read target RE fragment data from a BED file and create a HiFive 'Fragment' file.")
+    parser.add_argument("-F", "--fasta", dest="fasta", required=False, type=str, default=None,
+        help="FASTA file containing sequences of 5C primers (used for GC content for regression modeling).")
+    parser.add_argument("-r", "--re", dest="re", required=False, default=None, type=str,
+        help="The name of the restriction enzyme used to produce the RE fragments.")
+    parser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
+        help="The name of the genome RE fragments correspond to.")
+    parser.add_argument(dest="bed", type=str,
+        help="The name of the BED file containing 5C fragment positions.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiFive Fragments to.")
+    add_silent_argument(parser)
+    return
+
+def add_fivecdataset_subparser(subparsers):
+    """Add command '5c-data' arguments to parser.
+    """
+    parser = subparsers.add_parser("5c-data", help="HiFive 5C Dataset Creation Function: Read 5C data from either sets of paired-end BAM files or tabular counts files and create a HiFive 'FiveCData' file.")
+    infile_group = parser.add_mutually_exclusive_group(required=True)
+    infile_group.add_argument("-B", "--bam", dest="bam", nargs=2, action='append',
+        help="A pair of bam read end files from a single sequencing run. For multiple runs, this option can be passed multiple times.")
+    infile_group.add_argument("-C", "--count", dest="count", action='append',
+        help="A tab-separated text file containing a pair of fragment names and the number of observed reads for that pair (fragment1 fragment2 count), one per line. For multiple files, this option can be passed multiple times.")
+    parser.add_argument(dest="fragment", type=str,
+        help="The file name of an appropriate HiFive Fragment file.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiFive FiveCData to.")
+    add_silent_argument(parser)
+    return
+
+def add_fivecproject_subparser(subparsers):
+    """Add command '5c-project' arguments to parser.
+    """
+    parser = subparsers.add_parser("5c-project", help="HiFive 5C Project Creation Function: Creata a HiFive 5C project associated with a specific 5C dataset, filter out low-coverage fragments and calculate the distance-dependence function.")
+    parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
+        action='store', help="The minimum number of interactions needed for valid fragment. [default: %(default)s]")
+    parser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,
+        action='store', help="The minimum interaction distance to include in fragment filtering. [default: %(default)s]")
+    parser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
+        action='store', help="The maximum interaction distance to include in fragment filtering (None or zero indicate no maximum). [default: %(default)s]")
+    parser.add_argument(dest="data", type=str,
+        help="The file name of an appropriate HiFive FiveCData file.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiFive FiveC project to.")
+    add_silent_argument(parser)
+    return
+
+def add_fivecnormalize_subparser(subparsers):
+    """Add command '5c-normalize' arguments to parser.
+    """
+    parser = subparsers.add_parser("5c-normalize", help="HiFive 5C Project Normalization Function: Learn correction parameters for a HiFive 5C project.", epilog="For command line options of each command, type: %(prog)s 5c-normalize COMMAND -h")
+    subparser2 = parser.add_subparsers(dest='algorithm')
+    prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fragment. Learning is accomplished using gradient descent.")
+    exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fragment. Learning is accomplished using a variation of matrix balancing.")
+    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
+    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
+    add_fivec_normalize_group(prob_parser)
+    add_fivec_probability_group(prob_parser)
+    add_fivec_normalize_group(exp_parser)
+    add_fivec_express_group(exp_parser)
+    add_fivec_normalize_group(reg_parser)
+    add_fivec_regression_group(reg_parser)
+    add_fivec_normalize_group(regprob_parser)
+    add_fivec_probability_group(regprob_parser)
+    add_fivec_regression_group(regprob_parser)
+    add_fivec_normalize_group(regexp_parser)
+    add_fivec_express_group(regexp_parser)
+    add_fivec_regression_group(regexp_parser)
+    return
+
+def add_complete_fivec_subparser(subparsers):
+    """Add command '5c-complete' arguments to parser.
+    """
+    parser = subparsers.add_parser("5c-complete", help="HiFive 5C Project Complete Analysis Function: Create all necessary files (Fragment, Data, and Project) and learn correction parameters for a HiFive 5C project.", epilog="For command line options of each command, type: %(prog)s 5c-complete COMMAND -h")
+    subparser2 = parser.add_subparsers(dest='algorithm')
+    prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fragment. Learning is accomplished using gradient descent.")
+    exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fragment. Learning is accomplished using a variation of matrix balancing.")
+    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
+    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
+    add_fivec_complete_group(prob_parser)
+    add_fivec_probability_group(prob_parser)
+    add_fivec_complete_group(exp_parser)
+    add_fivec_express_group(exp_parser)
+    add_fivec_complete_group(reg_parser)
+    add_fivec_regression_group(reg_parser)
+    add_fivec_complete_group(regprob_parser)
+    add_fivec_probability_group(regprob_parser)
+    add_fivec_regression_group(regprob_parser)
+    add_fivec_complete_group(regexp_parser)
+    add_fivec_express_group(regexp_parser)
+    add_fivec_regression_group(regexp_parser)
+    return
+
+def add_fivec_normalize_group(subparser):
+    subparser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,
+        action='store', help="The minimum interaction distance to include in normalization. [default: %(default)s]")
+    subparser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
+        action='store', help="The maximum interaction distance to include in normalization (None or zero indicate no maximum). [default: %(default)s]")
+    subparser.add_argument("-r", "--regions", dest="regions", required=False, type=str, default=None,
+        action='store', help="A comma-separated list of regions to learn correction values for (None indicates all regions). [default: %(default)s]")
+    subparser.add_argument("-o", "--output-file", dest="output", required=False, type=str, default=None,
+        action='store', help="An alternate filename to save the normalized project to. If not given, the original project file will be overwritten. [default: %(default)s]")
+    subparser.add_argument(dest="project", type=str,
+        help="The name of the HiFive FiveC project to normalize.")
+    add_silent_argument(subparser)
+    return
+
+def add_fivec_complete_group(subparser):
+    subparser.add_argument("-F", "--fasta", dest="fasta", required=False, type=str, default=None,
+        help="FASTA file containing sequences of 5C primers (used for GC content for regression modeling).")
+    subparser.add_argument("--re", dest="re", required=False, default=None, type=str,
+        help="The name of the restriction enzyme used to produce the RE fragments.")
+    subparser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
+        help="The name of the genome RE fragments correspond to.")
+    subparser.add_argument(dest="bed", type=str,
+        help="The name of the BED file containing 5C fragment positions.")
+    infile_group = subparser.add_mutually_exclusive_group(required=True)
+    infile_group.add_argument("-B", "--bam", dest="bam", nargs=2, action='append',
+        help="A pair of bam read end files from a single sequencing run. For multiple runs, this option can be passed multiple times.")
+    infile_group.add_argument("-C", "--count", dest="count", action='append',
+        help="A tab-separated text file containing a pair of fragment names and the number of observed reads for that pair (fragment1 fragment2 count), one per line. For multiple files, this option can be passed multiple times.")
+    subparser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,
+        action='store', help="The minimum interaction distance to include in normalization. [default: %(default)s]")
+    subparser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
+        action='store', help="The maximum interaction distance to include in normalization (None or zero indicate no maximum). [default: %(default)s]")
+    subparser.add_argument("-r", "--regions", dest="regions", required=False, type=str, default=None,
+        action='store', help="A comma-separated list of regions to learn correction values for (None indicates all regions). [default: %(default)s]")
+    add_silent_argument(subparser)
+    outfile_group = subparser.add_mutually_exclusive_group(required=True)
+    outfile_group.add_argument("--prefix", dest="prefix", type=str, default=None,
+        help="A prefix for the output files (*.frags, *.fcd, and *.fcp).")
+    outfile_group.add_argument("-o", "--output", dest="output", type=str, nargs=3, default=None,
+        help="File names for the Fragment, FiveCData, and FiveC project files to be created.")
+    return
+
+def add_fivec_probability_group(subparser):
+    subparser.add_argument("-b", "--burnin-iterations", dest="burnin", required=False, type=int, default=1000,
+        action='store', help="The number of iterations to run the burn-in learning phase for with a constant learning rate. [default: %(default)s]")
+    subparser.add_argument("-a", "--annealing-iterations", dest="anneal", required=False, type=int, default=1000,
+        action='store', help="The number of iterations to run the annealing learning phase for with a linearly-decreasing learning rate. [default: %(default)s]")
+    subparser.add_argument("-p", "--precalculate", dest="precalc", required=False, default=False,
+        action='store_true', help="Precalculate correction values from fragment means for the probability algorithm. [default: %(default)s]")
+    subparser.add_argument("-l", "--learning-rate", dest="rate", required=False, type=float, default=0.01,
+        action='store', help="The learning rate (percentage of parameter gradient to apply) to use for gradient descent. [default: %(default)s]")
+    return
+
+def add_fivec_express_group(subparser):
+    subparser.add_argument("-e", "--express-iterations", dest="expiter", required=False, type=int, default=1000,
+        action='store', help="The number of iterations to run the express learning phase for. [default: %(default)s]")
+    subparser.add_argument("-d", "--remove-distance", dest="nodist", required=False, default=False,
+        action='store_true', help="Remove the distant-dependent portion of the signal prior to learning corrections with the express algorithm. [default: %(default)s]")
+    subparser.add_argument("-w", "--express-reads", dest="expreads", required=False, type=str, default='cis',
+        choices=['cis', 'trans', 'all'], help="Which set of reads to use for express normalization. [default: %(default)s]")
+    return
+
+def add_fivec_regression_group(subparser):
+    subparser.add_argument("-i", "--regression-iterations", dest="regiter", required=False, type=int, default=1000,
+        action='store', help="The maximum number of iterations to run regression modeling for. [default: %(default)s]")
+    subparser.add_argument("-t", "--learning-threshold", dest="threshold", required=False, type=float, default=1.0,
+        action='store', help="The learning threshold cutoff for regression algorithm. [default: %(default)s]")
+    subparser.add_argument("-y", "--regression-reads", dest="regreads", required=False, type=str, default='cis',
+        choices=['cis', 'trans', 'all'], help="Which set of reads to use for regression normalization. [default: %(default)s]")
+    subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
+        action='store', help="A comma-separated list of parameters to include in regression model (valid parameters are 'gc', 'len', and 'distance'). [default: %(default)s]")
+    subparser.add_argument("-n", "--model-bins", dest="modelbins", required=False, type=str, default="10,10,10",
+        action='store', help="A comma-separated list of the number of bins to separate model parameters into. [default: %(default)s]")
+    return
+
+def add_combine_fivec_replicates_subparser(subparsers):
+    """Add command 'combine-5c-replicates' arguments to parser.
+    """
+    parser = subparsers.add_parser("combine-5c-replicates",
+        help="HiFive Data Function: Combine two HiFive 5C datasets into a single dataset without needing to reload data.")
+    parser.add_argument(dest="output", type=str,
+        help="Name of file in which to write combined data.")
+    parser.add_argument(dest="replicate", nargs="+",
+        help="Two of more HiFive 5C data files to be combined. These files need to have been generated using the same Fragment file.")
+    add_silent_argument(parser)
+    return
+
+def add_fivec_heatmap_subparser(subparsers):
+    """Add command '5c-heatmap' arguments to parser.
+    """
+    parser = subparsers.add_parser("5c-heatmap",
+        help="HiFive Binning Function: Create a heatmap HDF5 file containing data from a HiFive FiveC project.")
+    parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
+    parser.add_argument("-t", "--trans", dest="trans", default=False, action="store_true",
+        help="Calculate and include trans interactions in heatmaps. [default: %(default)s]")
+    parser.add_argument("-r", "--regions", dest="regions", default=None, type=str,
+        help="A comma-separated list of regions to include in the heatmaps (None indicates all regions). [default: %(default)s]")
+    parser.add_argument("-d", "--data-type", dest="datatype", default="fragment",
+        help="Which corrections (if any) to apply to counts. [default: %(default)s]",
+        choices=["raw", "fragment", "distance", "enrichment", "expected"])
+    parser.add_argument("-a", "--array-type", dest="arraytype", default="full",
+        help="The type of array layout to store data in ('compact' only valid for unbinned data). [default: %(default)s]",
+        choices=["compact", "full"])
+    parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
+        help="Save the data as an image to this file.")
+    parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
+        help="Format the image in PDF format. [default: %(default)s]")
+    parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
+        help="Add color scale to the plot (pdf format only). [default: %(default)s]")
+    parser.add_argument("-n", "--names", dest="names", default=False, action="store_true",
+        help="Add region labels to the plot (pdf format only). [default: %(default)s]")
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+        help="Additional keyword arguments to pass to plotting function.")
+    add_silent_argument(parser)
+    parser.add_argument(dest="project", type=str,
+        help="The name of a HiFive FiveC project file to pull data from.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write 5C heatmaps to.")
+    return
+
+def add_fivec_interval_subparser(subparsers):
+    """Add command '5c-interval' arguments to parser.
+    """
+    parser = subparsers.add_parser("5c-interval",
+        help="HiFive Binning Function: Create a tabular interaction file containing data from a HiFive FiveC project. Data are a genomic-interval format (chr1 start1 stop1 chr2 start2 stop2).")
+    parser.add_argument("-c", "--region", dest="region", default=None, required=True, type=int,
+        help="The region from which to pull interaction data from.")
+    parser.add_argument("-s", "--start", dest="start", default=None, required=False, type=int,
+        help="The start coordinate of the pulled region to return. (None indicates the first valid bin in the region) [default %(default)s]")
+    parser.add_argument("-e", "--stop", dest="stop", default=None, required=False, type=int,
+        help="The stop coordinate of the pulled region to return. (None indicates the last valid bin in the region) [default %(default)s]")
+    parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
+    parser.add_argument("-d", "--data-type", dest="datatype", default="fend",
+        help="Which corrections (if any) to apply to counts. [default: %(default)s]",
+        choices=["raw", "fragment", "distance", "enrichment", "expected"])
+    parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
+        help="Save the data as an image to this file.")
+    parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
+        help="Format the image in PDF format. [default: %(default)s]")
+    parser.add_argument("-r", "--rotate", dest="rotate", default=False, action="store_true",
+        help="Rotate the plot 45 degrees (binned only). [default: %(default)s]")
+    parser.add_argument("-t", "--tick-marks", dest="ticks", default=False, action="store_true",
+        help="Add tick marks and labels to the plot (pdf format and binned only). [default: %(default)s]")
+    parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
+        help="Add color scale to the plot (pdf format only). [default: %(default)s]")
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+        help="Additional keyword arguments to pass to plotting function.")
+    add_silent_argument(parser)
+    parser.add_argument(dest="project", type=str,
+        help="The name of a HiFive FiveC project file to pull data from.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write 5C interval to.")
+    return
+
+def add_fends_subparser(subparsers):
+    """Add command 'fends' arguments to parser.
+    """
+    parser = subparsers.add_parser("fends", help="HiFive Fend Creation Function: Read RE fragment data from either a BED file or a HiCPipe-style tabular fend file and create a HiFive 'Fend' file.")
+    infile_group = parser.add_mutually_exclusive_group(required=True)
+    infile_group.add_argument("-F", "--fend", dest="fend", type=str, default=None,
+        help="Fend file in HiCPipe-compatible tabular format, optionally containing fend characteristics (GC content and/or mappability).")
+    infile_group.add_argument("-B", "--bed", dest="bed", type=str, default=None,
+        help="Bed file containing either RE fragment boundary data or RE cutsites.")
+    parser.add_argument("-r", "--re", dest="re", required=False, default=None, type=str,
+        help="The name of the restriction enzyme used to produce the RE fragments.")
+    parser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
+        help="The name of the genome RE fragments correspond to.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiFive Fends to.")
+    add_silent_argument(parser)
+    return
+
+def add_hicdataset_subparser(subparsers):
+    """Add command 'hic-data' arguments to parser.
+    """
+    parser = subparsers.add_parser("hic-data", help="HiFive HiC Dataset Creation Function: Read HiC data from sets of paired-end BAM files, tabular read position (RAW) files, or HiCPipe-compatible fend-pair counts (MAT) files and create a HiFive 'HiCData' file.")
+    infile_group = parser.add_mutually_exclusive_group(required=True)
+    infile_group.add_argument("-S", "--bam", dest="bam", nargs=2, action='append',
+        help="A pair of BAM read end files from a single sequencing run. For multiple runs, this option can be passed multiple times.")
+    infile_group.add_argument("-R", "--raw", dest="raw", action='append',
+        help="A tab-separated text file containing pairs of read ends (chr1 pos1 strand1 chr2 pos2 strand2), one per line. For multiple files, this option can be passed multiple times.")
+    infile_group.add_argument("-M", "--mat", dest="mat", action='append',
+        help="A HiCPipe-style tabular MAT file containing fend pair counts.")
+    parser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
+        help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
+    parser.add_argument(dest="fend", type=str,
+        help="The file name of an appropriate HiFive Fend file.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiFive HiCData to.")
+    add_silent_argument(parser)
+    return
+
+def add_hicproject_subparser(subparsers):
+    """Add command 'hic-project' arguments to parser. This command is MPI-compatible.}
+    """
+    parser = subparsers.add_parser("hic-project", help="HiFive HiC Project Creation Function: Creata a HiFive HiC project associated with a specific HiC dataset, filter out low-coverage fends and calculate the distance-dependence function.")
+    parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
+        action='store', help="The minimum number of interactions needed for valid fragment. [default: %(default)s]")
+    parser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,
+        action='store', help="The minimum interaction distance to include in fragment filtering. [default: %(default)s]")
+    parser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
+        action='store', help="The maximum interaction distance to include in fragment filtering (None or zero indicate no maximum). [default: %(default)s]")
+    parser.add_argument("-j", "--min-binsize", dest="minbin", required=False, type=int, default=1000,
+        action='store', help="The smallest interaction distance bin size for the distance-dependence function. [default: %(default)s]")
+    parser.add_argument("-n", "--num-bins", dest="numbins", required=False, type=int, default=100,
+        action='store', help="The number of bins to partion the interaction distance range into for distance-dependence function. [default: %(default)s]")
+    parser.add_argument(dest="data", type=str,
+        help="The file name of an appropriate HiFive HiCData file.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiFive HiC project to.")
+    add_silent_argument(parser)
+    return
+
+def add_hicnormalize_subparser(subparsers):
+    """Add command 'hic-normalize' arguments to parser.
+    """
+    parser = subparsers.add_parser("hic-normalize", help="HiFive HiC Project Normalization Function: Learn correction parameters for a HiFive HiC project.", epilog="For command line options of each command, type: %(prog)s hic-normalize COMMAND -h")
+    subparser2 = parser.add_subparsers(dest='algorithm')
+    prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fend. Learning is accomplished using gradient descent.")
+    exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fend. Learning is accomplished using a variation of matrix balancing.")
+    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fend characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a probability model.")
+    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a matrix-balancing approximation.")
+    add_hic_normalize_group(prob_parser)
+    add_hic_probability_group(prob_parser)
+    add_hic_normalize_group(exp_parser)
+    add_hic_express_group(exp_parser)
+    exp_parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
+        action='store', help="The minimum number of interactions for fend filtering, if refiltering is required due to distance cutoff or selected reads. [default: %(default)s]")
+    add_hic_normalize_group(reg_parser)
+    add_hic_regression_group(reg_parser)
+    add_hic_normalize_group(regprob_parser)
+    add_hic_probability_group(regprob_parser)
+    add_hic_regression_group(regprob_parser)
+    add_hic_normalize_group(regexp_parser)
+    add_hic_express_group(regexp_parser)
+    regexp_parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
+        action='store', help="The minimum number of interactions for fend filtering, if refiltering is required due to distance cutoff or selected reads. [default: %(default)s]")
+    add_hic_regression_group(regexp_parser)
+    return
+
+def add_complete_hic_subparser(subparsers):
+    """Add command 'hic-complete' arguments to parser.
+    """
+    parser = subparsers.add_parser("hic-complete", help="HiFive HiC Project Complete Analysis Function: Create all necessary files (Fend, Data, and Project) and learn correction parameters for a HiFive HiC project.", epilog="For command line options of each command, type: %(prog)s hic-complete COMMAND -h")
+    subparser2 = parser.add_subparsers(dest='algorithm')
+    prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fend. Learning is accomplished using gradient descent.")
+    exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fend. Learning is accomplished using a variation of matrix balancing.")
+    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fend characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a probability model.")
+    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a matrix-balancing approximation.")
+    add_complete_hic_group(prob_parser)
+    add_hic_probability_group(prob_parser)
+    add_complete_hic_group(exp_parser)
+    add_hic_express_group(exp_parser)
+    add_complete_hic_group(reg_parser)
+    add_hic_regression_group(reg_parser)
+    add_complete_hic_group(regprob_parser)
+    add_hic_probability_group(regprob_parser)
+    add_hic_regression_group(regprob_parser)
+    add_complete_hic_group(regexp_parser)
+    add_hic_express_group(regexp_parser)
+    add_hic_regression_group(regexp_parser)
+    return
+
+def add_complete_hic_group(subparser):
+    fendfile_group = subparser.add_mutually_exclusive_group(required=True)
+    fendfile_group.add_argument("-F", "--fend", dest="fend", type=str, default=None,
+        help="Fend file in HiCPipe-compatible tabular format, optionally containing fend characteristics (GC content and/or mappability).")
+    fendfile_group.add_argument("-B", "--bed", dest="bed", type=str, default=None,
+        help="Bed file containing either RE fragment boundary data or RE cutsites.")
+    subparser.add_argument("--re", dest="re", required=False, default=None, type=str,
+        help="The name of the restriction enzyme used to produce the RE fragments.")
+    subparser.add_argument("--genome", dest="genome", required=False, default=None, type=str,
+        help="The name of the genome RE fragments correspond to.")
+    infile_group = subparser.add_mutually_exclusive_group(required=True)
+    infile_group.add_argument("-S", "--bam", dest="bam", nargs=2, action='append',
+        help="A pair of BAM read end files from a single sequencing run. For multiple runs, this option can be passed multiple times.")
+    infile_group.add_argument("-R", "--raw", dest="raw", action='append',
+        help="A tab-separated text file containing pairs of read ends (chr1 pos1 strand1 chr2 pos2 strand2), one per line. For multiple files, this option can be passed multiple times.")
+    infile_group.add_argument("-M", "--mat", dest="mat", action='append',
+        help="A HiCPipe-style tabular MAT file containing fend pair counts.")
+    subparser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
+        help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
+    subparser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
+        action='store', help="The minimum number of interactions needed for valid fragment. [default: %(default)s]")
+    subparser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,
+        action='store', help="The minimum interaction distance to include in fragment filtering. [default: %(default)s]")
+    subparser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
+        action='store', help="The maximum interaction distance to include in fragment filtering (None or zero indicate no maximum). [default: %(default)s]")
+    subparser.add_argument("-j", "--min-binsize", dest="minbin", required=False, type=int, default=1000,
+        action='store', help="The smallest interaction distance bin size for the distance-dependence function. [default: %(default)s]")
+    subparser.add_argument("-n", "--num-bins", dest="numbins", required=False, type=int, default=100,
+        action='store', help="The number of bins to partion the interaction distance range into for distance-dependence function. [default: %(default)s]")
+    add_silent_argument(subparser)
+    outfile_group = subparser.add_mutually_exclusive_group(required=True)
+    outfile_group.add_argument("--prefix", dest="prefix", type=str, default=None,
+        help="A prefix for the output files (*.fends, *.hcd, and *.hcp).")
+    outfile_group.add_argument("-o", "--output", dest="output", type=str, nargs=3, default=None,
+        help="File names for the Fend, HiCData, and HiC project files to be created.")
+    return
+
+def add_hic_normalize_group(subparser):
+    subparser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,
+        action='store', help="The minimum interaction distance to include in normalization. [default: %(default)s]")
+    subparser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
+        action='store', help="The maximum interaction distance to include in normalization (None or zero indicate no maximum). [default: %(default)s]")
+    subparser.add_argument("-c", "--chromosomes", dest="chroms", required=False, type=str, default=None,
+        action='store', help="A comma-separated list of chromosomes to learn correction values for (None indicates all regions). [default: %(default)s]")
+    subparser.add_argument("-o", "--output-file", dest="output", required=False, type=str, default=None,
+        action='store', help="An alternate filename to save the normalized project to. If not given, the original project file will be overwritten. [default: %(default)s]")
+    subparser.add_argument(dest="project", type=str,
+        help="The name of the HiFive HiC project to normalize.")
+    add_silent_argument(subparser)
+    return
+
+def add_hic_probability_group(subparser):
+    subparser.add_argument("-b", "--burnin-iterations", dest="burnin", required=False, type=int, default=1000,
+        action='store', help="The number of iterations to run the burn-in learning phase for with a constant learning rate. [default: %(default)s]")
+    subparser.add_argument("-a", "--annealing-iterations", dest="anneal", required=False, type=int, default=1000,
+        action='store', help="The number of iterations to run the annealing learning phase for with a linearly-decreasing learning rate. [default: %(default)s]")
+    subparser.add_argument("-g", "--min-change", dest="change", required=False, type=float, default=0.0001,
+        action='store', help="The minimum mean change in fend correction parameter values needed to keep running past 'burnin_iterations' number of iterations during burn-in phase of probability learning algorithm. [default: %(default)s]")
+    subparser.add_argument("-p", "--precalculate", dest="precalc", required=False, default=False,
+        action='store_true', help="Precalculate correction values from fend means for the probability algorithm. [default: %(default)s]")
+    subparser.add_argument("-l", "--learning-rate", dest="rate", required=False, type=float, default=0.4,
+        action='store', help="The learning rate (percentage of parameter gradient to apply) to use for gradient descent. [default: %(default)s]")
+    subparser.add_argument("-k", "--display", dest="display", required=False, type=int, default=100,
+        action='store', help="The number of iterations to wait before explicitly calculating cost and updating display (zero indicates off). [default: %(default)s]")
+    return
+
+def add_hic_express_group(subparser):
+    subparser.add_argument("-e", "--express-iterations", dest="expiter", required=False, type=int, default=1000,
+        action='store', help="The number of iterations to run the express learning phase for. [default: %(default)s]")
+    subparser.add_argument("-d", "--remove-distance", dest="nodist", required=False, default=False,
+        action='store_true', help="Remove the distant-dependent portion of the signal prior to learning corrections with the express algorithm. [default: %(default)s]")
+    subparser.add_argument("-w", "--express-reads", dest="expreads", required=False, type=str, default='cis',
+        choices=['cis', 'trans', 'all'], help="Which set of reads to use for express normalization. [default: %(default)s]")
+    return
+
+def add_hic_regression_group(subparser):
+    subparser.add_argument("-r", "--regression-iterations", dest="regiter", required=False, type=int, default=1000,
+        action='store', help="The maximum number of iterations to run regression modeling for. [default: %(default)s]")
+    subparser.add_argument("-t", "--learning-threshold", dest="threshold", required=False, type=float, default=1.0,
+        action='store', help="The learning threshold cutoff for regression algorithm. [default: %(default)s]")
+    subparser.add_argument("-y", "--regression-reads", dest="regreads", required=False, type=str, default='cis',
+        choices=['cis', 'trans', 'all'], help="Which set of reads to use for regression normalization. [default: %(default)s]")
+    subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
+        action='store', help="A comma-separated list of parameters to include in regression model (valid parameters are 'gc', 'len', 'distance', and mappability). [default: %(default)s]")
+    subparser.add_argument("-z", "--model-bins", dest="modelbins", required=False, type=str, default="20,20,20",
+        action='store', help="A comma-separated list of the number of bins to separate model parameters into. [default: %(default)s]")
+    return
+
+def add_combine_hic_replicates_subparser(subparsers):
+    """Add command 'combine-hic-replicates' arguments to parser.
+    """
+    parser = subparsers.add_parser("combine-hic-replicates",
+        help="HiFive Data Function: Combine two HiFive HiC datasets into a single dataset without needing to reload data. These files need to have been generated using the same HiFive Fend file.")
+    parser.add_argument(dest="replicate1", type=str,
+        help="Name of the first HiFive HiCDataset replicate file to be combined.")
+    parser.add_argument(dest="replicate2", type=str,
+        help="Name of the second HiFive HiCDataset replicate file to be combined.")
+    parser.add_argument(dest="output", type=str,
+        help="Name of file in which to write combined data.")
+    add_silent_argument(parser)
+    return
+
+def add_hic_heatmap_subparser(subparsers):
+    """Add command 'hic-heatmap' arguments to parser.
+    """
+    parser = subparsers.add_parser("hic-heatmap",
+        help="HiFive Binning Function: Create a heatmap HDF5 file containing data from a HiFive HiC project.")
+    parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
+    parser.add_argument("-t", "--trans", dest="trans", default=False, action="store_true",
+        help="Calculate and include trans interactions in heatmaps. [default: %(default)s]")
+    parser.add_argument("-c", "--chromosomes", dest="chroms", default=None, type=str,
+        help="A comma-separated list of chromosomes to include in the heatmaps (None indicates all chromosomes). [default: %(default)s]")
+    parser.add_argument("-d", "--data-type", dest="datatype", default="fend",
+        help="Which corrections (if any) to apply to counts. [default: %(default)s]",
+        choices=["raw", "fend", "distance", "enrichment", "expected"])
+    parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
+        help="Save the data as an image to this file.")
+    parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
+        help="Format the image in PDF format. [default: %(default)s]")
+    parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
+        help="Add color scale to the plot (pdf format only). [default: %(default)s]")
+    parser.add_argument("-n", "--names", dest="names", default=False, action="store_true",
+        help="Add chromosome labels to the plot (pdf format only). [default: %(default)s]")
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+        help="Additional keyword arguments to pass to plotting function.")
+    add_silent_argument(parser)
+    parser.add_argument(dest="project", type=str,
+        help="The name of a HiFive HiC project file to pull data from.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiC heatmaps to.")
+    return
+
+def add_hic_interval_subparser(subparsers):
+    """Add command 'hic-interval' arguments to parser.
+    """
+    parser = subparsers.add_parser("hic-interval",
+        help="HiFive Binning Function: Create a tabular interaction file containing data from a HiFive HiC project. Data are a genomic-interval format (chr1 start1 stop1 chr2 start2 stop2).")
+    parser.add_argument("-c", "--chromosome", dest="chrom", default=None, required=True, type=str,
+        help="The chromosome from which to pull interaction data from.")
+    parser.add_argument("-s", "--start", dest="start", default=None, required=False, type=int,
+        help="The start coordinate of the pulled region to return. (None indicates the first valid bin on the chromosome) [default %(default)s]")
+    parser.add_argument("-e", "--stop", dest="stop", default=None, required=False, type=int,
+        help="The stop coordinate of the pulled region to return. (None indicates the last valid bin on the chromosome) [default %(default)s]")
+    parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
+    parser.add_argument("-m", "--max-distance", dest="maxdist", default=None, type=int,
+        help="The maximum interaction distance to return (None indicates no maximum). [default: %(default)s]")
+    parser.add_argument("-d", "--data-type", dest="datatype", default="fend",
+        help="Which corrections (if any) to apply to counts. [default: %(default)s]",
+        choices=["raw", "fend", "distance", "enrichment", "expected"])
+    parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
+        help="Save the data as an image to this file.")
+    parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
+        help="Format the image in PDF format. [default: %(default)s]")
+    parser.add_argument("-r", "--rotate", dest="rotate", default=False, action="store_true",
+        help="Rotate the plot 45 degrees (binned only). [default: %(default)s]")
+    parser.add_argument("-t", "--tick-marks", dest="ticks", default=False, action="store_true",
+        help="Add tick marks and labels to the plot (pdf format and binned only). [default: %(default)s]")
+    parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
+        help="Add color scale to the plot (pdf format only). [default: %(default)s]")
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+        help="Additional keyword arguments to pass to plotting function.")
+    add_silent_argument(parser)
+    parser.add_argument(dest="project", type=str,
+        help="The name of a HiFive HiC project file to pull data from.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiC interval to.")
+    return
+
+def add_silent_argument(parser):
+    parser.add_argument("-q", "--quiet", dest="silent", required=False, default=False,
+        action='store_true', help="Silence output messages. [default: %(default)s]")
+    return
+
+
+if __name__ == "__main__":
+    if "mpi4py" in sys.modules.keys():
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        num_procs = comm.Get_size()
+    else:
+        comm = None
+        rank = 0
+        num_procs = 1
+    main()

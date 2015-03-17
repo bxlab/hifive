@@ -20,16 +20,17 @@ def main():
           description = 'Python library for normalizing and analyzing HiC and 5C data',
           zip_safe = False,
           include_package_data = True,
-          package_dir = {'':'lib'},
-          packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py'], where='lib/'),
+          package_dir = {'':'./'},
+          packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py'], where='./'),
           install_requires = ['numpy', 'scipy', 'h5py'],
           setup_requires = ['setuptools_cython'],
           ext_modules = get_extension_modules(),
+          scripts = ['bin/hifive',],
           test_suite = 'nose.collector',
           tests_require = 'nose',
           #extras_require = {'pyx':[], 'PIL':[], 'mlpy':[]},
           author = "Michael Sauria",
-          author_email = "mike.sauria@gmail.com",
+          author_email = "mike.sauria@jhu.edu",
           url='https://bitbucket.org/bxlab/hifive')
 
 # ---- Extension Modules ----------------------------------------------------
@@ -37,32 +38,32 @@ def main():
 def get_extension_modules():
     extensions = []
     # Distance functions
-    extensions.append(Extension("hifive.libraries._hic_distance", ["lib/hifive/libraries/_hic_distance.pyx"],
+    extensions.append(Extension("hifive.libraries._hic_distance", ["hifive/libraries/_hic_distance.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=["-Wno-cpp"]))
+                                extra_compile_args=[]))
     # Binning functions
-    extensions.append(Extension("hifive.libraries._hic_binning", ["lib/hifive/libraries/_hic_binning.pyx"],
+    extensions.append(Extension("hifive.libraries._hic_binning", ["hifive/libraries/_hic_binning.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=["-Wno-cpp"]))
-    extensions.append(Extension("hifive.libraries._fivec_binning", ["lib/hifive/libraries/_fivec_binning.pyx"],
+                                extra_compile_args=[]))
+    extensions.append(Extension("hifive.libraries._fivec_binning", ["hifive/libraries/_fivec_binning.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=["-Wno-cpp"]))
+                                extra_compile_args=[]))
     # Interaction functions
-    extensions.append(Extension("hifive.libraries._hic_interactions", ["lib/hifive/libraries/_hic_interactions.pyx"],
+    extensions.append(Extension("hifive.libraries._hic_interactions", ["hifive/libraries/_hic_interactions.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=["-Wno-cpp"]))
+                                extra_compile_args=[]))
     # Optimization functions
-    extensions.append(Extension("hifive.libraries._hic_optimize", ["lib/hifive/libraries/_hic_optimize.pyx"],
+    extensions.append(Extension("hifive.libraries._hic_optimize", ["hifive/libraries/_hic_optimize.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=["-Wno-cpp"]))
-    extensions.append(Extension("hifive.libraries._fivec_optimize", ["lib/hifive/libraries/_fivec_optimize.pyx",
-                                "lib/hifive/libraries/_normal.cpp"],
+                                extra_compile_args=[]))
+    extensions.append(Extension("hifive.libraries._fivec_optimize", ["hifive/libraries/_fivec_optimize.pyx",
+                                "hifive/libraries/_normal.cpp"],
                                 include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=["-Wno-cpp"]))
+                                extra_compile_args=[]))
     # Boundary Index functions
-    extensions.append(Extension("hifive.libraries._bi", ["lib/hifive/libraries/_bi.pyx"],
-                                include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=["-Wno-cpp"]))
+    #extensions.append(Extension("hifive.libraries._bi", ["hifive/_bi.pyx"],
+    #                            include_dirs=[numpy.get_include()], language="c++",
+    #                            extra_compile_args=["-Wno-cpp"]))
     return extensions
 
 if __name__ == "__main__":
