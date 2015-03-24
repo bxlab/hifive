@@ -127,7 +127,7 @@ def find_cis_compact_expected(
                 # if finding frag, enrichment, or expected, and using express or probability bias correction, correct for frag
                 if not corrections is None:
                     value += corrections[frag1] + corrections[frag2]
-                # if finding frag, enrichment, or expected, and using regression bias correction, correct for frag
+                # if finding frag, enrichment, or expected, and using binning bias correction, correct for frag
                 if not gc_indices is None:
                     value += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
                 if not len_indices is None:
@@ -178,7 +178,7 @@ def find_cis_upper_expected(
                 # if finding frag, enrichment, or expected, and using express or probability bias correction, correct for frag
                 if not corrections is None:
                     value += corrections[frag1] + corrections[frag2]
-                # if finding frag, enrichment, or expected, and using regression bias correction, correct for frag
+                # if finding frag, enrichment, or expected, and using binning bias correction, correct for frag
                 if not gc_indices is None:
                     value += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
                 if not len_indices is None:
@@ -391,7 +391,7 @@ def find_trans_expected(
                 # if finding frag, enrichment, or expected, and using express or probability bias correction, correct for frag
                 if not corrections1 is None:
                     value += corrections1[frag1] + corrections2[frag2]
-                # if finding frag, enrichment, or expected, and using regression bias correction, correct for frag
+                # if finding frag, enrichment, or expected, and using binning bias correction, correct for frag
                 if not gc_indices1 is None:
                     value += gc_corrections[gc_indices1[frag1], gc_indices2[frag2]]
                 if not len_indices1 is None:
@@ -500,11 +500,14 @@ def dynamically_bin_trans(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_observed(
+def binning_bin_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_t, ndim=1] corrected_data,
+        np.ndarray[DTYPE_int_t, ndim=1] data_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
+        np.ndarray[DTYPE_64_t, ndim=2] float_counts,
         np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
         np.ndarray[DTYPE_int_t, ndim=1] len_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
@@ -550,6 +553,10 @@ def regression_bin_observed(
                     k += 1
                 index += k * distance_div
             counts[index, 0] += 1
+            if not corrected_data is None:
+                float_counts[index, 0] += corrected_data[i]
+                float_counts[index, 1] += pow(corrected_data[i], 2.0)
+                data_indices[i] = index
         for i in range(num_trans):
             frag1 = trans_data[i, 0]
             frag2 = trans_data[i, 1]
@@ -571,7 +578,7 @@ def regression_bin_observed(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_cis_expected(
+def binning_bin_cis_expected(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int_t, ndim=1] strands,
@@ -621,7 +628,7 @@ def regression_bin_cis_expected(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_trans_expected(
+def binning_bin_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int_t, ndim=1] strands,

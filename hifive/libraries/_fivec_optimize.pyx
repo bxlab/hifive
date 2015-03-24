@@ -35,7 +35,7 @@ cdef extern from "_normal.hpp":
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_regression_correction_adjustment(
+def find_binning_correction_adjustment(
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=2] indices not None,
         np.ndarray[DTYPE_t, ndim=2] gc_corrections,

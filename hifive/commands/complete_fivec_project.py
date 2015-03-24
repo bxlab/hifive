@@ -52,18 +52,18 @@ def run(args):
     del data
     fivec = FiveC(project_fname, 'r', silent=args.silent)
     precorrect = False
-    if args.algorithm in ['regression', 'regression-express', 'regression-probability']:
-        fivec.find_regression_fragment_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
+    if args.algorithm in ['binning', 'binning-express', 'binning-probability']:
+        fivec.find_binning_fragment_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
                                                    regions=regions, num_bins=modelbins, model=model,
-                                                   usereads=args.regreads, learning_threshold=args.threshold,
-                                                   max_iterations=args.regiter)
+                                                   usereads=args.binreads, learning_threshold=args.threshold,
+                                                   max_iterations=args.biniter)
         precorrect = True
-    if args.algorithm in ['probability', 'regression-probability']:
+    if args.algorithm in ['probability', 'binning-probability']:
         fivec.find_probability_fragment_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
                                                     regions=regions, burnin_iterations=args.burnin,
                                                     annealing_iterations=args.anneal, learningrate=args.rate,
                                                     precalculate=args.precalc, precorrect=precorrect)
-    elif args.algorithm in ['express', 'regression-express']:
+    elif args.algorithm in ['express', 'binning-express']:
         fivec.find_express_fragment_corrections(iterations=args.expiter, mindistance=args.mindist,
                                                 maxdistance=args.maxdist, remove_distance=args.nodist,
                                                 usereads=args.expreads, regions=regions,

@@ -82,15 +82,13 @@ class Fragment(object):
         fragfile.close()
         return None
 
-    def load_fragments(self, filename, fastafile=None, genome_name=None, re_name=None, regions=[],
+    def load_fragments(self, filename, genome_name=None, re_name=None, regions=[],
                        minregionspacing=1000000):
         """
         Parse and store fragment data from a bed for a 5C assay file into an h5dict.
 
         :param filename: A file name to read restriction fragment data from. This should be a BED file containing fragment boundaries for all probed fragments and primer names that match those used for read mapping.
         :type filename: str.
-        :param fastafile: A file name to read primer sequences from. This should be a FASTA file with primer names matching those in the BED file 'filename'. Optional.
-        :type fastafile: str.
         :param genome_name: The name of the species and build. Optional.
         :type genome_name: str.
         :param re_name: The name of the restriction enzyme used to produce the fragment set. Optional.
@@ -101,7 +99,7 @@ class Fragment(object):
         :type minregionspacing: int.
         :returns: None
         """
-        self.history += "Fragment.load_fragments(filename='%s', fastafile='%s', genome_name='%s', re_name='%s', regions=%s, minregionspacing=%i) - " % (filename, fastafile, genome_name, re_name, str(regions), minregionspacing)
+        self.history += "Fragment.load_fragments(filename='%s', genome_name='%s', re_name='%s', regions=%s, minregionspacing=%i) - " % (filename, genome_name, re_name, str(regions), minregionspacing)
         if not os.path.exists(filename):
             if not self.silent:
                 print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
@@ -111,13 +109,14 @@ class Fragment(object):
         chr2int = {}
         data = []
         input = open(filename, 'r')
-        fragment_index = 1
-        chromosome_index = 2
-        coordinate_index = 3
-        length_index = 5
+        feature_names = []
         for line in input:
             temp = line.strip('\n').split('\t')
-            if temp[0] == 'chr':
+            try:
+                start = int(temp[1])
+            except:
+                for i in range(6, len(temp)):
+                    feature_names.append(temp[i])
                 continue
             chrom = temp[0].strip('chr')
             start = int(temp[1])
@@ -127,29 +126,21 @@ class Fragment(object):
                 strand = 0
             else:
                 strand = 1
+            features = []
+            for i in range(6, 6 + len(feature_names)):
+                features.append(float(temp[i]))
             if chrom not in chr2int:
                 chr2int[chrom] = len(chromosomes)
                 chromosomes.append(chrom)
-            data.append([chr2int[chrom], start, stop, (start + stop) / 2, strand, name])
+            data.append([chr2int[chrom], start, stop, (start + stop) / 2, strand, name] + features)
         input.close()
         data.sort()
-        if not fastafile is None:
-            dtypes = numpy.dtype([('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32),
-                                  ('mid', numpy.int32), ('strand', numpy.int32), ('region', numpy.int32),
-                                  ('name', 'S32'), ('gc', numpy.float32)])
-            input = open(fastafile, 'r')
-            gc = {}
-            name = input.readline()
-            while len(name) > 0:
-                seq = input.readline().upper()
-                gc[name[1:-1].strip(' ')] = (seq.count('G') + seq.count('C')) / float(len(seq))
-                name = input.readline()
-            input.close()
-        else:
-            dtypes = numpy.dtype([('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32),
-                                  ('mid', numpy.int32), ('strand', numpy.int32), ('region', numpy.int32),
-                                  ('name', 'S32')])
-        fragments = numpy.empty(len(data), dtype=dtypes)
+        dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32),
+                  ('mid', numpy.int32), ('strand', numpy.int32), ('region', numpy.int32),
+                  ('name', 'S32')]
+        for feature in feature_names:
+            dtypes.append((feature, numpy.float32))
+        fragments = numpy.empty(len(data), dtype=numpy.dtype(dtypes))
         for i in range(len(data)):
             # make an entry for each fragment
             fragments['chr'][i] = data[i][0]
@@ -158,9 +149,8 @@ class Fragment(object):
             fragments['mid'][i] = data[i][3]
             fragments['strand'][i] = data[i][4]
             fragments['name'][i] = data[i][5]
-        if not fastafile is None:
-            for i in range(fragments.shape[0]):
-                fragments['gc'][i] = gc[fragments['name'][i]]
+            for j in range(len(feature_names)):
+                fragments[feature_names[j]][i] = data[i][6 + j]
         chromosomes = numpy.array(chromosomes)
         # make note of chromosome positions in fend array
         chr_indices = numpy.zeros(chromosomes.shape[0] + 1, dtype=numpy.int32)

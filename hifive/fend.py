@@ -142,115 +142,117 @@ class Fend(object):
         chromosome_index = 2
         coordinate_index = 3
         length_index = 5
+        feature_names = []
         for line in input:
             temp = line.strip('\n').split('\t')
-            if temp[0] == 'fend':
-                fragment_index = temp.index('frag')
+            try:
+                temp[0] == int(temp[0])
+            except:
+                fend_index = temp.index('fend')
                 chromosome_index = temp.index('chr')
                 coordinate_index = temp.index('coord')
-                length_index = temp.index('frag_len')
-                if 'frag_gc' in temp:
-                    gc_index = temp.index('frag_gc')
-                else:
-                    gc_index = None
-                if 'map_score' in temp:
-                    map_index = temp.index('map_score')
-                else:
-                    map_index = None
+                for i in range(6, len(temp)):
+                    feature_names.append(temp[i])
                 continue
             chrom = temp[chromosome_index].strip('chr')
-            frag = int(temp[fragment_index])
+            fend = int(temp[fend_index]) - 1
             if chrom not in chr2int:
                 chr2int[chrom] = len(chromosomes)
                 chromosomes.append(chrom)
-            if frag not in data:
-                # keep first instance of each fragment
-                data[frag] = [0, chr2int[chrom], int(temp[coordinate_index]), int(temp[length_index])]
-                if not gc_index is None:
-                    gcscore[(frag, 0)] = float(temp[gc_index])
-                if not map_index is None:
-                    mapscore[(frag, 0)] = float(temp[map_index])
+            features = []
+            for i in range(6, 6 + len(feature_names)):
+                features.append(float(temp[i]))
+            length = int(temp[length_index])
+            if fend % 2 == 0:
+                start = int(temp[coordinate_index])
+                stop = start + length / 2
             else:
-                # make sure that fragment has both ends present in file
-                data[frag][0] += 1
-                if not gc_index is None:
-                    gcscore[(frag, 1)] = float(temp[gc_index])
-                if not map_index is None:
-                    mapscore[(frag, 1)] = float(temp[map_index])
+                stop = int(temp[coordinate_index]) + 1
+                start = stop - length + length / 2
+            data[fend] = [chr2int[chrom], start, stop] + features
         input.close()
-        keys = data.keys()
-        for key in keys:
-            if data[key][0] != 1:
-                del data[key]
-        keys = data.keys()
-        keys.sort()
         dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32), ('mid', numpy.int32)]
-        if len(gcscore) > 0:
-            dtypes.append(('gc', numpy.float32))
-        if len(mapscore) > 0:
-            dtypes.append(('mappability', numpy.float32))
-        fends = numpy.empty(len(keys) * 2, dtype=numpy.dtype(dtypes))
-        for i, key in enumerate(keys):
-            # make 2 entries for each fragment, one for each half
-            index = i * 2
-            fends['chr'][index] = data[key][1]
-            fends['start'][index] = data[key][2]
-            fends['stop'][index] = data[key][2] + data[key][3] / 2
-            fends['mid'][index] = (fends['start'][index] + fends['stop'][index]) / 2
-            if (key, 0) in gcscore:
-                fends['gc'][index] = gcscore[(key, 0)]
-            if (key, 0) in mapscore:
-                fends['mappability'][index] = mapscore[(key, 0)]
-            index = i * 2 + 1
-            fends['chr'][index] = data[key][1]
-            fends['start'][index] = data[key][2] + data[key][3] / 2
-            fends['stop'][index] = data[key][2] + data[key][3]
-            fends['mid'][index] = (fends['start'][index] + fends['stop'][index]) / 2
-            if (key, 1) in gcscore:
-                fends['gc'][index] = gcscore[(key, 1)]
-            if (key, 1) in mapscore:
-                fends['mappability'][index] = mapscore[(key, 1)]
+        for i in range(len(feature_names)):
+            dtypes.append((feature_names[i], numpy.float32))
+        fends = numpy.empty(len(data), dtype=numpy.dtype(dtypes))
+        for i in data.keys():
+            fends['chr'][i] = data[i][0]
+            fends['start'][i] = data[i][1]
+            fends['stop'][i] = data[i][2]
+            fends['mid'][i] = (data[i][1] + data[i][2]) / 2
+            for j in range(3, 3 + len(feature_names)):
+                fends[feature_names[j - 3]][i] = data[i][j]
         chromosomes = numpy.array(chromosomes)
         return [fends, chromosomes]
 
     def _load_from_bed(self, fname):
         chromosomes = []
-        chr2int = {}
         data = {}
+        feature_names = []
+        sizes = []
         input = open(fname, 'r')
         for line in input:
-            temp = line[:-1].split('\t')
-            if temp[0] == 'chr':
+            temp = line.strip('\n').split('\t')
+            try:
+                start = int(temp[1])
+            except:
+                for i in range(6, len(temp)):
+                    feature_names.append(temp[i])
                 continue
             chrom = temp[0].strip('chr')
             if chrom not in data:
                 data[chrom] = []
-            data[chrom].append([int(temp[1]), int(temp[2])])
+            stop = int(temp[2])
+            features = []
+            for i in range(6, 6 + len(feature_names)):
+                temp1, temp2 = temp[i].split(',')
+                features += [float(temp1), float(temp2)]
+            data[chrom].append(tuple([start, stop] + features))
+            sizes.append(stop - start)
         input.close()
         chromosomes = data.keys()
         chromosomes.sort()
-        for i, chrom in enumerate(chromosomes):
-            data[chrom] = numpy.array(data[chrom], dtype=numpy.int32)
-            if numpy.mean(data[chrom][:, 1] - data[chrom][:, 0]) < 10.0:
-                data[chrom] = (data[chrom][:, 0] + data[chrom][:, 1]) / 2
-            else:
-                data[chrom] = numpy.r_[data[chrom][0, 0], data[chrom][:, 1]].astype(numpy.int32)
-            data[chrom] = data[chrom][numpy.argsort(data[chrom])]
-        indices = numpy.zeros(len(chromosomes) + 1, dtype=numpy.int32)
-        for i, chrom in enumerate(chromosomes):
-            indices[i + 1] = indices[i] + (data[chrom].shape[0] - 1) * 2
-        fends = numpy.empty(indices[-1], dtype=numpy.dtype([('chr', numpy.int32), ('start', numpy.int32),
-                ('stop', numpy.int32), ('mid', numpy.int32)]))
-        for i, chrom in enumerate(chromosomes):
-            # make 2 entries for each fragment, one for each half
-            fends['chr'][indices[i]:indices[i + 1]] = i
-            fends['start'][indices[i]:indices[i + 1]:2] = data[chrom][:-1]
-            fends['start'][(indices[i] + 1):indices[i + 1]:2] = (data[chrom][:-1] + data[chrom][1:]) / 2
-            fends['stop'][indices[i]:indices[i + 1]:2] = (data[chrom][:-1] + data[chrom][1:]) / 2
-            fends['stop'][(indices[i] + 1):indices[i + 1]:2] = data[chrom][1:]
-            fends['mid'][indices[i]:indices[i + 1]] = (fends['start'][indices[i]:indices[i + 1]] +
-                                                       fends['stop'][indices[i]:indices[i + 1]]) / 2
         chromosomes = numpy.array(chromosomes)
+        sizes = numpy.array(sizes)
+        dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32), ('mid', numpy.int32)]
+        dtypes2 = [('start', numpy.int32), ('stop', numpy.int32)]
+        for i in range(len(feature_names)):
+            dtypes.append((feature_names[i], numpy.float32))
+            dtypes2.append(("%s_1" % feature_names[i], numpy.float32))
+            dtypes2.append(("%s_2" % feature_names[i], numpy.float32))
+        for i, chrom in enumerate(chromosomes):
+            data[chrom].sort()
+            data[chrom] = numpy.array(data[chrom], dtype=numpy.dtype(dtypes2))
+        if numpy.mean(sizes) < 10.0:
+            fends = numpy.empty((sizes.shape[0] - chromosomes.shape[0]) * 2, dtype=numpy.dtype(dtypes))
+            pos = 0
+            for i, chrom in enumerate(chromosomes):
+                data_len = (data[chrom].shape[0] - 1) * 2
+                cuts = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
+                mids = (cuts[:-1] + cuts[1:]) / 2
+                fends['chr'][pos:(pos + data_len)] = i
+                fends['start'][pos:(pos + data_len):2] = cuts[:-1]
+                fends['stop'][pos:(pos + data_len):2] = mids
+                fends['start'][(pos + 1):(pos + data_len):2] = mids
+                fends['stop'][(pos + 1):(pos + data_len):2] = cuts[1:]
+                for j in range(len(feature_names)):
+                    fends[feature_names[j]][pos:(pos + data_len):2] = data[chrom]["%s_2" % feature_names[j]][:-1]
+                    fends[feature_names[j]][(pos + 1):(pos + data_len):2] = data[chrom]["%s_1" % feature_names[j]][1:]
+                pos += data_len
+        else:
+            fends = numpy.empty(sizes.shape[0] * 2, dtype=numpy.dtype(dtypes))
+            pos = 0
+            for i, chrom in enumerate(chromosomes):
+                data_len = data[chrom].shape[0] * 2
+                mids = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
+                fends['chr'][pos:(pos + data_len)] = i
+                fends['start'][pos:(pos + data_len)] = data[chrom]['start'][:]
+                fends['stop'][pos:(pos + data_len)] = data[chrom]['stop'][:]
+                for j in range(len(feature_names)):
+                    fends[feature_names[j]][pos:(pos + data_len):2] = data[chrom]["%s_1" % feature_names[j]]
+                    fends[feature_names[j]][(pos + 1):(pos + data_len):2] = data[chrom]["%s_2" % feature_names[j]]
+                pos += data_len
+        fends['mid'][:] = (fends['start'][:] + fends['stop'][:]) / 2
         return [fends, chromosomes]
 
 

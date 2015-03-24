@@ -117,7 +117,7 @@ def add_fragments_subparser(subparsers):
     """
     parser = subparsers.add_parser("fragments", help="HiFive Fragment Creation Function: Read target RE fragment data from a BED file and create a HiFive 'Fragment' file.")
     parser.add_argument("-F", "--fasta", dest="fasta", required=False, type=str, default=None,
-        help="FASTA file containing sequences of 5C primers (used for GC content for regression modeling).")
+        help="FASTA file containing sequences of 5C primers (used for GC content for binning modeling).")
     parser.add_argument("-r", "--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
     parser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
@@ -169,21 +169,21 @@ def add_fivecnormalize_subparser(subparsers):
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fragment. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fragment. Learning is accomplished using a variation of matrix balancing.")
-    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
-    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
-    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
+    bin_parser = subparser2.add_parser("binning", help="A multivariate binning probability model-based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    binprob_parser = subparser2.add_parser("binning-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
+    binexp_parser = subparser2.add_parser("binning-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
     add_fivec_normalize_group(prob_parser)
     add_fivec_probability_group(prob_parser)
     add_fivec_normalize_group(exp_parser)
     add_fivec_express_group(exp_parser)
-    add_fivec_normalize_group(reg_parser)
-    add_fivec_regression_group(reg_parser)
-    add_fivec_normalize_group(regprob_parser)
-    add_fivec_probability_group(regprob_parser)
-    add_fivec_regression_group(regprob_parser)
-    add_fivec_normalize_group(regexp_parser)
-    add_fivec_express_group(regexp_parser)
-    add_fivec_regression_group(regexp_parser)
+    add_fivec_normalize_group(bin_parser)
+    add_fivec_binning_group(bin_parser)
+    add_fivec_normalize_group(binprob_parser)
+    add_fivec_probability_group(binprob_parser)
+    add_fivec_binning_group(binprob_parser)
+    add_fivec_normalize_group(binexp_parser)
+    add_fivec_express_group(binexp_parser)
+    add_fivec_binning_group(binexp_parser)
     return
 
 def add_complete_fivec_subparser(subparsers):
@@ -193,21 +193,21 @@ def add_complete_fivec_subparser(subparsers):
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fragment. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fragment. Learning is accomplished using a variation of matrix balancing.")
-    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
-    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
-    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
+    bin_parser = subparser2.add_parser("binning", help="A multivariate binning probability model-based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    binprob_parser = subparser2.add_parser("binning-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
+    binexp_parser = subparser2.add_parser("binning-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
     add_fivec_complete_group(prob_parser)
     add_fivec_probability_group(prob_parser)
     add_fivec_complete_group(exp_parser)
     add_fivec_express_group(exp_parser)
-    add_fivec_complete_group(reg_parser)
-    add_fivec_regression_group(reg_parser)
-    add_fivec_complete_group(regprob_parser)
-    add_fivec_probability_group(regprob_parser)
-    add_fivec_regression_group(regprob_parser)
-    add_fivec_complete_group(regexp_parser)
-    add_fivec_express_group(regexp_parser)
-    add_fivec_regression_group(regexp_parser)
+    add_fivec_complete_group(bin_parser)
+    add_fivec_binning_group(bin_parser)
+    add_fivec_complete_group(binprob_parser)
+    add_fivec_probability_group(binprob_parser)
+    add_fivec_binning_group(binprob_parser)
+    add_fivec_complete_group(binexp_parser)
+    add_fivec_express_group(binexp_parser)
+    add_fivec_binning_group(binexp_parser)
     return
 
 def add_fivec_normalize_group(subparser):
@@ -226,7 +226,7 @@ def add_fivec_normalize_group(subparser):
 
 def add_fivec_complete_group(subparser):
     subparser.add_argument("-F", "--fasta", dest="fasta", required=False, type=str, default=None,
-        help="FASTA file containing sequences of 5C primers (used for GC content for regression modeling).")
+        help="FASTA file containing sequences of 5C primers (used for GC content for binning modeling).")
     subparser.add_argument("--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
     subparser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
@@ -272,15 +272,15 @@ def add_fivec_express_group(subparser):
         choices=['cis', 'trans', 'all'], help="Which set of reads to use for express normalization. [default: %(default)s]")
     return
 
-def add_fivec_regression_group(subparser):
-    subparser.add_argument("-i", "--regression-iterations", dest="regiter", required=False, type=int, default=1000,
-        action='store', help="The maximum number of iterations to run regression modeling for. [default: %(default)s]")
+def add_fivec_binning_group(subparser):
+    subparser.add_argument("-i", "--binning-iterations", dest="biniter", required=False, type=int, default=1000,
+        action='store', help="The maximum number of iterations to run binning modeling for. [default: %(default)s]")
     subparser.add_argument("-t", "--learning-threshold", dest="threshold", required=False, type=float, default=1.0,
-        action='store', help="The learning threshold cutoff for regression algorithm. [default: %(default)s]")
-    subparser.add_argument("-y", "--regression-reads", dest="regreads", required=False, type=str, default='cis',
-        choices=['cis', 'trans', 'all'], help="Which set of reads to use for regression normalization. [default: %(default)s]")
+        action='store', help="The learning threshold cutoff for binning algorithm. [default: %(default)s]")
+    subparser.add_argument("-y", "--binning-reads", dest="binreads", required=False, type=str, default='cis',
+        choices=['cis', 'trans', 'all', 'cis-corrected'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
     subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
-        action='store', help="A comma-separated list of parameters to include in regression model (valid parameters are 'gc', 'len', and 'distance'). [default: %(default)s]")
+        action='store', help="A comma-separated list of parameters to include in binning model. [default: %(default)s]")
     subparser.add_argument("-n", "--model-bins", dest="modelbins", required=False, type=str, default="10,10,10",
         action='store', help="A comma-separated list of the number of bins to separate model parameters into. [default: %(default)s]")
     return
@@ -432,25 +432,25 @@ def add_hicnormalize_subparser(subparsers):
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fend. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fend. Learning is accomplished using a variation of matrix balancing.")
-    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fend characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
-    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a probability model.")
-    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a matrix-balancing approximation.")
+    bin_parser = subparser2.add_parser("binning", help="A multivariate binning probability model-based approach for learning correction values associated with fend characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    binprob_parser = subparser2.add_parser("binning-probability", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a probability model.")
+    binexp_parser = subparser2.add_parser("binning-express", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a matrix-balancing approximation.")
     add_hic_normalize_group(prob_parser)
     add_hic_probability_group(prob_parser)
     add_hic_normalize_group(exp_parser)
     add_hic_express_group(exp_parser)
     exp_parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
         action='store', help="The minimum number of interactions for fend filtering, if refiltering is required due to distance cutoff or selected reads. [default: %(default)s]")
-    add_hic_normalize_group(reg_parser)
-    add_hic_regression_group(reg_parser)
-    add_hic_normalize_group(regprob_parser)
-    add_hic_probability_group(regprob_parser)
-    add_hic_regression_group(regprob_parser)
-    add_hic_normalize_group(regexp_parser)
-    add_hic_express_group(regexp_parser)
-    regexp_parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
+    add_hic_normalize_group(bin_parser)
+    add_hic_binning_group(bin_parser)
+    add_hic_normalize_group(binprob_parser)
+    add_hic_probability_group(binprob_parser)
+    add_hic_binning_group(binprob_parser)
+    add_hic_normalize_group(binexp_parser)
+    add_hic_express_group(binexp_parser)
+    binexp_parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
         action='store', help="The minimum number of interactions for fend filtering, if refiltering is required due to distance cutoff or selected reads. [default: %(default)s]")
-    add_hic_regression_group(regexp_parser)
+    add_hic_binning_group(binexp_parser)
     return
 
 def add_complete_hic_subparser(subparsers):
@@ -460,21 +460,21 @@ def add_complete_hic_subparser(subparsers):
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fend. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fend. Learning is accomplished using a variation of matrix balancing.")
-    reg_parser = subparser2.add_parser("regression", help="A multivariate regression-model based approach for learning correction values associated with fend characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
-    regprob_parser = subparser2.add_parser("regression-probability", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a probability model.")
-    regexp_parser = subparser2.add_parser("regression-express", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a matrix-balancing approximation.")
+    bin_parser = subparser2.add_parser("binning", help="A multivariate binning probability model-based approach for learning correction values associated with fend characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
+    binprob_parser = subparser2.add_parser("binning-probability", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a probability model.")
+    binexp_parser = subparser2.add_parser("binning-express", help="A chained-correction approach first learning fend characteristic corrections and applying them prior to learning fend-associated correction values via a matrix-balancing approximation.")
     add_complete_hic_group(prob_parser)
     add_hic_probability_group(prob_parser)
     add_complete_hic_group(exp_parser)
     add_hic_express_group(exp_parser)
-    add_complete_hic_group(reg_parser)
-    add_hic_regression_group(reg_parser)
-    add_complete_hic_group(regprob_parser)
-    add_hic_probability_group(regprob_parser)
-    add_hic_regression_group(regprob_parser)
-    add_complete_hic_group(regexp_parser)
-    add_hic_express_group(regexp_parser)
-    add_hic_regression_group(regexp_parser)
+    add_complete_hic_group(bin_parser)
+    add_hic_binning_group(bin_parser)
+    add_complete_hic_group(binprob_parser)
+    add_hic_probability_group(binprob_parser)
+    add_hic_binning_group(binprob_parser)
+    add_complete_hic_group(binexp_parser)
+    add_hic_express_group(binexp_parser)
+    add_hic_binning_group(binexp_parser)
     return
 
 def add_complete_hic_group(subparser):
@@ -552,17 +552,19 @@ def add_hic_express_group(subparser):
         choices=['cis', 'trans', 'all'], help="Which set of reads to use for express normalization. [default: %(default)s]")
     return
 
-def add_hic_regression_group(subparser):
-    subparser.add_argument("-r", "--regression-iterations", dest="regiter", required=False, type=int, default=1000,
-        action='store', help="The maximum number of iterations to run regression modeling for. [default: %(default)s]")
+def add_hic_binning_group(subparser):
+    subparser.add_argument("-r", "--binning-iterations", dest="biniter", required=False, type=int, default=1000,
+        action='store', help="The maximum number of iterations to run binning modeling for. [default: %(default)s]")
     subparser.add_argument("-t", "--learning-threshold", dest="threshold", required=False, type=float, default=1.0,
-        action='store', help="The learning threshold cutoff for regression algorithm. [default: %(default)s]")
-    subparser.add_argument("-y", "--regression-reads", dest="regreads", required=False, type=str, default='cis',
-        choices=['cis', 'trans', 'all'], help="Which set of reads to use for regression normalization. [default: %(default)s]")
+        action='store', help="The learning threshold cutoff for binning algorithm. [default: %(default)s]")
+    subparser.add_argument("-y", "--binning-reads", dest="binreads", required=False, type=str, default='cis',
+        choices=['cis', 'trans', 'all'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
     subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
-        action='store', help="A comma-separated list of parameters to include in regression model (valid parameters are 'gc', 'len', 'distance', and mappability). [default: %(default)s]")
+        action='store', help="A comma-separated list of parameters to include in binning model. [default: %(default)s]")
     subparser.add_argument("-z", "--model-bins", dest="modelbins", required=False, type=str, default="20,20,20",
         action='store', help="A comma-separated list of the number of bins to separate model parameters into. [default: %(default)s]")
+    subparser.add_argument("-u", "--parameter-types", dest="parameters", required=False, type=str, default="even,even,fixed-const",
+        action='store', help="A comma-separated list parameter types ('even' or 'fixed', depending on whether bins should contain equal numbers of fends or be equally spaced along the parameter range, and a '-const' suffix to indicate the values are not to be optimized). [default: %(default)s]")
     return
 
 def add_combine_hic_replicates_subparser(subparsers):

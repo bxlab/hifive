@@ -91,20 +91,20 @@ def find_cis_upper_observed(
 def find_cis_compact_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
-        np.ndarray[DTYPE_t, ndim=2] map_corrections,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] fend_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_t, ndim=2] parameters,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
-        double chrom_mean):
-    cdef long long int fend1, fend2, k, map1, map2
+        double chrom_mean,
+        int startfend):
+    cdef long long int fend1, fend2, j, k, map1, map2, bin1, bin2, index
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
+    cdef long long int num_parameters = fend_indices.shape[1]
     with nogil:
         for fend1 in range(num_fends - 1):
             map1 = mapping[fend1]
@@ -120,13 +120,13 @@ def find_cis_compact_expected(
                 # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
                 if not corrections is None:
                     value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
-                if not gc_indices is None:
-                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
-                if not len_indices is None:
-                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
-                if not map_indices is None:
-                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
+                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value *= binning_corrections[index]
                 # if finding distance, enrichment, or expected, correct for distance
                 if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
@@ -143,13 +143,13 @@ def find_cis_compact_expected(
                 # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
                 if not corrections is None:
                     value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
-                if not gc_indices is None:
-                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
-                if not len_indices is None:
-                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
-                if not map_indices is None:
-                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
+                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value *= binning_corrections[index]
                 # if finding distance, enrichment, or expected, correct for distance
                 if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
@@ -166,20 +166,20 @@ def find_cis_compact_expected(
 def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
-        np.ndarray[DTYPE_t, ndim=2] map_corrections,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] fend_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_t, ndim=2] parameters,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
-        double chrom_mean):
-    cdef long long int fend1, fend2, k, index, map1, map2
+        double chrom_mean,
+        int startfend):
+    cdef long long int fend1, fend2, j, k, index, map1, map2, bin1, bin2, index2
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
+    cdef long long int num_parameters = fend_indices.shape[1]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
     with nogil:
         for fend1 in range(num_fends - 1):
@@ -197,13 +197,13 @@ def find_cis_upper_expected(
                 # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
                 if not corrections is None:
                     value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
-                if not gc_indices is None:
-                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
-                if not len_indices is None:
-                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
-                if not map_indices is None:
-                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
+                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        index2 = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value *= binning_corrections[index2]
                 # if finding distance, enrichment, or expected, correct for distance
                 if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
@@ -220,13 +220,13 @@ def find_cis_upper_expected(
                 # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
                 if not corrections is None:
                     value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
-                if not gc_indices is None:
-                    value *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
-                if not len_indices is None:
-                    value *= len_corrections[len_indices[fend1], len_indices[fend2]]
-                if not map_indices is None:
-                    value *= map_corrections[map_indices[fend1], map_indices[fend2]]
+                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
+                        index2 = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value *= binning_corrections[index2]
                 # if finding distance, enrichment, or expected, correct for distance
                 if not parameters is None:
                     distance = log(mids[fend2] - mids[fend1])
@@ -992,21 +992,19 @@ def find_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
         np.ndarray[DTYPE_t, ndim=1] corrections1,
         np.ndarray[DTYPE_t, ndim=1] corrections2,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices1,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices2,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices1,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices2,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices1,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices2,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
-        np.ndarray[DTYPE_t, ndim=2] map_corrections,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] fend_indices,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
-        double trans_mean):
-    cdef long long int fend1, fend2, map1, map2
+        double trans_mean,
+        int startfend1,
+        int startfend2):
+    cdef long long int j, fend1, fend2, map1, map2, bin1, bin2, index
     cdef double value
     cdef long long int num_fends1 = mapping1.shape[0]
     cdef long long int num_fends2 = mapping2.shape[0]
+    cdef long long int num_parameters = fend_indices.shape[1]
     with nogil:
         for fend1 in range(num_fends1 - 1):
             map1 = mapping1[fend1]
@@ -1021,13 +1019,13 @@ def find_trans_expected(
                 # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
                 if not corrections1 is None:
                     value *= corrections1[fend1] * corrections2[fend2]
-                # if finding fend, enrichment, or expected, and using regression bias correction, correct for fend
-                if not gc_indices1 is None:
-                    value *= gc_corrections[gc_indices1[fend1], gc_indices2[fend2]]
-                if not len_indices1 is None:
-                    value *= len_corrections[len_indices1[fend1], len_indices2[fend2]]
-                if not map_indices1 is None:
-                    value *= map_corrections[map_indices1[fend1], map_indices2[fend2]]
+                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(fend_indices[fend1 + startfend1, j], fend_indices[fend2 + startfend2, j]) 
+                        bin2 = max(fend_indices[fend1 + startfend1, j], fend_indices[fend2 + startfend2, j]) 
+                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value *= binning_corrections[index]
                 signal[map1, map2, 1] += value
     return None
 
@@ -1132,27 +1130,22 @@ def dynamically_bin_trans(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_cis_observed(
+def binning_bin_cis_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
-        int gc_div,
-        int map_div,
-        int len_div,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
-        int gc_bins,
-        int map_bins,
-        int len_bins,
         int distance_bins,
         int mindistance,
         int maxdistance):
-    cdef long long int i, k, distance, fend1, fend2, index, bin1, bin2, prev_fend
+    cdef long long int i, j, k, distance, fend1, fend2, index, bin1, bin2, prev_fend
     cdef long long int num_data = data.shape[0]
+    cdef long long int num_features = all_indices.shape[1]
     with nogil:
         prev_fend = -1
         for i in range(num_data):
@@ -1169,18 +1162,10 @@ def regression_bin_cis_observed(
             if distance < mindistance or distance > maxdistance:
                 continue
             index = 0
-            if gc_div > 0:
-                bin1 = min(gc_indices[fend1], gc_indices[fend2])
-                bin2 = max(gc_indices[fend1], gc_indices[fend2])
-                index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-            if map_div > 0:
-                bin1 = min(map_indices[fend1], map_indices[fend2])
-                bin2 = max(map_indices[fend1], map_indices[fend2])
-                index += (bin1 * map_bins - bin1 * (bin1 + 1) / 2 + bin2) * map_div
-            if len_div > 0:
-                bin1 = min(len_indices[fend1], len_indices[fend2])
-                bin2 = max(len_indices[fend1], len_indices[fend2])
-                index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+            for j in range(num_features):
+                bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
+                bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
+                index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
             if distance_div > 0:
                 while distance > distance_cutoffs[k]:
                     k += 1
@@ -1192,21 +1177,15 @@ def regression_bin_cis_observed(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_cis_expected(
+def binning_bin_cis_expected(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
-        int gc_div,
-        int map_div,
-        int len_div,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
-        int gc_bins,
-        int map_bins,
-        int len_bins,
         int distance_bins,
         int mindistance,
         int maxdistance,
@@ -1214,6 +1193,7 @@ def regression_bin_cis_expected(
         int stopfend,
         int maxfend):
     cdef long long int i, j, k, distance, fend1, fend2, index, bin1, bin2
+    cdef long long int num_features = all_indices.shape[1]
     with nogil:
         for fend1 in range(startfend, min(stopfend, maxfend - 2)):
             if filt[fend1] == 0:
@@ -1223,18 +1203,10 @@ def regression_bin_cis_expected(
             distance = mids[fend2] - mids[fend1]
             if filt[fend2] == 1 and distance >= mindistance and distance <= maxdistance:
                 index = 0
-                if gc_div > 0:
-                    bin1 = min(gc_indices[fend1], gc_indices[fend2])
-                    bin2 = max(gc_indices[fend1], gc_indices[fend2])
-                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-                if map_div > 0:
-                    bin1 = min(map_indices[fend1], map_indices[fend2])
-                    bin2 = max(map_indices[fend1], map_indices[fend2])
-                    index += (bin1 * map_bins - bin1 * (bin1 + 1) / 2 + bin2) * map_div
-                if len_div > 0:
-                    bin1 = min(len_indices[fend1], len_indices[fend2])
-                    bin2 = max(len_indices[fend1], len_indices[fend2])
-                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                for j in range(num_features):
+                    bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
+                    bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
+                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
                 if distance_div > 0:
                     while distance > distance_cutoffs[k]:
                         k += 1
@@ -1247,18 +1219,10 @@ def regression_bin_cis_expected(
                 if distance < mindistance or distance > maxdistance:
                     continue
                 index = 0
-                if gc_div > 0:
-                    bin1 = min(gc_indices[fend1], gc_indices[fend2])
-                    bin2 = max(gc_indices[fend1], gc_indices[fend2])
-                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-                if map_div > 0:
-                    bin1 = min(map_indices[fend1], map_indices[fend2])
-                    bin2 = max(map_indices[fend1], map_indices[fend2])
-                    index += (bin1 * map_bins - bin1 * (bin1 + 1) / 2 + bin2) * map_div
-                if len_div > 0:
-                    bin1 = min(len_indices[fend1], len_indices[fend2])
-                    bin2 = max(len_indices[fend1], len_indices[fend2])
-                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                for j in range(num_features):
+                    bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
+                    bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
+                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
                 if distance_div > 0:
                     while distance > distance_cutoffs[k]:
                         k += 1
@@ -1270,23 +1234,18 @@ def regression_bin_cis_expected(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_trans_observed(
+def binning_bin_trans_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        int gc_div,
-        int map_div,
-        int len_div,
+        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
-        int gc_bins,
-        int map_bins,
-        int len_bins,
         int distance_bins):
-    cdef long long int i, fend1, fend2, index, bin1, bin2
+    cdef long long int i, j, fend1, fend2, index, bin1, bin2
     cdef long long int num_data = data.shape[0]
+    cdef long long int num_features = all_indices.shape[1]
     with nogil:
         for i in range(num_data):
             fend1 = data[i, 0]
@@ -1296,18 +1255,10 @@ def regression_bin_trans_observed(
             if filt[fend2] == 0:
                 continue
             index = 0
-            if gc_div > 0:
-                bin1 = min(gc_indices[fend1], gc_indices[fend2])
-                bin2 = max(gc_indices[fend1], gc_indices[fend2])
-                index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-            if map_div > 0:
-                bin1 = min(map_indices[fend1], map_indices[fend2])
-                bin2 = max(map_indices[fend1], map_indices[fend2])
-                index += (bin1 * map_bins - bin1 * (bin1 + 1) / 2 + bin2) * map_div
-            if len_div > 0:
-                bin1 = min(len_indices[fend1], len_indices[fend2])
-                bin2 = max(len_indices[fend1], len_indices[fend2])
-                index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+            for j in range(num_features):
+                bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
+                bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
+                index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
             if distance_div > 0:
                 index += (distance_bins - 1) * distance_div
             counts[index, 0] += 1
@@ -1317,12 +1268,12 @@ def regression_bin_trans_observed(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def regression_bin_trans_expected(
+def binning_bin_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int gc_div,
         int map_div,
         int len_div,
@@ -1336,6 +1287,7 @@ def regression_bin_trans_expected(
         int startfend2,
         int stopfend2):
     cdef long long int i, j, fend1, fend2, index, bin1, bin2
+    cdef long long int num_features = all_indices.shape[1]
     with nogil:
         for fend1 in range(startfend1, stopfend1):
             if filt[fend1] == 0:
@@ -1344,18 +1296,10 @@ def regression_bin_trans_expected(
                 if filt[fend2] == 0:
                     continue
                 index = 0
-                if gc_div > 0:
-                    bin1 = min(gc_indices[fend1], gc_indices[fend2])
-                    bin2 = max(gc_indices[fend1], gc_indices[fend2])
-                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-                if map_div > 0:
-                    bin1 = min(map_indices[fend1], map_indices[fend2])
-                    bin2 = max(map_indices[fend1], map_indices[fend2])
-                    index += (bin1 * map_bins - bin1 * (bin1 + 1) / 2 + bin2) * map_div
-                if len_div > 0:
-                    bin1 = min(len_indices[fend1], len_indices[fend2])
-                    bin2 = max(len_indices[fend1], len_indices[fend2])
-                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                for j in range(num_features):
+                    bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
+                    bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
+                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
                 if distance_div > 0:
                     index += (distance_bins - 1) * distance_div
                 counts[index, 1] += 1

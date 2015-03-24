@@ -61,7 +61,7 @@ In order to build HiFive's documentation locally, you need to execute the follow
   > cd doc
   > make html
 
-This will create the documentation suitale for viewing with a web browser. In order to create a pdf version of the documentation, simply run the following::
+This will create the documentation suitable for viewing with a web browser. In order to create a pdf version of the documentation, simply run the following::
 
   > cd doc
   > make latexpdf

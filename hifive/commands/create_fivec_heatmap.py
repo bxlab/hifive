@@ -14,14 +14,17 @@ from ..plotting import plot_fivec_heatmap, plot_key
 
 
 def run(args):
-    if not args.image is None and options.pdf and "pyx" not in sys.modules.keys():
+    if not args.image is None and args.pdf and "pyx" not in sys.modules.keys():
         print >> sys.stderr, ("-p/--pdf requires the package 'pyx'"),
         return 1
     if args.binsize > 0:
         args.arraytype = 'full'
-    regions = args.regions.split(',')
-    if len(regions) == 1 and regions[0] == '':
+    if args.regions is None:
         regions = []
+    else:
+        regions = args.regions.split(',')
+        if len(regions) == 1 and regions[0] == '':
+            regions = []
     for i in range(len(regions)):
         try:
             regions[i] = int(regions[i])
@@ -62,7 +65,7 @@ def run(args):
                 kwargs['symmetricscaling'] = True
             else:
                 kwargs['symmetricscaling'] = False
-        img, minscore, maxscore = plot_fivec_heatmap(args[1], returnscale=True, silent=args.silent, **kwargs)
+        img, minscore, maxscore = plot_fivec_heatmap(args.output, returnscale=True, silent=args.silent, **kwargs)
         if not args.pdf:
             img.save(args.image)
         else:

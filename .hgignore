@@ -53,3 +53,4 @@ tests/test_hic_binning.pyc
 tests/test_hic_data.pyc
 tests/test_hic_project.pyc
 tests/generate_test_data.py
+doc/_static/hic_distance.py

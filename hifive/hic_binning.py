@@ -179,40 +179,18 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         return None
     # If correction is required, determine what type and get appropriate data
     corrections = None
-    gc_corrections = None
-    gc_indices = None
-    len_corrections = None
-    len_indices = None
-    map_corrections = None
-    map_indices = None
+    binning_corrections = None
+    correction_indices = None
+    binning_num_bins = None
+    fend_indices = None
     if datatype in ['fend', 'enrichment', 'expected']:
-        if hic.normalization in ['express', 'probability', 'regression-express', 'regression-probability']:
+        if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections = hic.corrections[startfend:stopfend]
-        if hic.normalization in ['regression', 'regression-express', 'regression-probability']:
-            if not hic.gc_corrections is None:
-                gc_bins = int((0.25 + 2 * hic.gc_corrections.shape[0]) ** 0.5 - 0.5)
-                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(gc_bins, 0)
-                gc_corrections[indices] = hic.gc_corrections
-                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
-                gc_indices = numpy.searchsorted(hic.gc_bins,
-                             hic.fends['fends']['gc'][startfend:stopfend]).astype(numpy.int32)
-            if not hic.len_corrections is None:
-                len_bins = int((0.25 + 2 * hic.len_corrections.shape[0]) ** 0.5 - 0.5)
-                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(len_bins, 0)
-                len_corrections[indices] = hic.len_corrections
-                len_corrections[indices[1], indices[0]] = len_corrections[indices]
-                len_indices = numpy.searchsorted(hic.len_bins, hic.fends['fends']['stop'][startfend:stopfend] -
-                                                 hic.fends['fends']['start'][startfend:stopfend]).astype(numpy.int32)
-            if not hic.map_corrections is None:
-                map_bins = int((0.25 + 2 * hic.map_corrections.shape[0]) ** 0.5 - 0.5)
-                map_corrections = numpy.zeros((map_bins, map_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(map_bins, 0)
-                map_corrections[indices] = hic.map_corrections
-                map_corrections[indices[1], indices[0]] = map_corrections[indices]
-                map_indices = numpy.searchsorted(hic.map_bins,
-                              hic.fends['fends']['mappability'][startfend:stopfend]).astype(numpy.int32)
+        if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
+            binning_corrections = hic.binning_corrections
+            correction_indices = hic.binning_correction_indices
+            binning_num_bins = hic.binning_num_bins
+            fend_indices = hic.binning_fend_indices
     if datatype in ['distance', 'enrichment', 'expected']:
         distance_parameters = hic.distance_parameters
         chrom_mean = hic.chromosome_means[chrint]
@@ -227,9 +205,9 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     # Fill in data values
     if arraytype == 'compact':
         if datatype != 'raw':
-            _hic_binning.find_cis_compact_expected(mapping, corrections, gc_indices, len_indices, map_indices,
-                                                   gc_corrections, len_corrections, map_corrections, mids,
-                                                   distance_parameters, max_fend, data_array, chrom_mean)
+            _hic_binning.find_cis_compact_expected(mapping, corrections, binning_corrections, correction_indices,
+                                                   binning_num_bins, fend_indices, mids, distance_parameters,
+                                                   max_fend, data_array, chrom_mean, startfend)
         if datatype != 'expected':
             _hic_binning.find_cis_compact_observed(data, data_indices, mapping, max_fend, data_array)
         else:
@@ -240,9 +218,9 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             data_array[where[0], where[1], 1] = 1.0
     else:
         if datatype != 'raw':
-            _hic_binning.find_cis_upper_expected(mapping, corrections, gc_indices, len_indices, map_indices,
-                                                 gc_corrections, len_corrections, map_corrections, mids,
-                                                 distance_parameters, max_fend, data_array, chrom_mean)
+            _hic_binning.find_cis_upper_expected(mapping, corrections, binning_corrections, correction_indices,
+                                                 binning_num_bins, fend_indices, mids, distance_parameters,
+                                                 max_fend, data_array, chrom_mean, startfend)
         if datatype != 'expected':
             _hic_binning.find_cis_upper_observed(data, data_indices, mapping, max_fend, data_array)
         else:
@@ -679,50 +657,19 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     # If correction is required, determine what type and get appropriate data
     corrections1 = None
     corrections2 = None
-    gc_corrections = None
-    gc_indices1 = None
-    gc_indices2 = None
-    len_corrections = None
-    len_indices1 = None
-    len_indices2 = None
-    map_corrections = None
-    map_indices1 = None
-    map_indices2 = None
+    binning_corrections = None
+    correction_indices = None
+    binning_num_bins = None
+    fend_indices = None
     if datatype in ['fend', 'enrichment', 'expected']:
-        if hic.normalization in ['express', 'probability', 'regression-express', 'regression-probability']:
+        if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections1 = hic.corrections[startfend1:stopfend1]
             corrections2 = hic.corrections[startfend2:stopfend2]
-        if hic.normalization in ['regression', 'regression-express', 'regression-probability']:
-            if not hic.gc_corrections is None:
-                gc_bins = int((0.25 + 2 * hic.gc_corrections.shape[0]) ** 0.5 - 0.5)
-                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(gc_bins, 0)
-                gc_corrections[indices] = hic.gc_corrections
-                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
-                gc_indices1 = numpy.searchsorted(hic.gc_bins,
-                              hic.fends['fends']['gc'][startfend1:stopfend1]).astype(numpy.int32)
-                gc_indices2 = numpy.searchsorted(hic.gc_bins,
-                              hic.fends['fends']['gc'][startfend2:stopfend2]).astype(numpy.int32)
-            if not hic.len_corrections is None:
-                len_bins = int((0.25 + 2 * hic.len_corrections.shape[0]) ** 0.5 - 0.5)
-                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(len_bins, 0)
-                len_corrections[indices] = hic.len_corrections
-                len_corrections[indices[1], indices[0]] = len_corrections[indices]
-                len_indices1 = numpy.searchsorted(hic.len_bins, hic.fends['fends']['stop'][startfend1:stopfend1] -
-                               hic.fends['fends']['start'][startfend1:stopfend1]).astype(numpy.int32)
-                len_indices2 = numpy.searchsorted(hic.len_bins, hic.fends['fends']['stop'][startfend2:stopfend2] -
-                               hic.fends['fends']['start'][startfend2:stopfend2]).astype(numpy.int32)
-            if not hic.map_corrections is None:
-                map_bins = int((0.25 + 2 * hic.map_corrections.shape[0]) ** 0.5 - 0.5)
-                map_corrections = numpy.zeros((map_bins, map_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(map_bins, 0)
-                map_corrections[indices] = hic.map_corrections
-                map_corrections[indices[1], indices[0]] = map_corrections[indices]
-                map_indices1 = numpy.searchsorted(hic.map_bins,
-                               hic.fends['fends']['mappability'][startfend1:stopfend1]).astype(numpy.int32)
-                map_indices2 = numpy.searchsorted(hic.map_bins,
-                               hic.fends['fends']['mappability'][startfend2:stopfend2]).astype(numpy.int32)
+        if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
+            binning_corrections = hic.binning_corrections
+            correction_indices = hic.binning_correction_indices
+            binning_num_bins = hic.binning_num_bins
+            fend_indices = hic.binning_fend_indices
     if datatype in ['distance', 'enrichment', 'expected']:
         if 'trans_means' not in hic.__dict__.keys():
             hic.find_trans_means()
@@ -741,16 +688,16 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     # Fill in data values
     if chrint1 < chrint2:
         if datatype != 'raw':
-            _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, gc_indices1, gc_indices2,
-                                             len_indices1, len_indices2, map_indices1, map_indices2, gc_corrections,
-                                             len_corrections, map_corrections, data_array, trans_mean)
+            _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, binning_corrections,
+                                             correction_indices, binning_num_bins, fend_indices, data_array,
+                                             trans_mean, startfend1, startfend2)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping1, mapping2, data_array)
     else:
         if datatype != 'raw':
-            _hic_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, gc_indices2, gc_indices1,
-                                             len_indices2, len_indices1, map_indices2, map_indices1, gc_corrections,
-                                             len_corrections, map_corrections, data_array, trans_mean)
+            _hic_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, binning_corrections,
+                                             correction_indices, binning_num_bins, fend_indices, data_array,
+                                             trans_mean, startfend2, startfend1)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping2, mapping1, data_array)
     if chrint2 < chrint1:

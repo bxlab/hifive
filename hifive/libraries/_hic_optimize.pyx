@@ -31,28 +31,26 @@ cdef extern from "math.h":
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_regression_correction_adjustment(
+def find_binning_correction_adjustment(
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=1] indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] indices1 not None,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
-        np.ndarray[DTYPE_t, ndim=2] map_corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] map_indices):
-    cdef long long int i, fend1, fend2
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] fend_indices):
+    cdef long long int i, j, fend1, fend2, bin1, bin2, index
     cdef long long int num_fends = corrections.shape[0]
+    cdef long long int num_parameters = fend_indices.shape[1]
     with nogil:
         for i in range(num_fends):
             fend1 = indices0[i]
             fend2 = indices1[i]
-            if not gc_indices is None:
-                corrections[i] *= gc_corrections[gc_indices[fend1], gc_indices[fend2]]
-            if not len_indices is None:
-                corrections[i] *= len_corrections[len_indices[fend1], len_indices[fend2]]
-            if not map_indices is None:
-                corrections[i] *= map_corrections[map_indices[fend1], map_indices[fend2]]
+            for j in range(num_parameters):
+                bin1 = min(fend_indices[fend1, j], fend_indices[fend2, j])
+                bin2 = max(fend_indices[fend1, j], fend_indices[fend2, j])
+                index = (num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                corrections[i] *= binning_corrections[index]
     return None
 
 

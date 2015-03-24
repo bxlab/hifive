@@ -182,9 +182,9 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
     len_corrections = None
     len_indices = None
     if datatype in ['fragment', 'enrichment', 'expected']:
-        if fivec.normalization in ['express', 'probability', 'regression-express', 'regression-probability']:
+        if fivec.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections = fivec.corrections[startfrag:stopfrag]
-        if fivec.normalization in ['regression', 'regression-express', 'regression-probability']:
+        if fivec.normalization in ['binning', 'binning-express', 'binning-probability']:
             if not fivec.gc_corrections is None:
                 gc_bins = int((0.25 + 2 * fivec.gc_corrections.shape[0]) ** 0.5 - 0.5)
                 gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
@@ -713,10 +713,10 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
     len_indices1 = None
     len_indices2 = None
     if datatype in ['fragment', 'enrichment', 'expected']:
-        if fivec.normalization in ['express', 'probability', 'regression-express', 'regression-probability']:
+        if fivec.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections1 = fivec.corrections[startfrag1:stopfrag1]
             corrections2 = fivec.corrections[startfrag2:stopfrag2]
-        if fivec.normalization in ['regression', 'regression-express', 'regression-probability']:
+        if fivec.normalization in ['binning', 'binning-express', 'binning-probability']:
             if not fivec.gc_corrections is None:
                 gc_bins = int((0.25 + 2 * fivec.gc_corrections.shape[0]) ** 0.5 - 0.5)
                 gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import sys
+
 try:
     from mpi4py import MPI
 except:
@@ -26,7 +28,7 @@ def run(args):
             comm.send(1, dest=i, tag=11)
     else:
         comm.recv(source=0, tag=11)
-        hic = hifive.HiC(args.output, 'r', silent=True)
+        hic = HiC(args.output, 'r', silent=True)
     hic.find_distance_parameters(minsize=args.minbin, numbins=args.numbins)
     if rank == 0:
         hic.save()

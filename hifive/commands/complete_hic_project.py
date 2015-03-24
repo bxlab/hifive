@@ -26,12 +26,8 @@ def run(args):
         chroms = []
     if not args.model is None:
         model = args.model.split(',')
-        for par in model:
-            if par not in ['gc', 'len', 'distance']:
-                if rank == 0:
-                    print sys.stderr, ("Not all arguments in -v/--model are valid.")
-                return 1
         modelbins = args.modelbins.split(',')
+        parameters.split(',')
         for i in range(len(modelbins)):
             try:
                 modelbins[i] = int(modelbins[i])
@@ -39,9 +35,9 @@ def run(args):
                 if rank == 0:
                     print sys.stderr, ("Not all arguments in -n/--modelbins could be converted to integers.")
                 return 1
-        if len(model) != len(modelbins):
+        if len(model) != len(modelbins) or len(model) != len(parameters):
             if rank == 0:
-                print sys.stderr, ("-v/--model and -n/--modelbins not equal lengths.")
+                print sys.stderr, ("-v/--model, -n/--modelbins, and -u/--parameter-types must be equal lengths.")
             return 1
     if args.prefix is None:
         fend_fname, data_fname, project_fname = args.output
@@ -75,21 +71,21 @@ def run(args):
     hic.filter_fends(mininteractions=args.minint, mindistance=args.mindist, maxdistance=args.maxdist)
     hic.find_distance_parameters(minsize=args.minbin, numbins=args.numbins)
     precorrect = False
-    if args.algorithm in ['regression', 'regression-express', 'regression-probability']:
-        hic.find_regression_fend_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
-                                             chroms=chroms, num_bins=modelbins, model=model, usereads=args.regreads,
-                                             learning_threshold=args.threshold, max_iterations=args.regiter)
+    if args.algorithm in ['binning', 'binning-express', 'binning-probability']:
+        hic.find_binning_fend_corrections(mindistance=args.mindist, maxdistance=args.maxdist, parameters=parameters,
+                                             chroms=chroms, num_bins=modelbins, model=model, usereads=args.binreads,
+                                             learning_threshold=args.threshold, max_iterations=args.biniter)
         precorrect = True
-    if args.algorithm in ['probability', 'regression-probability']:
+    if args.algorithm in ['probability', 'binning-probability']:
         hic.find_probability_fend_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
                                               minchange=args.change, burnin_iterations=args.burnin,
                                               annealing_iterations=args.anneal, learningrate=args.rate,
                                               display=args.display, chroms=chroms,
                                               precalculate=args.precalc, precorrect=precorrect)
-    elif args.algorithm in ['express', 'regression-express']:
+    elif args.algorithm in ['express', 'binning-express']:
         hic.find_express_fend_corrections(iterations=args.expiter, mindistance=args.mindist,
                                           maxdistance=args.maxdist, remove_distance=args.nodist,
                                           usereads=args.expreads, mininteractions=args.minint,
                                           chroms=chroms, precorrect=precorrect)
     if rank == 0:
-        hic.save(args.outfname)
+        hic.save()
