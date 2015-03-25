@@ -783,19 +783,16 @@ class FiveC(object):
             data = data[numpy.where(filt[data[:, 0]] * filt[data[:, 1]])[0], :]
         if usereads in ['trans', 'all']:
             trans_data = self.data['trans_data'][...]
-            trans_data = trans_data[numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0], :]
+            trans_data = trans_data[numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0], :] 
         _binning.binning_bin_observed(data,
                                       trans_data,
                                       mids,
                                       bin_counts,
-                                      gc_indices,
-                                      len_indices,
+                                      all_indices,
                                       distance_cutoffs,
-                                      gc_div,
-                                      len_div,
+                                      num_bins,
+                                      bin_divs,
                                       distance_div,
-                                      gc_bins,
-                                      len_bins,
                                       distance_bins,
                                       mindistance,
                                       maxdistance)
@@ -808,14 +805,11 @@ class FiveC(object):
                                                      mids,
                                                      strands,
                                                      bin_counts,
-                                                     gc_indices,
-                                                     len_indices,
+                                                     all_indices,
                                                      distance_cutoffs,
-                                                     gc_div,
-                                                     len_div,
+                                                     num_bins,
+                                                     bin_divs,
                                                      distance_div,
-                                                     gc_bins,
-                                                     len_bins,
                                                      distance_bins,
                                                      mindistance,
                                                      maxdistance,
@@ -833,13 +827,10 @@ class FiveC(object):
                                                            mids,
                                                            strands,
                                                            bin_counts,
-                                                           gc_indices,
-                                                           len_indices,
-                                                           gc_div,
-                                                           len_div,
+                                                           all_indices,
+                                                           num_bins,
+                                                           bin_divs,
                                                            distance_div,
-                                                           gc_bins,
-                                                           len_bins,
                                                            distance_bins,
                                                            mindistance,
                                                            maxdistance,
@@ -908,15 +899,14 @@ class FiveC(object):
                                prior * prod / (log_2 * (1.0 - prior * prod * x[0]))), dtype=numpy.float64)
             return grad
 
-        ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, distance_corrections,
-                     distance_indices, bin_counts, prior)
-
+        ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
+                     bin_counts, prior, min_p)
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:00  ll:%f") % (' ' * 80, ll),
         iteration = 0
         delta = numpy.inf
         pgtol = 1e-8
-        numpy.seterr(invalid='ignore')
+        numpy.seterr(invalid='ignore', divide='ignore')
         while iteration < max_iterations and delta >= learning_threshold:
             new_corrections = numpy.copy(all_corrections)
             for h in range(len(model)):
@@ -939,8 +929,8 @@ class FiveC(object):
                     new_corrections[correction_indices[h] + i] = x[0]
             all_corrections = new_corrections
             iteration += 1
-            new_ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, distance_corrections,
-                             distance_indices, bin_counts, prior)
+            new_ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
+                         bin_counts, prior, min_p)
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:%02i  ll:%f\n") % (' ' * 80,
                                       iteration, new_ll),

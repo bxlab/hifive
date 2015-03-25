@@ -516,18 +516,16 @@ def binning_bin_observed(
         np.ndarray[DTYPE_int_t, ndim=2] trans_data,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
-        int gc_div,
-        int len_div,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
-        int gc_bins,
-        int len_bins,
         int distance_bins,
         int mindistance,
         int maxdistance):
     cdef long long int i, k, distance, frag1, frag2, index, bin1, bin2, prev_frag, num_data, num_trans
+    cdef long long int num_features = all_indices.shape[1]
     if not data is None:
         num_data = data.shape[0]
     else:
@@ -548,14 +546,10 @@ def binning_bin_observed(
             if distance < mindistance or distance > maxdistance:
                 continue
             index = 0
-            if gc_div > 0:
-                bin1 = min(gc_indices[frag1], gc_indices[frag2])
-                bin2 = max(gc_indices[frag1], gc_indices[frag2])
-                index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-            if len_div > 0:
-                bin1 = min(len_indices[frag1], len_indices[frag2])
-                bin2 = max(len_indices[frag1], len_indices[frag2])
-                index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+            for j in range(num_features):
+                bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
+                bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
+                index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
             if distance_div > 0:
                 while distance > distance_cutoffs[k]:
                     k += 1
@@ -565,14 +559,10 @@ def binning_bin_observed(
             frag1 = trans_data[i, 0]
             frag2 = trans_data[i, 1]
             index = 0
-            if gc_div > 0:
-                bin1 = min(gc_indices[frag1], gc_indices[frag2])
-                bin2 = max(gc_indices[frag1], gc_indices[frag2])
-                index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-            if len_div > 0:
-                bin1 = min(len_indices[frag1], len_indices[frag2])
-                bin2 = max(len_indices[frag1], len_indices[frag2])
-                index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+            for j in range(num_features):
+                bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
+                bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
+                index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
             if distance_div > 0:
                 index += (distance_bins - 1) * distance_div
             counts[index, 0] += 1
@@ -587,20 +577,18 @@ def binning_bin_cis_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int_t, ndim=1] strands,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
+        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
-        int gc_div,
-        int len_div,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
-        int gc_bins,
-        int len_bins,
         int distance_bins,
         int mindistance,
         int maxdistance,
         int startfrag,
         int stopfrag):
     cdef long long int i, j, k, distance, frag1, frag2, index, bin1, bin2
+    cdef long long int num_features = all_indices.shape[1]
     with nogil:
         for frag1 in range(startfrag, stopfrag - 1):
             if filt[frag1] == 0:
@@ -613,14 +601,10 @@ def binning_bin_cis_expected(
                 if distance < mindistance or distance > maxdistance:
                     continue
                 index = 0
-                if gc_div > 0:
-                    bin1 = min(gc_indices[frag1], gc_indices[frag2])
-                    bin2 = max(gc_indices[frag1], gc_indices[frag2])
-                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-                if len_div > 0:
-                    bin1 = min(len_indices[frag1], len_indices[frag2])
-                    bin2 = max(len_indices[frag1], len_indices[frag2])
-                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                for j in range(num_features):
+                    bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
+                    bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
+                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
                 if distance_div > 0:
                     while distance > distance_cutoffs[k]:
                         k += 1
@@ -637,13 +621,10 @@ def binning_bin_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int_t, ndim=1] strands,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        int gc_div,
-        int len_div,
+        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
-        int gc_bins,
-        int len_bins,
         int distance_bins,
         int mindistance,
         int maxdistance,
@@ -652,6 +633,7 @@ def binning_bin_trans_expected(
         int startfrag2,
         int stopfrag2):
     cdef long long int i, j, k, frag1, frag2, index, bin1, bin2
+    cdef long long int num_features = all_indices.shape[1]
     with nogil:
         for frag1 in range(startfrag1, stopfrag1):
             if filt[frag1] == 0:
@@ -660,14 +642,10 @@ def binning_bin_trans_expected(
                 if filt[frag2] == 0 or strands[frag1] == strands[frag2]:
                     continue
                 index = 0
-                if gc_div > 0:
-                    bin1 = min(gc_indices[frag1], gc_indices[frag2])
-                    bin2 = max(gc_indices[frag1], gc_indices[frag2])
-                    index += bin1 * gc_bins - bin1 * (bin1 + 1) / 2 + bin2
-                if len_div > 0:
-                    bin1 = min(len_indices[frag1], len_indices[frag2])
-                    bin2 = max(len_indices[frag1], len_indices[frag2])
-                    index += (bin1 * len_bins - bin1 * (bin1 + 1) / 2 + bin2) * len_div
+                for j in range(num_features):
+                    bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
+                    bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
+                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
                 if distance_div > 0:
                     index += (distance_bins - 1) * distance_div
                 counts[index, 1] += 1
