@@ -278,7 +278,7 @@ def add_fivec_binning_group(subparser):
     subparser.add_argument("-t", "--learning-threshold", dest="threshold", required=False, type=float, default=1.0,
         action='store', help="The learning threshold cutoff for binning algorithm. [default: %(default)s]")
     subparser.add_argument("-y", "--binning-reads", dest="binreads", required=False, type=str, default='cis',
-        choices=['cis', 'trans', 'all', 'cis-corrected'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
+        choices=['cis', 'trans', 'all'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
     subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
         action='store', help="A comma-separated list of parameters to include in binning model. [default: %(default)s]")
     subparser.add_argument("-n", "--model-bins", dest="modelbins", required=False, type=str, default="10,10,10",
@@ -558,7 +558,7 @@ def add_hic_binning_group(subparser):
     subparser.add_argument("-t", "--learning-threshold", dest="threshold", required=False, type=float, default=1.0,
         action='store', help="The learning threshold cutoff for binning algorithm. [default: %(default)s]")
     subparser.add_argument("-y", "--binning-reads", dest="binreads", required=False, type=str, default='cis',
-        choices=['cis', 'trans', 'all'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
+        choices=['cis', 'trans', 'all', 'cis-corrected'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
     subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
         action='store', help="A comma-separated list of parameters to include in binning model. [default: %(default)s]")
     subparser.add_argument("-z", "--model-bins", dest="modelbins", required=False, type=str, default="20,20,20",

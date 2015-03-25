@@ -1074,8 +1074,8 @@ class HiC(object):
         return None
 
     def find_binning_fend_corrections(self, mindistance=0, maxdistance=0, chroms=[], num_bins=[20, 20, 20],
-                                         model=['gc', 'len', 'distance'], parameters=['even', 'even', 'even-const'],
-                                         learning_threshold=1.0, max_iterations=10, usereads='cis'):
+                                      parameters=['even', 'even', 'even-const'], model=['gc', 'len', 'distance'],
+                                      learning_threshold=1.0, max_iterations=10, usereads='cis'):
         """
         Using a multivariate binning model, learn correction values for combinations of model parameter bins. This function is MPI compatible.
 
@@ -1085,17 +1085,19 @@ class HiC(object):
         :type maxdistance: int.
         :param chroms: A list of chromosomes to calculate corrections for. If set as None, all chromosome corrections are found.
         :type chroms: list
-        :param num_bins: The number of approximately equal-sized bins two divide model components into.
-        :type num_bins: int.
         :param remove_distance: Use distance dependence curve in prior probability calculation for each observation.
         :type remove_distance: bool.
         :param model: A list of fend features to be used in model. Valid values are len', 'distance', and any features included in the creation of the associated Fend object. The 'distance' parameter is only good with 'cis' or 'all' reads. If used with 'all', distances will be partitioned into n - 1 bins and the final distance bin will contain all trans data.
         :type model: list
+        :param num_bins: A list of the number of approximately equal-sized bins two divide model components into.
+        :type num_bins: list
+        :para parameters: A list of types, one for each model parameter. Types can be either 'even' or 'fixed', indicating whether each parameter bin should contain approximately even numbers of interactions or be of fixed width spanning 1 / Nth of the range of the parameter's values, respectively. Parameter types can also have the suffix '-const' to indicate that the parameter should not be optimized.
+        :type parameters: list
         :param learning_threshold: The minimum change in log-likelihood needed to continue iterative learning process.
         :type learning_threshold: float
         :param max_iterations: The maximum number of iterations to use for learning model parameters.
         :type max_iterations: int.
-        :param usereads: Specifies which set of interactions to use, 'cis', 'trans', or 'all'.
+        :param usereads: Specifies which set of interactions to use, 'cis', 'trans', and 'all'.
         :type usereads: str.
         :returns: None
         """
@@ -1152,6 +1154,8 @@ class HiC(object):
                 maxdistance = max(maxdistance, self.fends['fends']['mid'][chr_indices[chrint + 1] - 1] -
                                                self.fends['fends']['mid'][chr_indices[chrint]] + 1)
         valid = numpy.where(filt == 1)[0]
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\rPartitioning features into bins...") % (' ' * 80),
         if 'distance' in model:
             use_distance = True
             index = model.index('distance')
@@ -1221,10 +1225,9 @@ class HiC(object):
             distance_div = 0
             distance_bins = 0
         bin_counts = numpy.zeros((total_bins, 2), dtype=numpy.int64)
+        temp_counts = None
         if self.rank == 0:
             temp_counts = numpy.copy(bin_counts)
-        else:
-            temp_counts = None
         for h, chrom in enumerate(chroms):
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rFinding bin counts... chr%s") % (' ' * 80, chrom),
@@ -1341,7 +1344,7 @@ class HiC(object):
         min_p = 1.0 / numpy.sum(bin_counts[:, 1])
         all_indices = numpy.zeros((bin_counts.shape[0], len(model)), dtype=numpy.int32)
         for i in range(correction_indices.shape[0] - 1):
-            temp0 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 0], minlength=num_bins[i]) 
+            temp0 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 0], minlength=num_bins[i])
             temp1 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 1], minlength=num_bins[i])
             where = numpy.where(temp1 > 0)[0]
             all_indices[:, i] = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / bin_divs[i]) %
@@ -1370,14 +1373,6 @@ class HiC(object):
             prod = numpy.maximum(1.0 - prod, min_p)
             return (-numpy.sum(counts[:, 0] * sum_log + counts[:, 1] * numpy.log2(prod)))
 
-        ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
-                     bin_counts, prior, min_p)
-        if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:00  ll:%f\n") % (' ' * 80, ll),
-        iteration = 0
-        delta = numpy.inf
-        pgtol = 1e-8
-
         def find_sum_log_prod(index, indices, corrections, correction_indices, distance_c, distance_i, sum_log, prod):
             prod.fill(1.0)
             for i in range(indices.shape[1]):
@@ -1400,6 +1395,15 @@ class HiC(object):
                                prior * prod / (log_2 * (1.0 - prior * prod * x[0]))), dtype=numpy.float64)
             return grad
 
+        ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
+                     bin_counts, prior, min_p)
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:00  ll:%f\n") % (' ' * 80, ll),
+        iteration = 0
+        delta = numpy.inf
+        pgtol = 1e-8
+
+
         numpy.seterr(invalid='ignore', divide='ignore')
         while iteration < max_iterations and delta >= learning_threshold:
             new_corrections = numpy.copy(all_corrections)
@@ -1416,10 +1420,10 @@ class HiC(object):
                 for i in range(node_ranges[self.rank], node_ranges[self.rank + 1]):
                     where = numpy.where(all_indices[:, h] == i)[0]
                     temp_bin_counts = bin_counts[where, :]
+                    x0 = all_corrections[(correction_indices[h] + i):(correction_indices[h] + i + 1)]
                     find_sum_log_prod(h, all_indices[where, :], all_corrections, correction_indices,
                                       distance_corrections, distance_indices, temp_sum_log,
                                       temp_prod)
-                    x0 = all_corrections[(correction_indices[h] + i):(correction_indices[h] + i + 1)]
                     x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
                                    args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2, min_p))
                     new_corrections[correction_indices[h] + i] = x[0]
@@ -1439,8 +1443,8 @@ class HiC(object):
             else:
                 self.comm.Recv(all_corrections, source=0, tag=13)
             iteration += 1
-            new_ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
-                             bin_counts, prior, min_p)
+            new_ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections,
+                             distance_indices, bin_counts, prior, min_p)
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:%02i  ll:%f\n") % (' ' * 80,
                                       iteration, new_ll),

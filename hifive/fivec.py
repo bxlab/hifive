@@ -42,10 +42,11 @@ class FiveC(object):
         """
         self.file = os.path.abspath(filename)
         self.silent = silent        
-        self.gc_bins = None
-        self.gc_corrections = None
-        self.len_bins = None
-        self.len_corrections = None
+        self.binning_corrections = None
+        self.binning_correction_indices = None
+        self.binning_frag_indices = None
+        self.binning_num_bins = None
+        self.model_parameters = None
         self.corrections = None
         self.region_means = None
         self.gamma = None
@@ -626,9 +627,9 @@ class FiveC(object):
         self.history += 'Success\n'
         return None
 
-    def find_binning_fragment_corrections(self, mindistance=0, maxdistance=0, num_bins=[10, 10, 10],
-                                          model=['gc', 'len'], learning_threshold=1.0,
-                                          max_iterations=100,  usereads='cis', regions=[]):
+    def find_binning_fragment_corrections(self, mindistance=0, maxdistance=0, model=['gc', 'len'], num_bins=[10, 10],
+                                          parameters=['even', 'even'], learning_threshold=1.0, max_iterations=100,
+                                          usereads='cis', regions=[]):
         """
         Using multivariate binning model, learn correction values for combinations of model parameter bins.
 
@@ -636,17 +637,19 @@ class FiveC(object):
         :type mindistance: int.
         :param maxdistance: The maximum inter-fend distance to be included in modeling.
         :type maxdistance: int.
-        :param num_bins: The number of approximately equal-sized bins two divide model components into.
-        :type num_bins: int.
-        :param remove_distance: Use distance dependence curve in prior probability calculation for each observation.
-        :type remove_distance: bool.
         :param model: A list of fend features to be used in model. Valid values are 'gc', 'len', and 'distance'. The 'distance' parameter is only good with 'cis' or 'all' reads and the 'binary' or 'raw' datatype. If used with 'all', distances will be partitioned into n - 1 bins and the final distance bin will contain all trans data.
         :type model: list
+        :param num_bins: The number of approximately equal-sized bins two divide model components into.
+        :type num_bins: int.
+        :para parameters: A list of types, one for each model parameter. Types can be either 'even' or 'fixed', indicating whether each parameter bin should contain approximately even numbers of interactions or be of fixed width spanning 1 / Nth of the range of the parameter's values, respectively. Parameter types can also have the suffix '-const' to indicate that the parameter should not be optimized.
+        :type parameters: list
+        :param remove_distance: Use distance dependence curve in prior probability calculation for each observation.
+        :type remove_distance: bool.
         :param learning_threshold: The minimum change in log-likelihood needed to continue iterative learning process.
         :type learning_threshold: float
         :param max_iterations: The maximum number of iterations to use for learning model parameters.
         :type max_iterations: int.
-        :param usereads: Specifies which set of interactions to use, 'cis', 'trans', or 'all'.
+        :param usereads: Specifies which set of interactions to use, 'cis', 'trans', and 'all'.
         :type usereads: str.
         :param regions: A list of regions to calculate corrections for. If set as None, all region corrections are found.
         :type regions: list
@@ -659,6 +662,12 @@ class FiveC(object):
                 if not self.silent:
                     print >> sys.stderr, ("Fragment feature %s not found in fragment object. Try removing it from model or creating a new fragment object with feature data.\n") % (parameter),
                 self.history += "Error: model parameter '%s' not found in fragment data\n" % parameter
+                return None
+        for parameter in parameters:
+            if parameter not in ['even', 'fixed', 'even-const', 'fixed-const']:
+                if not self.silent:
+                    print >> sys.stderr, ("Fragment feature type %s is not valid.") % (parameter),
+                self.history += "Error: model feature type '%s' not valid\n" % parameter
                 return None
         if 'distance' in model and usereads == 'trans':
             if not self.silent:
@@ -689,44 +698,54 @@ class FiveC(object):
                 maxdistance = max(maxdistance, self.frags['regions']['stop'][i] -
                                                self.frags['regions']['start'][i]) + 1
         valid = numpy.where(filt == 1)[0]
-        # Create requested bin cutoffs for each feature of the binning model
         if not self.silent:
             print >> sys.stderr, ("\r%s\rPartitioning features into bins...") % (' ' * 80),
-        total_bins = 1
-        if 'gc' in model:
-            gc_bins = num_bins[model.index('gc')]
-            gc_values = self.frags['fragments']['gc'][...][valid]
-            gc_values.sort()
-            self.gc_bins = gc_values[numpy.round(numpy.linspace(0, gc_values.shape[0],
-                                     gc_bins + 1)).astype(numpy.int32)[1:] - 1]
-            self.gc_bins[-1] = numpy.inf
-            self.gc_corrections = numpy.zeros(gc_bins * (gc_bins + 1) / 2, dtype=numpy.float64)
-            total_bins *= self.gc_corrections.shape[0]
-            gc_div = 1
-            gc_indices = numpy.searchsorted(self.gc_bins, self.frags['fragments']['gc'][...]).astype(numpy.int32)
-        else:
-            gc_div = 0
-            gc_indices = None
-            gc_bins = 0
-        if 'len' in model:
-            len_bins = num_bins[model.index('len')]
-            len_values = (self.frags['fragments']['stop'][...][valid] -
-                          self.frags['fragments']['start'][...][valid]).astype(numpy.float32)
-            len_values.sort()
-            self.len_bins = len_values[numpy.round(numpy.linspace(0, len_values.shape[0],
-                                       len_bins + 1)).astype(numpy.int32)[1:] - 1]
-            self.len_bins[-1] = numpy.inf
-            self.len_corrections = numpy.zeros(len_bins * (len_bins + 1) / 2, dtype=numpy.float64)
-            len_div = total_bins
-            total_bins *= self.len_corrections.shape[0]
-            len_indices = numpy.searchsorted(self.len_bins, self.frags['fragments']['stop'][...] -
-                                             self.frags['fragments']['start'][...]).astype(numpy.int32)
-        else:
-            len_div = 0
-            len_indices = None
-            len_bins = 0
-        mids = self.frags['fragments']['mid'][...]
         if 'distance' in model:
+            use_distance = True
+            index = model.index('distance')
+            model = model[:index] + model[(index + 1):]
+            distance_bins = num_bins[index]
+            num_bins = num_bins[:index] + num_bins[(index + 1):]
+            parameters = parameters[:index] + parameters[(index + 1):]
+        else:
+            use_distance = False
+        num_bins = numpy.array(num_bins, dtype=numpy.int32)
+        total_bins = 1
+        all_bins = numpy.zeros(0, dtype=numpy.float32)
+        all_corrections = numpy.ones(0, dtype=numpy.float64)
+        all_indices = numpy.zeros((filt.shape[0], len(model)), dtype=numpy.int32)
+        bin_indices = numpy.zeros(len(model) + 1, dtype=numpy.int32)
+        correction_indices = numpy.zeros(len(model) + 1, dtype=numpy.int32)
+        bin_divs = numpy.zeros(len(model), dtype=numpy.int32)
+        for i in range(len(model)):
+            if model[i] == 'len':
+                values = (self.frags['fragments']['stop'][...] -
+                          self.frags['fragments']['start'][...]).astype(numpy.float32)
+            elif model[i] != 'distance':
+                values = self.frags['fragments'][model[i]][...]
+            else:
+                continue
+            if parameters[i].count('even') > 0:
+                temp = numpy.copy(values)
+                temp.sort()
+                all_bins = numpy.hstack((all_bins, temp[numpy.round(numpy.linspace(0, values.shape[0],
+                                        num_bins[i] + 1)).astype(numpy.int32)[1:] - 1])).astype(numpy.float32)
+            else:
+                all_bins = numpy.hstack((all_bins, numpy.linspace(numpy.amin(values),
+                                        numpy.amax(values), num_bins[i] + 1)[1:])).astype(numpy.float32)
+            all_bins[-1] = numpy.inf
+            bin_indices[i + 1] = all_bins.shape[0]
+            all_corrections = numpy.hstack((all_corrections, numpy.zeros(num_bins[i] * (num_bins[i] + 1) / 2,
+                                           dtype=numpy.float64)))
+            correction_indices[i + 1] = all_corrections.shape[0]
+            bin_divs[i] = total_bins
+            total_bins *= num_bins[i] * (num_bins[i] + 1) / 2
+            all_indices[:, i] = numpy.searchsorted(all_bins[bin_indices[i]:bin_indices[i + 1]],
+                                                   values).astype(numpy.int32)
+        self.binning_frag_indices = all_indices
+        self.binning_num_bins = num_bins
+        mids = self.frags['fragments']['mid'][...]
+        if use_distance:
             distance_bins = num_bins[model.index('distance')]
             if maxdistance == 0:
                 max_dist = 0
@@ -759,26 +778,16 @@ class FiveC(object):
         trans_data = None
         corrected_counts = None
         data_indices = None
-        if usereads in ['cis', 'all', 'cis-corrected']:
+        if usereads in ['cis', 'all']:
             data = self.data['cis_data'][...]
             data = data[numpy.where(filt[data[:, 0]] * filt[data[:, 1]])[0], :]
-            if usereads == 'cis-corrected':
-                frag_regions = self.frags['fragments']['region'][...]
-                distance_signal = (self.region_means[frag_regions[data[:, 0]]] - self.gamma *
-                                   numpy.log(mids[data[:, 1]] - mids[data[:, 0]]))
-                corrected_counts = (numpy.log(data[:, 2]) - distance_signal).astype(numpy.float32)
-                float_bin_counts = numpy.zeros((total_bins, 4), dtype=numpy.float64)
-                data_indices = numpy.zeros(data.shape[0], dtype=numpy.int32)
         if usereads in ['trans', 'all']:
             trans_data = self.data['trans_data'][...]
             trans_data = trans_data[numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0], :]
         _binning.binning_bin_observed(data,
                                       trans_data,
-                                      corrected_counts,
-                                      data_indices,
                                       mids,
                                       bin_counts,
-                                      float_bin_counts,
                                       gc_indices,
                                       len_indices,
                                       distance_cutoffs,
@@ -841,49 +850,20 @@ class FiveC(object):
         # Find seed values
         if not self.silent:
             print >> sys.stderr, ("\r%s\rFinding seed values...") % (' ' * 80),
-        if usereads != 'cis-corrected':
-            bin_counts = bin_counts.astype(numpy.float64)
-            bin_counts[numpy.where(bin_counts[:, 0] == 0)[0], :] += 1
-            prior = numpy.sum(bin_counts[:, 0]) / numpy.sum(bin_counts[:, 1]).astype(numpy.float64)
-            log_prior = numpy.log2(prior)
-            log_2 = numpy.log(2.0)
-        else:
-            where = numpy.where(bin_counts[:, 0] >= 2)[0]
-            float_bin_counts[where, 2] = float_bin_counts[where, 0] / bin_counts[where, 0]
-            float_bin_counts[where, 3] = (float_bin_counts[where, 1] / bin_counts[where, 0] -
-                                          float_bin_counts[where, 2] ** 2.0)
-        if gc_bins > 0:
-            gc_indices = numpy.arange(bin_counts.shape[0], dtype=numpy.int32) % self.gc_corrections.shape[0]
-            if usereads != 'cis-corrected':
-                self.gc_corrections = (
-                    numpy.bincount(gc_indices, weights=bin_counts[:, 0],
-                                   minlength=self.gc_corrections.shape[0]).astype(numpy.float64) /
-                    (numpy.maximum(1, numpy.bincount(gc_indices, weights=bin_counts[:, 1],
-                                   minlength=self.gc_corrections.shape[0])) *
-                    prior)).astype(numpy.float64)
-            else:
-                self.gc_corrections = numpy.bincount(gc_indices, weights=(float_bin_counts[:, 0] * bin_counts[:, 0]),
-                                                     minlength=self.gc_corrections.shape[0])
-                self.gc_corrections /= numpy.bincount(gc_indices, weights=bin_counts[:, 0],
-                                                      minlength=self.gc_corrections.shape[0])
-        else:
-            gc_indices = None
-        if len_bins > 0:
-            len_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / len_div) %
-                           self.len_corrections.shape[0])
-            if usereads != 'cis-corrected':
-                self.len_corrections = (
-                    numpy.bincount(len_indices, weights=bin_counts[:, 0],
-                    minlength=self.len_corrections.shape[0]).astype(numpy.float64) /
-                    (numpy.maximum(1, numpy.bincount(len_indices, weights=bin_counts[:, 1],
-                    minlength=self.len_corrections.shape[0])) * prior)).astype(numpy.float64)
-            else:
-                self.len_corrections = numpy.bincount(len_indices, weights=(float_bin_counts[:, 0] * bin_counts[:, 0]),
-                                                      minlength=self.len_corrections.shape[0])
-                self.len_corrections /= numpy.bincount(len_indices, weights=bin_counts[:, 0],
-                                                       minlength=self.len_corrections.shape[0])
-        else:
-            len_indices = None
+        bin_counts = bin_counts.astype(numpy.float64)
+        bin_counts[numpy.where(bin_counts[:, 0] == 0)[0], :] += 1
+        prior = numpy.sum(bin_counts[:, 0]) / numpy.sum(bin_counts[:, 1]).astype(numpy.float64)
+        log_prior = numpy.log2(prior)
+        log_2 = numpy.log(2.0)
+        min_p = 1.0 / numpy.sum(bin_counts[:, 1])
+        all_indices = numpy.zeros((bin_counts.shape[0], len(model)), dtype=numpy.int32)
+        for i in range(correction_indices.shape[0] - 1):
+            temp0 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 0], minlength=num_bins[i])
+            temp1 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 1], minlength=num_bins[i])
+            where = numpy.where(temp1 > 0)[0]
+            all_indices[:, i] = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / bin_divs[i]) %
+                                 (correction_indices[i + 1] - correction_indices[i]))
+            all_corrections[where + correction_indices[i]:] = temp0[where] / temp1[where].astype(numpy.float64) / prior
         if distance_bins > 0:
             distance_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / distance_div) %
                                 distance_corrections.shape[0])
@@ -895,70 +875,41 @@ class FiveC(object):
         else:
             distance_indices = None
 
-        if usereads != 'cis-corrected':
-            def find_ll(gc_c, gc_i, len_c, len_i, distance_c, distance_i, counts, prior):
-                sum_log = numpy.zeros(counts.shape[0], dtype=numpy.float64)
-                prod = numpy.ones(counts.shape[0], dtype=numpy.float64) * prior
-                if not gc_c is None:
-                    temp = gc_c[gc_i]
-                    sum_log += numpy.log2(temp)
-                    prod *= temp
-                if not len_c is None:
-                    temp = len_c[len_i]
-                    sum_log += numpy.log2(temp)
-                    prod *= temp
-                if not distance_c is None:
-                    temp = distance_c[distance_i]
-                    sum_log += numpy.log2(temp)
-                    prod *= temp
-                where = numpy.where(prod < 1.0)[0]
-                return (-numpy.sum(counts[where, 0] * (numpy.log2(prior) + sum_log[where]) +
-                        (counts[where, 1] - counts[where, 0]) * numpy.log2(1.0 - prod[where])))
+        def find_ll(indices, corrections, correction_indices, distance_c, distance_i, counts, prior, min_p):
+            prod = numpy.ones(counts.shape[0], dtype=numpy.float64)
+            for i in range(indices.shape[1]):
+                prod *= corrections[correction_indices[i] + indices[:, i]]
+            if not distance_c is None:
+                prod *= distance_c[distance_i]
+            prod *= prior
+            sum_log = numpy.log2(prod)
+            prod = numpy.maximum(1.0 - prod, min_p)
+            return (-numpy.sum(counts[:, 0] * sum_log + counts[:, 1] * numpy.log2(prod)))
+        
+        def find_sum_log_prod(index, indices, corrections, correction_indices, distance_c, distance_i, sum_log, prod):
+            prod.fill(1.0)
+            for i in range(indices.shape[1]):
+                if i == index:
+                    continue
+                prod *= corrections[correction_indices[i] + indices[:, i]]
+            if not distance_c is None:
+                prod *= distance_c[distance_i]
+            sum_log[:] = numpy.log2(prod)
+            return
 
-            def temp_ll(x, *args):
-                counts, sum_log, prod, prior, log_prior, log_2 = args[:6]
-                return -numpy.sum(counts[:, 0] * (log_prior + sum_log + numpy.log2(x[0])) +
-                                 (counts[:, 1] - counts[:, 0]) * numpy.log2(1.0 - prior * prod * x[0]))
+        def temp_ll(x, *args):
+            counts, sum_log, prod, prior, log_prior, log_2, min_p = args[:7]
+            return -numpy.sum(counts[:, 0] * (log_prior + sum_log + numpy.log2(x[0])) +
+                             counts[:, 1] * numpy.log2(numpy.maximum(min_p, 1.0 - prior * prod * x[0])))
 
-            def temp_ll_grad(x, *args):
-                counts, sum_log, prod, prior, log_prior, log_2 = args[:6]
-                grad = numpy.array(-numpy.sum(counts[:, 0] / (log_2 * x[0]) - (counts[:, 1] - counts[:, 0]) *
-                                   prior * prod / (log_2 * (1.0 - prior * prod * x[0]))), dtype=numpy.float64)
-                return grad
+        def temp_ll_grad(x, *args):
+            counts, sum_log, prod, prior, log_prior, log_2 = args[:6]
+            grad = numpy.array(-numpy.sum(counts[:, 0] / (log_2 * x[0]) - counts[:, 1] *
+                               prior * prod / (log_2 * (1.0 - prior * prod * x[0]))), dtype=numpy.float64)
+            return grad
 
-            ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, distance_corrections,
-                         distance_indices, bin_counts, prior)
-        else:
-            def find_ll(gc_c, gc_i, len_c, len_i, counts1, counts2):
-                where = numpy.where(counts1[:, 0] >= 2)[0]
-                mus = numpy.copy(counts2[:, 2])
-                if not gc_c is None:
-                    mus += gc_c[gc_i]
-                if not len_c is None:
-                    mus += len_c[len_i]
-                mus = mus[where]
-                return numpy.sum((counts2[where, 1] - 2.0 * mus * counts2[where, 0] + counts1[where, 0] * mus ** 2.0) /
-                       counts2[where, 3])
-            
-            def temp_ll(x, *args):
-                counts1, counts2, mus = args[:3]
-                where = numpy.where(counts1[:, 0] >= 2)[0]
-                if where.shape[0] == 0:
-                    return 0.0
-                return numpy.sum((counts2[where, 1] - 2.0 * (mus[where] + x) * counts2[where, 0] + counts1[where, 0] *
-                                 (mus[where] + x) ** 2.0) / counts2[where, 3])
-
-            def temp_ll_grad(x, *args):
-                counts1, counts2, mus = args[:3]
-                where = numpy.where(counts1[:, 0] >= 2)[0]
-                if where.shape[0] == 0:
-                    return numpy.zeros(1, dtype=numpy.float32)
-                grad = numpy.array(numpy.sum(-2.0 * counts2[where, 0] + 2.0 * counts1[where, 0] * (mus[where] + x) /
-                                   counts2[where, 3]))
-                return grad
-
-            ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, bin_counts,
-                         float_bin_counts)
+        ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, distance_corrections,
+                     distance_indices, bin_counts, prior)
 
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:00  ll:%f") % (' ' * 80, ll),
@@ -967,79 +918,29 @@ class FiveC(object):
         pgtol = 1e-8
         numpy.seterr(invalid='ignore')
         while iteration < max_iterations and delta >= learning_threshold:
-            if not self.gc_corrections is None:
-                new_gc_corrections = numpy.zeros(self.gc_corrections.shape[0], dtype=numpy.float64)
-                for i in range(self.gc_corrections.shape[0]):
-                    if usereads != 'cis-corrected':
-                        where = numpy.where(gc_indices == i)[0]
-                        temp_bin_counts = bin_counts[where, :]
-                        temp_sum_log = numpy.zeros(where.shape[0], dtype=numpy.float64)
-                        temp_prod = numpy.ones(where.shape[0], dtype=numpy.float64)
-                        if not self.len_corrections is None:
-                            temp = self.len_corrections[len_indices[where]]
-                            temp_sum_log += numpy.log2(temp)
-                            temp_prod *= temp
-                        if not distance_corrections is None:
-                            temp = distance_corrections[distance_indices[where]]
-                            temp_sum_log += numpy.log2(temp)
-                            temp_prod *= temp
-                        x0 = self.gc_corrections[i:(i+1)]
-                        x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
-                                       args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2))
-                        new_gc_corrections[i] = x[0]
-                    else:
-                        x0 = self.gc_corrections[i:(i+1)]
-                        where = numpy.where(gc_indices == i)[0]
-                        temp_bin_counts = bin_counts[where, :]
-                        temp_float_counts = float_bin_counts[where, :]
-                        mus = float_bin_counts[where, 0] + x0
-                        if not self.len_corrections is None:
-                            mus += self.len_corrections[len_indices[where]]
-                        x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
-                                       args=(temp_bin_counts, temp_float_counts, mus))
-                        new_gc_corrections[i] = x[0]
-            if not self.len_corrections is None:
-                new_len_corrections = numpy.zeros(self.len_corrections.shape[0], dtype=numpy.float64)
-                for i in range(self.len_corrections.shape[0]):
-                    if usereads != 'cis-corrected':
-                        where = numpy.where(len_indices == i)[0]
-                        temp_bin_counts = bin_counts[where, :]
-                        temp_sum_log = numpy.zeros(where.shape[0], dtype=numpy.float64)
-                        temp_prod = numpy.ones(where.shape[0], dtype=numpy.float64)
-                        if not self.gc_corrections is None:
-                            temp = self.gc_corrections[gc_indices[where]]
-                            temp_sum_log += numpy.log2(temp)
-                            temp_prod *= temp
-                        if not distance_corrections is None:
-                            temp = distance_corrections[distance_indices[where]]
-                            temp_sum_log += numpy.log2(temp)
-                            temp_prod *= temp
-                        x0 = self.len_corrections[i:(i+1)]
-                        x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
-                                       args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2))
-                        new_len_corrections[i] = x[0]
-                    else:
-                        x0 = self.len_corrections[i:(i+1)]
-                        where = numpy.where(len_indices == i)[0]
-                        temp_bin_counts = bin_counts[where, :]
-                        temp_float_counts = float_bin_counts[where, :]
-                        mus = float_bin_counts[where, 0] + x0
-                        if not self.gc_corrections is None:
-                            mus += self.gc_corrections[gc_indices[where]]
-                        x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
-                                       args=(temp_bin_counts, temp_float_counts, mus))
-                        new_len_corrections[i] = x[0]
-            if not self.gc_corrections is None:
-                self.gc_corrections = new_gc_corrections
-            if not self.len_corrections is None:
-                self.len_corrections = new_len_corrections
+            new_corrections = numpy.copy(all_corrections)
+            for h in range(len(model)):
+                # don't learn constant parameters
+                if parameters[h].count('const') > 0:
+                    continue
+                num_cor = correction_indices[h + 1] - correction_indices[h]
+                bins = bin_counts.shape[0] / num_cor
+                temp_sum_log = numpy.zeros(bins, dtype=numpy.float64)
+                temp_prod = numpy.ones(bins, dtype=numpy.float64)
+                for i in range(num_cor):
+                    where = numpy.where(all_indices[:, h] == i)[0]
+                    temp_bin_counts = bin_counts[where, :]
+                    x0 = all_corrections[(correction_indices[h] + i):(correction_indices[h] + i + 1)]
+                    find_sum_log_prod(h, all_indices[where, :], all_corrections, correction_indices,
+                                      distance_corrections, distance_indices, temp_sum_log,
+                                      temp_prod)
+                    x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
+                                   args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2, min_p))
+                    new_corrections[correction_indices[h] + i] = x[0]
+            all_corrections = new_corrections
             iteration += 1
-            if usereads != 'cis-corrected':        
-                new_ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices,
-                                 distance_corrections, distance_indices, bin_counts, prior)
-            else:
-                new_ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, bin_counts,
-                                 float_bin_counts)
+            new_ll = find_ll(self.gc_corrections, gc_indices, self.len_corrections, len_indices, distance_corrections,
+                             distance_indices, bin_counts, prior)
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:%02i  ll:%f\n") % (' ' * 80,
                                       iteration, new_ll),
@@ -1047,11 +948,9 @@ class FiveC(object):
             if delta < 0.0:
                 delta = numpy.inf
             ll = new_ll
-        if usereads != 'cis-corrected':
-            if not self.gc_corrections is None:
-                self.gc_corrections = numpy.log(self.gc_corrections)
-            if not self.len_corrections is None:
-                self.len_corrections = numpy.log(self.len_corrections)
+        self.binning_corrections = numpy.log(all_corrections).astype(numpy.float32)
+        self.model_parameters = numpy.array(model)
+        self.binning_correction_indices = correction_indices
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning binning corrections... Final ll:%f") % (' ' * 80, ll),
         self.normalization = 'binning'

@@ -177,30 +177,18 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
         return None
     # If correction is required, determine what type and get appropriate data
     corrections = None
-    gc_corrections = None
-    gc_indices = None
-    len_corrections = None
-    len_indices = None
+    binning_corrections = None
+    correction_indices = None
+    binning_num_bins = None
+    frag_indices = None
     if datatype in ['fragment', 'enrichment', 'expected']:
         if fivec.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections = fivec.corrections[startfrag:stopfrag]
         if fivec.normalization in ['binning', 'binning-express', 'binning-probability']:
-            if not fivec.gc_corrections is None:
-                gc_bins = int((0.25 + 2 * fivec.gc_corrections.shape[0]) ** 0.5 - 0.5)
-                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(gc_bins, 0)
-                gc_corrections[indices] = fivec.gc_corrections
-                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
-                gc_indices = numpy.searchsorted(fivec.gc_bins,
-                             fivec.frags['fragments']['gc'][startfrag:stopfrag]).astype(numpy.int32)
-            if not fivec.len_corrections is None:
-                len_bins = int((0.25 + 2 * fivec.len_corrections.shape[0]) ** 0.5 - 0.5)
-                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(len_bins, 0)
-                len_corrections[indices] = fivec.len_corrections
-                len_corrections[indices[1], indices[0]] = len_corrections[indices]
-                len_indices = numpy.searchsorted(fivec.len_bins, fivec.frags['fragments']['stop'][startfrag:stopfrag] -
-                              fivec.frags['fragments']['start'][startfrag:stopfrag]).astype(numpy.int32)
+            binning_corrections = fivec.binning_corrections
+            correction_indices = fivec.binning_correction_indices
+            binning_num_bins = fivec.binning_num_bins
+            frag_indices = fivec.binning_frag_indices
     if datatype in ['distance', 'enrichment', 'expected']:
         gamma = fivec.gamma
         region_mean = fivec.region_means[region]
@@ -217,8 +205,9 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
         if datatype != 'expected':
             _fivec_binning.find_cis_compact_observed(data, data_indices, mapping, data_array)
         if datatype != 'raw':
-            _fivec_binning.find_cis_compact_expected(mapping, corrections, gc_indices, len_indices, gc_corrections,
-                                                     len_corrections, mids, strands, data_array, gamma, region_mean)
+            _fivec_binning.find_cis_compact_expected(mapping, corrections, binning_corrections, correction_indices,
+                                                     binning_num_bins, frag_indices, mids, strands, data_array, gamma,
+                                                     region_mean, startfrag)
         else:
             where = numpy.where(data_array[:, :, 0] > 0.0)
             data_array[where[0], where[1], 1] = 1.0
@@ -229,8 +218,9 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
         if datatype != 'expected':
             _fivec_binning.find_cis_upper_observed(data, data_indices, mapping, data_array)
         if datatype != 'raw':
-            _fivec_binning.find_cis_upper_expected(mapping, corrections, gc_indices, len_indices, gc_corrections,
-                                                   len_corrections, mids, strands, data_array, gamma, region_mean)
+            _fivec_binning.find_cis_upper_expected(mapping, corrections, binning_corrections, correction_indices,
+                                                   binning_num_bins, frag_indices, mids, strands, data_array, gamma,
+                                                   region_mean, startfrag)
         else:
             where = numpy.where(data_array[:, 0] > 0.0)
             data_array[where[0], 1] = 1.0
@@ -706,39 +696,19 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
     # If correction is required, determine what type and get appropriate data
     corrections1 = None
     corrections2 = None
-    gc_corrections = None
-    gc_indices1 = None
-    gc_indices2 = None
-    len_corrections = None
-    len_indices1 = None
-    len_indices2 = None
+    binning_corrections = None
+    correction_indices = None
+    binning_num_bins = None
+    frag_indices = None
     if datatype in ['fragment', 'enrichment', 'expected']:
         if fivec.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections1 = fivec.corrections[startfrag1:stopfrag1]
             corrections2 = fivec.corrections[startfrag2:stopfrag2]
         if fivec.normalization in ['binning', 'binning-express', 'binning-probability']:
-            if not fivec.gc_corrections is None:
-                gc_bins = int((0.25 + 2 * fivec.gc_corrections.shape[0]) ** 0.5 - 0.5)
-                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(gc_bins, 0)
-                gc_corrections[indices] = fivec.gc_corrections
-                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
-                gc_indices1 = numpy.searchsorted(fivec.gc_bins,
-                              fivec.frags['fragments']['gc'][startfrag1:stopfrag1]).astype(numpy.int32)
-                gc_indices2 = numpy.searchsorted(fivec.gc_bins,
-                              fivec.frags['fragments']['gc'][startfrag2:stopfrag2]).astype(numpy.int32)
-            if not fivec.len_corrections is None:
-                len_bins = int((0.25 + 2 * fivec.len_corrections.shape[0]) ** 0.5 - 0.5)
-                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(len_bins, 0)
-                len_corrections[indices] = fivec.len_corrections
-                len_corrections[indices[1], indices[0]] = len_corrections[indices]
-                len_indices1 = numpy.searchsorted(fivec.len_bins,
-                               fivec.frags['fragments']['stop'][startfrag1:stopfrag1] -
-                               fivec.frags['fragments']['start'][startfrag1:stopfrag1]).astype(numpy.int32)
-                len_indices2 = numpy.searchsorted(fivec.len_bins,
-                               fivec.frags['fragments']['stop'][startfrag2:stopfrag2] -
-                               fivec.frags['fragments']['start'][startfrag2:stopfrag2]).astype(numpy.int32)
+            binning_corrections = fivec.binning_corrections
+            correction_indices = fivec.binning_correction_indices
+            binning_num_bins = fivec.binning_num_bins
+            frag_indices = fivec.binning_frag_indices
     if datatype in ['distance', 'enrichment', 'expected']:
         if fivec.trans_mean is None:
             fivec.find_trans_mean()
@@ -758,15 +728,13 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             _fivec_binning.find_trans_observed(data, data_indices, mapping2, mapping1, data_array)
     if datatype != 'raw':
         if startfrag1 < startfrag2:
-            _fivec_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, gc_indices1,
-                                               gc_indices2, len_indices1, len_indices2, gc_corrections,
-                                               len_corrections, strands1, strands2, data_array, trans_mean)
+            _fivec_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, binning_corrections,
+                                               correction_indices, binning_num_bins, frag_indices, strands1, strands2,
+                                               data_array, trans_mean, startfrag1, startfrag2)
         else:
-            _fivec_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, gc_indices2,
-                                               gc_indices1, len_indices2, len_indices1, gc_corrections,
-                                               len_corrections, strands2, strands1, data_array,
-                                               trans_mean)
-    else:
+            _fivec_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, binning_corrections,
+                                               correction_indices, binning_num_bins, frag_indices, strands2, strands1,
+                                               data_array, trans_mean, startfrag2, startfrag1)
         where = numpy.where(data_array[:, :, 0] > 0.0)
         data_array[where[0], where[1], 1] = 1.0
     if datatype == 'expected':

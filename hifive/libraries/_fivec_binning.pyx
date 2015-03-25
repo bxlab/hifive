@@ -95,19 +95,21 @@ def find_cis_upper_observed(
 def find_cis_compact_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] frag_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int_t, ndim=1] strands,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         double gamma,
-        double region_mean):
-    cdef long long int frag1, frag2, map1, map2, strand1
+        double region_mean,
+        int startfrag):
+    cdef long long int frag1, frag2, map1, map2, strand1, bin1, bin2, index
     cdef double distance, value
     cdef long long int num_frags = mapping.shape[0]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    cdef long long int num_parameters = frag_indices.shape[1]
     with nogil:
         for frag1 in range(num_frags - 1):
             map1 = mapping[frag1]
@@ -128,10 +130,12 @@ def find_cis_compact_expected(
                 if not corrections is None:
                     value += corrections[frag1] + corrections[frag2]
                 # if finding frag, enrichment, or expected, and using binning bias correction, correct for frag
-                if not gc_indices is None:
-                    value += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
-                if not len_indices is None:
-                    value += len_corrections[len_indices[frag1], len_indices[frag2]]
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(frag_indices[frag1 + startfrag, j], frag_indices[frag2 + startfrag, j]) 
+                        bin2 = max(frag_indices[frag1 + startfrag, j], frag_indices[frag2 + startfrag, j]) 
+                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value += binning_corrections[index]
                 # if finding distance, enrichment, or expected, correct for distance
                 if gamma != 0.0:
                     distance = log(mids[frag2] - mids[frag1])
@@ -149,19 +153,21 @@ def find_cis_compact_expected(
 def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] frag_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int_t, ndim=1] strands,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         double gamma,
-        double region_mean):
-    cdef long long int frag1, frag2, index, map1, map2, strand1
+        double region_mean,
+        int startfrag):
+    cdef long long int frag1, frag2, index, map1, map2, strand1, bin1, bin2, index2
     cdef double distance, value
     cdef long long int num_frags = mapping.shape[0]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    cdef long long int num_parameters = frag_indices.shape[1]
     with nogil:
         for frag1 in range(num_frags - 1):
             map1 = mapping[frag1]
@@ -179,10 +185,12 @@ def find_cis_upper_expected(
                 if not corrections is None:
                     value += corrections[frag1] + corrections[frag2]
                 # if finding frag, enrichment, or expected, and using binning bias correction, correct for frag
-                if not gc_indices is None:
-                    value += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
-                if not len_indices is None:
-                    value += len_corrections[len_indices[frag1], len_indices[frag2]]
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(frag_indices[frag1 + startfrag, j], frag_indices[frag2 + startfrag, j]) 
+                        bin2 = max(frag_indices[frag1 + startfrag, j], frag_indices[frag2 + startfrag, j]) 
+                        index2 = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value += binning_corrections[index2]
                 # if finding distance, enrichment, or expected, correct for distance
                 if gamma != 0.0:
                     distance = log(mids[frag2] - mids[frag1])
@@ -362,20 +370,21 @@ def find_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
         np.ndarray[DTYPE_t, ndim=1] corrections1,
         np.ndarray[DTYPE_t, ndim=1] corrections2,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices1,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices2,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices1,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices2,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] frag_indices,
         np.ndarray[DTYPE_int_t, ndim=1] strands1,
         np.ndarray[DTYPE_int_t, ndim=1] strands2,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
-        double trans_mean):
-    cdef long long int frag1, frag2, map1, map2, strand1
+        double trans_mean,
+        int startfrag1,
+        int startfrag2):
+    cdef long long int frag1, frag2, map1, map2, strand1, bin1, bin2, index
     cdef double distance, value
     cdef long long int num_frags1 = mapping1.shape[0]
     cdef long long int num_frags2 = mapping2.shape[0]
+    cdef long long int num_parameters = frag_indices.shape[1]
     with nogil:
         for frag1 in range(num_frags1):
             map1 = mapping1[frag1]
@@ -392,10 +401,12 @@ def find_trans_expected(
                 if not corrections1 is None:
                     value += corrections1[frag1] + corrections2[frag2]
                 # if finding frag, enrichment, or expected, and using binning bias correction, correct for frag
-                if not gc_indices1 is None:
-                    value += gc_corrections[gc_indices1[frag1], gc_indices2[frag2]]
-                if not len_indices1 is None:
-                    value += len_corrections[len_indices1[frag1], len_indices2[frag2]]
+                if not binning_corrections is None:
+                    for j in range(num_parameters):
+                        bin1 = min(frag_indices[frag1 + startfrag1, j], frag_indices[frag2 + startfrag2, j]) 
+                        bin2 = max(frag_indices[frag1 + startfrag1, j], frag_indices[frag2 + startfrag2, j]) 
+                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                        value += binning_corrections[index]
                 signal[map1, map2, 1] += exp(value)
     return None
 
@@ -503,11 +514,8 @@ def dynamically_bin_trans(
 def binning_bin_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=2] trans_data,
-        np.ndarray[DTYPE_t, ndim=1] corrected_data,
-        np.ndarray[DTYPE_int_t, ndim=1] data_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_64_t, ndim=2] float_counts,
         np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
         np.ndarray[DTYPE_int_t, ndim=1] len_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
@@ -553,10 +561,6 @@ def binning_bin_observed(
                     k += 1
                 index += k * distance_div
             counts[index, 0] += 1
-            if not corrected_data is None:
-                float_counts[index, 0] += corrected_data[i]
-                float_counts[index, 1] += pow(corrected_data[i], 2.0)
-                data_indices[i] = index
         for i in range(num_trans):
             frag1 = trans_data[i, 0]
             frag2 = trans_data[i, 1]
