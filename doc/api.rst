@@ -14,13 +14,4 @@ Contents:
    fivec_binning.rst
    hic_binning.rst
    plotting.rst
-   additional_scripts.rst
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
 

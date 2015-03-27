@@ -7,7 +7,7 @@ Getting started
 
 .. _installing_HiFive:
 
-Installing :mod:`HiFive`
+Installing HiFive
 =============================
 
 :mod:`HiFive` can be obtained from `HiFive <https://bitbucket.org/bxlab/hifive/>`_ using the following command::

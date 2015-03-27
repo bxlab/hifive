@@ -15,7 +15,7 @@ import h5py
 class HiCBinning(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.project_fname = '%s/tests/data/test_analyzed.hcp' % self.basedir
+        self.project_fname = '%s/tests/data/test_probability.hcp' % self.basedir
         self.binned_fname = '%s/tests/data/test_binned.hdf5' % self.basedir
         self.heatmap_fname = '%s/tests/data/test.hch' % self.basedir
         self.data = h5py.File(self.binned_fname, 'r')
@@ -40,8 +40,8 @@ class HiCBinning(unittest.TestCase):
         self.compare_arrays(self.data['hic_mapping2'][...], mapping2, 'trans mappings')
 
     def test_generate_heatmap(self):
-        self.project.write_heatmap_dict("%s/tests/data/test_temp.hch" % self.basedir, 50000, includetrans=True,
-                                        datatype='fend')
+        self.project.write_heatmap("%s/tests/data/test_temp.hch" % self.basedir, 50000, includetrans=True,
+                                   datatype='fend')
         heatmap = h5py.File("%s/tests/data/test_temp.hch" % self.basedir)
         for name in self.heatmap['/'].attrs.keys():
             if name == 'history':

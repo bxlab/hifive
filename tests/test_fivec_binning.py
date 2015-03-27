@@ -15,7 +15,7 @@ import h5py
 class FiveCBinning(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.project_fname = '%s/tests/data/test_analyzed.fcp' % self.basedir
+        self.project_fname = '%s/tests/data/test_probability.fcp' % self.basedir
         self.binned_fname = '%s/tests/data/test_binned.hdf5' % self.basedir
         self.heatmap_fname = '%s/tests/data/test.fch' % self.basedir
         self.data = h5py.File(self.binned_fname, 'r')

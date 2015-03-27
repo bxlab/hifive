@@ -9,7 +9,7 @@ HiFive's documentation
 Contents:
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    introduction.rst
    getting_started.rst
@@ -18,6 +18,15 @@ Contents:
    filtering_data.rst
    distance_dependence.rst
    normalization.rst
+   hifive.rst
    fivec_tutorial.rst
    hic_tutorial.rst
    api.rst
+
+Indices and tables
+++++++++++++++++++
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
+

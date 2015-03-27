@@ -182,9 +182,9 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
     binning_num_bins = None
     frag_indices = None
     if datatype in ['fragment', 'enrichment', 'expected']:
-        if fivec.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
+        if fivec.normalization.count('probability') + fivec.normalization.count('express') > 0:
             corrections = fivec.corrections[startfrag:stopfrag]
-        if fivec.normalization in ['binning', 'binning-express', 'binning-probability']:
+        if fivec.normalization.count('binning') > 0:
             binning_corrections = fivec.binning_corrections
             correction_indices = fivec.binning_correction_indices
             binning_num_bins = fivec.binning_num_bins
@@ -701,10 +701,10 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
     binning_num_bins = None
     frag_indices = None
     if datatype in ['fragment', 'enrichment', 'expected']:
-        if fivec.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
+        if fivec.normalization.count('probability') + fivec.normalization.count('express') > 0:
             corrections1 = fivec.corrections[startfrag1:stopfrag1]
             corrections2 = fivec.corrections[startfrag2:stopfrag2]
-        if fivec.normalization in ['binning', 'binning-express', 'binning-probability']:
+        if fivec.normalization.count('binning') > 0:
             binning_corrections = fivec.binning_corrections
             correction_indices = fivec.binning_correction_indices
             binning_num_bins = fivec.binning_num_bins
@@ -735,6 +735,7 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             _fivec_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, binning_corrections,
                                                correction_indices, binning_num_bins, frag_indices, strands2, strands1,
                                                data_array, trans_mean, startfrag2, startfrag1)
+    else:
         where = numpy.where(data_array[:, :, 0] > 0.0)
         data_array[where[0], where[1], 1] = 1.0
     if datatype == 'expected':

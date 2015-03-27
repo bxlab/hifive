@@ -57,7 +57,7 @@ def main():
     elif subcommand == "5c-interval":
         from hifive.commands.get_fivec_interval import run
         run(args)
-    elif subcommand == "combine-5c-replicates" and rank == 0:
+    elif subcommand == "5c-combine-replicates" and rank == 0:
         from hifive.commands.combine_fivec_replicates import run
         run(args)
     elif subcommand == "fends" and rank == 0:
@@ -81,7 +81,7 @@ def main():
     elif subcommand == "hic-interval":
         from hifive.commands.get_hic_interval import run
         run(args)
-    elif subcommand == "combine-hic-replicates" and rank == 0:
+    elif subcommand == "hic-combine-replicates" and rank == 0:
         from hifive.commands.combine_hic_replicates import run
         run(args)
 
@@ -101,7 +101,7 @@ def generate_parser():
     add_complete_fivec_subparser(subparsers)
     add_fivec_heatmap_subparser(subparsers)
     add_fivec_interval_subparser(subparsers)
-    add_combine_fivec_replicates_subparser(subparsers)
+    add_fivec_combine_replicates_subparser(subparsers)
     add_fends_subparser(subparsers)
     add_hicdataset_subparser(subparsers)
     add_hicproject_subparser(subparsers)
@@ -109,15 +109,13 @@ def generate_parser():
     add_complete_hic_subparser(subparsers)
     add_hic_heatmap_subparser(subparsers)
     add_hic_interval_subparser(subparsers)
-    add_combine_hic_replicates_subparser(subparsers)
+    add_hic_combine_replicates_subparser(subparsers)
     return parser
 
 def add_fragments_subparser(subparsers):
     """Add command 'fragments' arguments to parser.
     """
     parser = subparsers.add_parser("fragments", help="HiFive Fragment Creation Function: Read target RE fragment data from a BED file and create a HiFive 'Fragment' file.")
-    parser.add_argument("-F", "--fasta", dest="fasta", required=False, type=str, default=None,
-        help="FASTA file containing sequences of 5C primers (used for GC content for binning modeling).")
     parser.add_argument("-r", "--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
     parser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
@@ -172,6 +170,8 @@ def add_fivecnormalize_subparser(subparsers):
     bin_parser = subparser2.add_parser("binning", help="A multivariate binning probability model-based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
     binprob_parser = subparser2.add_parser("binning-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
     binexp_parser = subparser2.add_parser("binning-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
+    probbin_parser = subparser2.add_parser("probability-binning", help="A chained-correction approach first learning fragment-associated correction values via a probability model and applying them prior to learning fragment characteristic corrections.")
+    expbin_parser = subparser2.add_parser("express-binning", help="A chained-correction approach first learning fragment-associated correction values via a matrix-balancing approximation and applying them prior to learning fragment characteristic corrections.")
     add_fivec_normalize_group(prob_parser)
     add_fivec_probability_group(prob_parser)
     add_fivec_normalize_group(exp_parser)
@@ -179,11 +179,17 @@ def add_fivecnormalize_subparser(subparsers):
     add_fivec_normalize_group(bin_parser)
     add_fivec_binning_group(bin_parser)
     add_fivec_normalize_group(binprob_parser)
-    add_fivec_probability_group(binprob_parser)
     add_fivec_binning_group(binprob_parser)
+    add_fivec_probability_group(binprob_parser)
     add_fivec_normalize_group(binexp_parser)
-    add_fivec_express_group(binexp_parser)
     add_fivec_binning_group(binexp_parser)
+    add_fivec_express_group(binexp_parser)
+    add_fivec_normalize_group(probbin_parser)
+    add_fivec_probability_group(probbin_parser)
+    add_fivec_binning_group(probbin_parser)
+    add_fivec_normalize_group(expbin_parser)
+    add_fivec_express_group(expbin_parser)
+    add_fivec_binning_group(expbin_parser)
     return
 
 def add_complete_fivec_subparser(subparsers):
@@ -196,6 +202,8 @@ def add_complete_fivec_subparser(subparsers):
     bin_parser = subparser2.add_parser("binning", help="A multivariate binning probability model-based approach for learning correction values associated with fragment characteristics. Learning is accomplished using the Broyden-Fletcher-Goldfarb-Shanno algorithm.")
     binprob_parser = subparser2.add_parser("binning-probability", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a probability model.")
     binexp_parser = subparser2.add_parser("binning-express", help="A chained-correction approach first learning fragment characteristic corrections and applying them prior to learning fragment-associated correction values via a matrix-balancing approximation.")
+    probbin_parser = subparser2.add_parser("probability-binning", help="A chained-correction approach first learning fragment-associated correction values via a probability model and applying them prior to learning fragment characteristic corrections.")
+    expbin_parser = subparser2.add_parser("express-binning", help="A chained-correction approach first learning fragment-associated correction values via a matrix-balancing approximation and applying them prior to learning fragment characteristic corrections.")
     add_fivec_complete_group(prob_parser)
     add_fivec_probability_group(prob_parser)
     add_fivec_complete_group(exp_parser)
@@ -203,11 +211,17 @@ def add_complete_fivec_subparser(subparsers):
     add_fivec_complete_group(bin_parser)
     add_fivec_binning_group(bin_parser)
     add_fivec_complete_group(binprob_parser)
-    add_fivec_probability_group(binprob_parser)
     add_fivec_binning_group(binprob_parser)
+    add_fivec_probability_group(binprob_parser)
     add_fivec_complete_group(binexp_parser)
-    add_fivec_express_group(binexp_parser)
     add_fivec_binning_group(binexp_parser)
+    add_fivec_express_group(binexp_parser)
+    add_fivec_complete_group(probbin_parser)
+    add_fivec_probability_group(probbin_parser)
+    add_fivec_binning_group(probbin_parser)
+    add_fivec_complete_group(expbin_parser)
+    add_fivec_express_group(expbin_parser)
+    add_fivec_binning_group(expbin_parser)
     return
 
 def add_fivec_normalize_group(subparser):
@@ -225,8 +239,6 @@ def add_fivec_normalize_group(subparser):
     return
 
 def add_fivec_complete_group(subparser):
-    subparser.add_argument("-F", "--fasta", dest="fasta", required=False, type=str, default=None,
-        help="FASTA file containing sequences of 5C primers (used for GC content for binning modeling).")
     subparser.add_argument("--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
     subparser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
@@ -246,7 +258,7 @@ def add_fivec_complete_group(subparser):
         action='store', help="A comma-separated list of regions to learn correction values for (None indicates all regions). [default: %(default)s]")
     add_silent_argument(subparser)
     outfile_group = subparser.add_mutually_exclusive_group(required=True)
-    outfile_group.add_argument("--prefix", dest="prefix", type=str, default=None,
+    outfile_group.add_argument("-P", "--prefix", dest="prefix", type=str, default=None,
         help="A prefix for the output files (*.frags, *.fcd, and *.fcp).")
     outfile_group.add_argument("-o", "--output", dest="output", type=str, nargs=3, default=None,
         help="File names for the Fragment, FiveCData, and FiveC project files to be created.")
@@ -279,16 +291,18 @@ def add_fivec_binning_group(subparser):
         action='store', help="The learning threshold cutoff for binning algorithm. [default: %(default)s]")
     subparser.add_argument("-y", "--binning-reads", dest="binreads", required=False, type=str, default='cis',
         choices=['cis', 'trans', 'all'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
-    subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
+    subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="len",
         action='store', help="A comma-separated list of parameters to include in binning model. [default: %(default)s]")
-    subparser.add_argument("-n", "--model-bins", dest="modelbins", required=False, type=str, default="10,10,10",
+    subparser.add_argument("-n", "--model-bins", dest="modelbins", required=False, type=str, default="10",
         action='store', help="A comma-separated list of the number of bins to separate model parameters into. [default: %(default)s]")
+    subparser.add_argument("-u", "--parameter-types", dest="parameters", required=False, type=str, default="even",
+        action='store', help="A comma-separated list parameter types ('even' or 'fixed', depending on whether bins should contain equal numbers of fends or be equally spaced along the parameter range, and a '-const' suffix to indicate the values are not to be optimized). [default: %(default)s]")
     return
 
-def add_combine_fivec_replicates_subparser(subparsers):
-    """Add command 'combine-5c-replicates' arguments to parser.
+def add_fivec_combine_replicates_subparser(subparsers):
+    """Add command '5c-combine-replicates' arguments to parser.
     """
-    parser = subparsers.add_parser("combine-5c-replicates",
+    parser = subparsers.add_parser("5c-combine-replicates",
         help="HiFive Data Function: Combine two HiFive 5C datasets into a single dataset without needing to reload data.")
     parser.add_argument(dest="output", type=str,
         help="Name of file in which to write combined data.")
@@ -308,10 +322,10 @@ def add_fivec_heatmap_subparser(subparsers):
         help="Calculate and include trans interactions in heatmaps. [default: %(default)s]")
     parser.add_argument("-r", "--regions", dest="regions", default=None, type=str,
         help="A comma-separated list of regions to include in the heatmaps (None indicates all regions). [default: %(default)s]")
-    parser.add_argument("-d", "--data-type", dest="datatype", default="fragment",
+    parser.add_argument("-d", "--datatype", dest="datatype", default="fragment",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fragment", "distance", "enrichment", "expected"])
-    parser.add_argument("-a", "--array-type", dest="arraytype", default="full",
+    parser.add_argument("-a", "--arraytype", dest="arraytype", default="full",
         help="The type of array layout to store data in ('compact' only valid for unbinned data). [default: %(default)s]",
         choices=["compact", "full"])
     parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
@@ -344,7 +358,7 @@ def add_fivec_interval_subparser(subparsers):
         help="The stop coordinate of the pulled region to return. (None indicates the last valid bin in the region) [default %(default)s]")
     parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
         help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
-    parser.add_argument("-d", "--data-type", dest="datatype", default="fend",
+    parser.add_argument("-d", "--data-type", dest="datatype", default="fragment",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fragment", "distance", "enrichment", "expected"])
     parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
@@ -353,7 +367,7 @@ def add_fivec_interval_subparser(subparsers):
         help="Format the image in PDF format. [default: %(default)s]")
     parser.add_argument("-r", "--rotate", dest="rotate", default=False, action="store_true",
         help="Rotate the plot 45 degrees (binned only). [default: %(default)s]")
-    parser.add_argument("-t", "--tick-marks", dest="ticks", default=False, action="store_true",
+    parser.add_argument("-t", "--ticks", dest="ticks", default=False, action="store_true",
         help="Add tick marks and labels to the plot (pdf format and binned only). [default: %(default)s]")
     parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
         help="Add color scale to the plot (pdf format only). [default: %(default)s]")
@@ -508,7 +522,7 @@ def add_complete_hic_group(subparser):
         action='store', help="The number of bins to partion the interaction distance range into for distance-dependence function. [default: %(default)s]")
     add_silent_argument(subparser)
     outfile_group = subparser.add_mutually_exclusive_group(required=True)
-    outfile_group.add_argument("--prefix", dest="prefix", type=str, default=None,
+    outfile_group.add_argument("-P", "--prefix", dest="prefix", type=str, default=None,
         help="A prefix for the output files (*.fends, *.hcd, and *.hcp).")
     outfile_group.add_argument("-o", "--output", dest="output", type=str, nargs=3, default=None,
         help="File names for the Fend, HiCData, and HiC project files to be created.")
@@ -534,7 +548,7 @@ def add_hic_probability_group(subparser):
     subparser.add_argument("-a", "--annealing-iterations", dest="anneal", required=False, type=int, default=1000,
         action='store', help="The number of iterations to run the annealing learning phase for with a linearly-decreasing learning rate. [default: %(default)s]")
     subparser.add_argument("-g", "--min-change", dest="change", required=False, type=float, default=0.0001,
-        action='store', help="The minimum mean change in fend correction parameter values needed to keep running past 'burnin_iterations' number of iterations during burn-in phase of probability learning algorithm. [default: %(default)s]")
+        action='store', help="The maximum allowable change per iteration in fend correction parameter values allowable to terminate the burn-in phase of learning. [default: %(default)s]")
     subparser.add_argument("-p", "--precalculate", dest="precalc", required=False, default=False,
         action='store_true', help="Precalculate correction values from fend means for the probability algorithm. [default: %(default)s]")
     subparser.add_argument("-l", "--learning-rate", dest="rate", required=False, type=float, default=0.4,
@@ -558,19 +572,19 @@ def add_hic_binning_group(subparser):
     subparser.add_argument("-t", "--learning-threshold", dest="threshold", required=False, type=float, default=1.0,
         action='store', help="The learning threshold cutoff for binning algorithm. [default: %(default)s]")
     subparser.add_argument("-y", "--binning-reads", dest="binreads", required=False, type=str, default='cis',
-        choices=['cis', 'trans', 'all', 'cis-corrected'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
-    subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="gc,len,distance",
+        choices=['cis', 'trans', 'all'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
+    subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="len,distance",
         action='store', help="A comma-separated list of parameters to include in binning model. [default: %(default)s]")
-    subparser.add_argument("-z", "--model-bins", dest="modelbins", required=False, type=str, default="20,20,20",
+    subparser.add_argument("-z", "--model-bins", dest="modelbins", required=False, type=str, default="20,20",
         action='store', help="A comma-separated list of the number of bins to separate model parameters into. [default: %(default)s]")
-    subparser.add_argument("-u", "--parameter-types", dest="parameters", required=False, type=str, default="even,even,fixed-const",
+    subparser.add_argument("-u", "--parameter-types", dest="parameters", required=False, type=str, default="even,fixed-const",
         action='store', help="A comma-separated list parameter types ('even' or 'fixed', depending on whether bins should contain equal numbers of fends or be equally spaced along the parameter range, and a '-const' suffix to indicate the values are not to be optimized). [default: %(default)s]")
     return
 
-def add_combine_hic_replicates_subparser(subparsers):
-    """Add command 'combine-hic-replicates' arguments to parser.
+def add_hic_combine_replicates_subparser(subparsers):
+    """Add command 'hic-combine-replicates' arguments to parser.
     """
-    parser = subparsers.add_parser("combine-hic-replicates",
+    parser = subparsers.add_parser("hic-combine-replicates",
         help="HiFive Data Function: Combine two HiFive HiC datasets into a single dataset without needing to reload data. These files need to have been generated using the same HiFive Fend file.")
     parser.add_argument(dest="replicate1", type=str,
         help="Name of the first HiFive HiCDataset replicate file to be combined.")
@@ -592,7 +606,7 @@ def add_hic_heatmap_subparser(subparsers):
         help="Calculate and include trans interactions in heatmaps. [default: %(default)s]")
     parser.add_argument("-c", "--chromosomes", dest="chroms", default=None, type=str,
         help="A comma-separated list of chromosomes to include in the heatmaps (None indicates all chromosomes). [default: %(default)s]")
-    parser.add_argument("-d", "--data-type", dest="datatype", default="fend",
+    parser.add_argument("-d", "--datatype", dest="datatype", default="fend",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fend", "distance", "enrichment", "expected"])
     parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
@@ -636,7 +650,7 @@ def add_hic_interval_subparser(subparsers):
         help="Format the image in PDF format. [default: %(default)s]")
     parser.add_argument("-r", "--rotate", dest="rotate", default=False, action="store_true",
         help="Rotate the plot 45 degrees (binned only). [default: %(default)s]")
-    parser.add_argument("-t", "--tick-marks", dest="ticks", default=False, action="store_true",
+    parser.add_argument("-t", "--ticks", dest="ticks", default=False, action="store_true",
         help="Add tick marks and labels to the plot (pdf format and binned only). [default: %(default)s]")
     parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
         help="Add color scale to the plot (pdf format only). [default: %(default)s]")

@@ -108,7 +108,6 @@ class FiveC(object):
             self.chr2int[chrom] = i
         # create arrays
         self.filter = numpy.ones(self.frags['fragments'].shape[0], dtype=numpy.int32)
-        self.corrections = numpy.zeros(self.frags['fragments'].shape[0], dtype=numpy.float32)
         self.history += 'Success\n'
         return None
 
@@ -123,7 +122,6 @@ class FiveC(object):
         self.history.replace("'None'", "None")
         if not out_fname is None:
             original_file = os.path.abspath(self.file)
-            self.file = out_fname
             if 'datafilename' in self.__dict__:
                 datafilename = self.datafilename
                 if datafilename[:2] == './':
@@ -142,7 +140,9 @@ class FiveC(object):
                                         fragfilename.lstrip('/').split('/')[parent_count:])
                 self.fragfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
                                                os.path.dirname(self.file)), os.path.basename(fragfilename))
-        datafile = h5py.File(self.file, 'w')
+        else:
+            out_fname = self.file
+        datafile = h5py.File(out_fname, 'w')
         for key in self.__dict__.keys():
             if key in ['data', 'frags', 'file', 'chr2int', 'silent']:
                 continue
@@ -163,6 +163,20 @@ class FiveC(object):
 
         :returns: None
         """
+        # return attributes to init state
+        self.binning_corrections = None
+        self.binning_correction_indices = None
+        self.binning_frag_indices = None
+        self.binning_num_bins = None
+        self.model_parameters = None
+        self.corrections = None
+        self.region_means = None
+        self.gamma = None
+        self.sigma = None
+        self.trans_mean = None
+        self.normalization = 'none'
+        self.history = ''
+        # load data hdf5 dict
         datafile = h5py.File(self.file, 'r')
         for key in datafile.keys():
             self[key] = numpy.copy(datafile[key])
@@ -262,7 +276,9 @@ class FiveC(object):
         # find distances between fragment pairs
         log_distances = numpy.log(mids[data[valid, 1]] - mids[data[valid, 0]])
         # find regression line
-        log_counts = numpy.log(data[valid, 2]) - self.corrections[data[valid, 0]] - self.corrections[data[valid, 1]]
+        log_counts = numpy.log(data[valid, 2])
+        if not self.corrections is None:
+            log_counts -= self.corrections[data[valid, 0]] - self.corrections[data[valid, 1]]
         temp = linregress(log_distances, log_counts)[:2]
         self.gamma = -float(temp[0])
         if self.region_means is None:
@@ -298,7 +314,7 @@ class FiveC(object):
         :returns: None
         """
         self.history += "FiveC.find_probability_fragment_corrections(mindistance=%i, maxdistance=%i, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, precalculate=%s, regions=%s, precorrect=%s) - " % (mindistance, maxdistance, burnin_iterations, annealing_iterations, learningrate, precalculate, str(regions), precorrect)
-        if precorrect and self.gc_corrections is None and self.len_corrections is None:
+        if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
             self.history += "Error: 'find_binning_fragment_corrections()' not run yet\n"
@@ -311,25 +327,6 @@ class FiveC(object):
         # determine if distance parameters have been calculated
         if self.gamma is None:
             self.find_distance_parameters()
-        if precorrect:
-            if not self.gc_corrections is None:
-                gc_bins = int((0.25 + 2 * self.gc_corrections.shape[0]) ** 0.5 - 0.5)
-                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(gc_bins, 0)
-                gc_corrections[indices] = self.gc_corrections
-                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
-            else:
-                gc_corrections = None
-                gc_indices = None
-            if not self.len_corrections is None:
-                len_bins = int((0.25 + 2 * self.len_corrections.shape[0]) ** 0.5 - 0.5)
-                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(len_bins, 0)
-                len_corrections[indices] = self.len_corrections
-                len_corrections[indices[1], indices[0]] = len_corrections[indices]
-            else:
-                len_corrections = None
-                len_indices = None
         # limit corrections to only requested regions
         filt = numpy.copy(self.filter)
         for i in range(self.frags['regions'].shape[0]):
@@ -367,19 +364,12 @@ class FiveC(object):
         if precorrect:
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rFinding binning corrections...") % (' ' * 80),
-            if not gc_corrections is None:
-                gc_indices = numpy.searchsorted(self.gc_bins,
-                             self.frags['fragments']['gc'][...]).astype(numpy.int32)
-            if not len_corrections is None:
-                len_indices = numpy.searchsorted(self.len_bins,
-                              self.frags['fragments']['stop'][...] -
-                              self.frags['fragments']['start'][...]).astype(numpy.int32)
             _optimize.find_binning_correction_adjustment(distance_signal,
                                                             data,
-                                                            gc_corrections,
-                                                            len_corrections,
-                                                            gc_indices,
-                                                            len_indices)
+                                                            self.binning_corrections,
+                                                            self.binning_correction_indices,
+                                                            self.binning_num_bins,
+                                                            self.binning_frag_indices)
         # cycle through learning phases
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
@@ -468,7 +458,7 @@ class FiveC(object):
         :returns: None
         """
         self.history += "FiveC.find_express_fragment_corrections(mindistance=%i, maxdistance=%i, iterations=%i, remove_distance=%s, usereads='%s', regions=%s, precorrect=%s) - " % (mindistance, maxdistance, iterations, remove_distance, usereads, str(regions), precorrect)
-        if precorrect and self.gc_corrections is None and self.len_corrections is None:
+        if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
             self.history += "Error: 'find_binning_fragment_corrections()' not run yet\n"
@@ -484,25 +474,6 @@ class FiveC(object):
             regions = numpy.arange(self.frags['regions'].shape[0])
         if self.corrections is None:
             self.corrections = numpy.zeros(self.frags['fragments'].shape[0], dtype=numpy.float32)
-        if precorrect:
-            if not self.gc_corrections is None:
-                gc_bins = int((0.25 + 2 * self.gc_corrections.shape[0]) ** 0.5 - 0.5)
-                gc_corrections = numpy.zeros((gc_bins, gc_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(gc_bins, 0)
-                gc_corrections[indices] = self.gc_corrections
-                gc_corrections[indices[1], indices[0]] = gc_corrections[indices]
-            else:
-                gc_corrections = None
-                gc_indices = None
-            if not self.len_corrections is None:
-                len_bins = int((0.25 + 2 * self.len_corrections.shape[0]) ** 0.5 - 0.5)
-                len_corrections = numpy.zeros((len_bins, len_bins), dtype=numpy.float32)
-                indices = numpy.triu_indices(len_bins, 0)
-                len_corrections[indices] = self.len_corrections
-                len_corrections[indices[1], indices[0]] = len_corrections[indices]
-            else:
-                len_corrections = None
-                len_indices = None
         # limit corrections to only requested regions
         filt = numpy.copy(self.filter)
         for i in range(self.frags['regions'].shape[0]):
@@ -546,31 +517,24 @@ class FiveC(object):
         if precorrect:
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rFinding binning corrections...") % (' ' * 80),
-            if not gc_corrections is None:
-                gc_indices = numpy.searchsorted(self.gc_bins,
-                             self.frags['fragments']['gc'][...]).astype(numpy.int32)
-            if not len_corrections is None:
-                len_indices = numpy.searchsorted(self.len_bins,
-                              self.frags['fragments']['stop'][...] -
-                              self.frags['fragments']['start'][...]).astype(numpy.int32)
             if usereads in ['cis', 'all']:
                 if distance_signal is None:
                     distance_signal = numpy.zeros(data.shape[0], dtype=numpy.float32)
                 _optimize.find_binning_correction_adjustment(distance_signal,
-                                                                data,
-                                                                gc_corrections,
-                                                                len_corrections,
-                                                                gc_indices,
-                                                                len_indices)
+                                                             data,
+                                                             self.binning_corrections,
+                                                             self.binning_correction_indices,
+                                                             self.binning_num_bins,
+                                                             self.binning_frag_indices)
             if usereads in ['trans', 'all']:
                 if trans_signal is None:
                     trans_signal = numpy.zeros(trans_data.shape[0], dtype=numpy.float32)
                 _optimize.find_binning_correction_adjustment(trans_signal,
-                                                                trans_data,
-                                                                gc_corrections,
-                                                                len_corrections,
-                                                                gc_indices,
-                                                                len_indices)
+                                                             trans_data,
+                                                             self.binning_corrections,
+                                                             self.binning_correction_indices,
+                                                             self.binning_num_bins,
+                                                             self.binning_frag_indices)
         # create empty arrays
         fragment_means = numpy.zeros(self.filter.shape[0], dtype=numpy.float64)
         interactions = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
@@ -629,7 +593,7 @@ class FiveC(object):
 
     def find_binning_fragment_corrections(self, mindistance=0, maxdistance=0, model=['gc', 'len'], num_bins=[10, 10],
                                           parameters=['even', 'even'], learning_threshold=1.0, max_iterations=100,
-                                          usereads='cis', regions=[]):
+                                          usereads='cis', regions=[], precorrect=False):
         """
         Using multivariate binning model, learn correction values for combinations of model parameter bins.
 
@@ -637,7 +601,7 @@ class FiveC(object):
         :type mindistance: int.
         :param maxdistance: The maximum inter-fend distance to be included in modeling.
         :type maxdistance: int.
-        :param model: A list of fend features to be used in model. Valid values are 'gc', 'len', and 'distance'. The 'distance' parameter is only good with 'cis' or 'all' reads and the 'binary' or 'raw' datatype. If used with 'all', distances will be partitioned into n - 1 bins and the final distance bin will contain all trans data.
+        :param model: A list of fragment features to be used in model. Valid values are 'len' and any features included in the creation of the associated Fragment object.
         :type model: list
         :param num_bins: The number of approximately equal-sized bins two divide model components into.
         :type num_bins: int.
@@ -653,12 +617,14 @@ class FiveC(object):
         :type usereads: str.
         :param regions: A list of regions to calculate corrections for. If set as None, all region corrections are found.
         :type regions: list
+        :param precorrect: Use fragment-based corrections in expected value calculations, resulting in a chained normalization approach.
+        :type precorrect: bool.
         :returns: None
         """
         self.history += "FiveC.find_binning_fragment_corrections(mindistance=%i, maxdistance=%i, num_bins=%s, model=%s, learning_threshold=%f, max_iterations=%i, usereads='%s', regions=%s) - " % (mindistance, maxdistance, str(num_bins), str(model), learning_threshold, max_iterations, usereads, str(regions))
         present = True
         for parameter in model:
-            if not parameter in ['len', 'distance'] and parameter not in self.frags['fragments'].dtype.names:
+            if not parameter in ['len'] and parameter not in self.frags['fragments'].dtype.names:
                 if not self.silent:
                     print >> sys.stderr, ("Fragment feature %s not found in fragment object. Try removing it from model or creating a new fragment object with feature data.\n") % (parameter),
                 self.history += "Error: model parameter '%s' not found in fragment data\n" % parameter
@@ -669,21 +635,21 @@ class FiveC(object):
                     print >> sys.stderr, ("Fragment feature type %s is not valid.") % (parameter),
                 self.history += "Error: model feature type '%s' not valid\n" % parameter
                 return None
-        if 'distance' in model and usereads == 'trans':
-            if not self.silent:
-                print >> sys.stderr, ("The 'distance' parameter can only be used in conjuction with 'cis' or 'all' reads.\n"),
-            self.history += "Error: model parameter 'distance' cannot be used with 'trans'\n"
-            return None
         if len(model) != len(num_bins):
             if not self.silent:
                 print >> sys.stderr, ("The number of items in the 'model' parameter must be the same as the number in the 'num_bins' parameter.\n"),
             self.history += "Error: mismatch between lengths of 'num_bins' and 'model'\n"
             return None
         # make sure usereads has a valid value
-        if usereads not in ['cis', 'trans', 'all', 'cis-corrected']:
+        if usereads not in ['cis', 'trans', 'all']:
             if not self.silent:
                 print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
             self.history += "Error: '%s' not a valid value for 'usereads'\n" % usereads
+            return None
+        if precorrect and self.corrections is None:
+            if not self.silent:
+                print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_probability_fragment_corrections' or 'find_express_fragment_corrections'.\n"),
+            self.history += "Error: 'find_binning_fragment_corrections()' or 'find_binning_fragment_corrections()' not run yet\n"
             return None
         # if regions not given, set to all regions
         if regions == None or len(regions) == 0:
@@ -700,15 +666,6 @@ class FiveC(object):
         valid = numpy.where(filt == 1)[0]
         if not self.silent:
             print >> sys.stderr, ("\r%s\rPartitioning features into bins...") % (' ' * 80),
-        if 'distance' in model:
-            use_distance = True
-            index = model.index('distance')
-            model = model[:index] + model[(index + 1):]
-            distance_bins = num_bins[index]
-            num_bins = num_bins[:index] + num_bins[(index + 1):]
-            parameters = parameters[:index] + parameters[(index + 1):]
-        else:
-            use_distance = False
         num_bins = numpy.array(num_bins, dtype=numpy.int32)
         total_bins = 1
         all_bins = numpy.zeros(0, dtype=numpy.float32)
@@ -721,10 +678,8 @@ class FiveC(object):
             if model[i] == 'len':
                 values = (self.frags['fragments']['stop'][...] -
                           self.frags['fragments']['start'][...]).astype(numpy.float32)
-            elif model[i] != 'distance':
-                values = self.frags['fragments'][model[i]][...]
             else:
-                continue
+                values = self.frags['fragments'][model[i]][...]
             if parameters[i].count('even') > 0:
                 temp = numpy.copy(values)
                 temp.sort()
@@ -745,31 +700,10 @@ class FiveC(object):
         self.binning_frag_indices = all_indices
         self.binning_num_bins = num_bins
         mids = self.frags['fragments']['mid'][...]
-        if use_distance:
-            distance_bins = num_bins[model.index('distance')]
-            if maxdistance == 0:
-                max_dist = 0
-                dists = mids[chr_indices[1:] - 1] - mids[chr_indices[:-1]]
-                for chrom in chroms:
-                    max_dist = max(max_dist, dists[self.chr2int[chrom]])
-            else:
-                max_dist = maxdistance
-            if usereads == 'cis':
-                distance_cutoffs = numpy.ceil(numpy.exp(numpy.linspace(numpy.log(max(1, mindistance)),
-                                              numpy.log(max_dist), distance_bins + 1))[1:]).astype(numpy.int32)
-            else:
-                distance_cutoffs = numpy.ceil(numpy.exp(numpy.linspace(numpy.log(max(1, mindistance)),
-                                              numpy.log(max_dist), distance_bins))[1:]).astype(numpy.int32)
-            distance_cutoffs[-1] += 1
-            distance_corrections = numpy.zeros(distance_bins, dtype=numpy.float64)
-            distance_div = total_bins
-            total_bins *= distance_bins
-        else:
-            distance_cutoffs = None
-            distance_corrections = None
-            distance_div = 0
-            distance_bins = 0
-        bin_counts = numpy.zeros((total_bins, 2), dtype=numpy.int64)
+        region_ints = self.frags['fragments']['region'][...]
+
+        bin_counts = numpy.zeros(total_bins, dtype=numpy.int64)
+        bin_sums = numpy.zeros((total_bins, 2), dtype=numpy.float64)
         if not self.silent:
             print >> sys.stderr, ("\r%s\rFinding bin counts...") % (' ' * 80),
         # Find number of observations in each bin
@@ -778,135 +712,93 @@ class FiveC(object):
         trans_data = None
         corrected_counts = None
         data_indices = None
+        trans_mean = 0.0
+        gamma = 0.0
+        frag_corrections = None
+        if precorrect:
+            frag_corrections = self.corrections
         if usereads in ['cis', 'all']:
             data = self.data['cis_data'][...]
             data = data[numpy.where(filt[data[:, 0]] * filt[data[:, 1]])[0], :]
+            if self.gamma is None:
+                self.find_distance_parameters()
+            gamma = self.gamma
         if usereads in ['trans', 'all']:
             trans_data = self.data['trans_data'][...]
             trans_data = trans_data[numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0], :] 
+            if self.trans_mean is None:
+                self.find_trans_mean()
+            trans_mean = self.trans_mean
         _binning.binning_bin_observed(data,
                                       trans_data,
+                                      region_ints,
                                       mids,
                                       bin_counts,
+                                      bin_sums,
                                       all_indices,
-                                      distance_cutoffs,
                                       num_bins,
                                       bin_divs,
-                                      distance_div,
-                                      distance_bins,
+                                      self.region_means,
+                                      frag_corrections,
                                       mindistance,
-                                      maxdistance)
-        if usereads in ['cis', 'all']:
-            for i in regions:
-                # Find number of possible interactions in each bin
-                startfrag = self.frags['regions']['start_frag'][i]
-                stopfrag = self.frags['regions']['stop_frag'][i]
-                _binning.binning_bin_cis_expected(filt,
-                                                     mids,
-                                                     strands,
-                                                     bin_counts,
-                                                     all_indices,
-                                                     distance_cutoffs,
-                                                     num_bins,
-                                                     bin_divs,
-                                                     distance_div,
-                                                     distance_bins,
-                                                     mindistance,
-                                                     maxdistance,
-                                                     startfrag,
-                                                     stopfrag)
-        if usereads in ['trans', 'all']:
-            for i in range(len(regions) - 1):
-                # Find number of possible interactions in each bin
-                startfrag1 = self.frags['regions']['start_frag'][regions[i]]
-                stopfrag1 = self.frags['regions']['stop_frag'][regions[i]]
-                for j in range(i + 1, len(regions)):
-                    startfrag2 = self.frags['regions']['start_frag'][regions[j]]
-                    stopfrag2 = self.frags['regions']['stop_frag'][regions[j]]
-                    _binning.binning_bin_trans_expected(filt,
-                                                           mids,
-                                                           strands,
-                                                           bin_counts,
-                                                           all_indices,
-                                                           num_bins,
-                                                           bin_divs,
-                                                           distance_div,
-                                                           distance_bins,
-                                                           mindistance,
-                                                           maxdistance,
-                                                           startfrag1,
-                                                           stopfrag1,
-                                                           startfrag2,
-                                                           stopfrag2)
+                                      maxdistance,
+                                      gamma,
+                                      trans_mean)
         # Find seed values
         if not self.silent:
             print >> sys.stderr, ("\r%s\rFinding seed values...") % (' ' * 80),
-        bin_counts = bin_counts.astype(numpy.float64)
-        bin_counts[numpy.where(bin_counts[:, 0] == 0)[0], :] += 1
-        prior = numpy.sum(bin_counts[:, 0]) / numpy.sum(bin_counts[:, 1]).astype(numpy.float64)
-        log_prior = numpy.log2(prior)
-        log_2 = numpy.log(2.0)
-        min_p = 1.0 / numpy.sum(bin_counts[:, 1])
         all_indices = numpy.zeros((bin_counts.shape[0], len(model)), dtype=numpy.int32)
+        n = numpy.sum(bin_counts)
         for i in range(correction_indices.shape[0] - 1):
-            temp0 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 0], minlength=num_bins[i])
-            temp1 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 1], minlength=num_bins[i])
-            where = numpy.where(temp1 > 0)[0]
             all_indices[:, i] = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / bin_divs[i]) %
                                  (correction_indices[i + 1] - correction_indices[i]))
-            all_corrections[where + correction_indices[i]:] = temp0[where] / temp1[where].astype(numpy.float64) / prior
-        if distance_bins > 0:
-            distance_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / distance_div) %
-                                distance_corrections.shape[0])
-            distance_corrections = (
-                numpy.bincount(distance_indices, weights=bin_counts[:, 0],
-                minlength=distance_corrections.shape[0]).astype(numpy.float64) /
-                (numpy.maximum(1, numpy.bincount(distance_indices, weights=bin_counts[:, 1],
-                minlength=distance_corrections.shape[0])) * prior)).astype(numpy.float64)
-        else:
-            distance_indices = None
+            temp0 = numpy.bincount(all_indices[:, i], weights=bin_sums[:, 0], minlength=num_bins[i])
+            temp1 = numpy.bincount(all_indices[:, i], weights=bin_counts, minlength=num_bins[i])
+            where = numpy.where(temp1 > 0)[0]
+            all_corrections[where + correction_indices[i]] = temp0[where] / temp1[where].astype(numpy.float64)
 
-        def find_ll(indices, corrections, correction_indices, distance_c, distance_i, counts, prior, min_p):
-            prod = numpy.ones(counts.shape[0], dtype=numpy.float64)
-            for i in range(indices.shape[1]):
-                prod *= corrections[correction_indices[i] + indices[:, i]]
-            if not distance_c is None:
-                prod *= distance_c[distance_i]
-            prod *= prior
-            sum_log = numpy.log2(prod)
-            prod = numpy.maximum(1.0 - prod, min_p)
-            return (-numpy.sum(counts[:, 0] * sum_log + counts[:, 1] * numpy.log2(prod)))
-        
-        def find_sum_log_prod(index, indices, corrections, correction_indices, distance_c, distance_i, sum_log, prod):
-            prod.fill(1.0)
+        def find_cor_sums(index, indices, corrections, correction_indices, cor_sums):
+            cor_sums.fill(0.0)
             for i in range(indices.shape[1]):
                 if i == index:
                     continue
-                prod *= corrections[correction_indices[i] + indices[:, i]]
-            if not distance_c is None:
-                prod *= distance_c[distance_i]
-            sum_log[:] = numpy.log2(prod)
+                cor_sums += corrections[correction_indices[i] + indices[:, i]]
             return
 
+        def find_sigma2(counts, sums, cor_sums, n):
+            return 1.0 / (n - 1.0) * numpy.sum(counts * cor_sums ** 2.0 + sums[:, 1] - 2 * cor_sums * sums[:, 0])
+
+        def find_ll(counts, sums, cor_sums, n, sigma, sigma2):
+            return (n * (log(sigma) + 0.5 * log(2.0 * numpy.pi)) + 1.0 / (2.0 * sigma2) *
+                    numpy.sum(counts * cor_sums ** 2.0 + sums[:, 1] - 2.0 * cor_sums * sums[:, 0]))
+        
         def temp_ll(x, *args):
-            counts, sum_log, prod, prior, log_prior, log_2, min_p = args[:7]
-            return -numpy.sum(counts[:, 0] * (log_prior + sum_log + numpy.log2(x[0])) +
-                             counts[:, 1] * numpy.log2(numpy.maximum(min_p, 1.0 - prior * prod * x[0])))
+            counts, sums, cor_sums, n, ni, sigma, sigma2 = args[:7]
+            return (ni * (log(sigma) + 0.5 * log(2.0 * numpy.pi)) + 1.0 / (2.0 * sigma2) *
+                    numpy.sum(counts * (cor_sums + x[0]) ** 2.0 + sums[:, 1] - 2.0 * (cor_sums + x[0]) * sums[:, 0]))
 
         def temp_ll_grad(x, *args):
-            counts, sum_log, prod, prior, log_prior, log_2 = args[:6]
-            grad = numpy.array(-numpy.sum(counts[:, 0] / (log_2 * x[0]) - counts[:, 1] *
-                               prior * prod / (log_2 * (1.0 - prior * prod * x[0]))), dtype=numpy.float64)
-            return grad
+            counts, sums, cor_sums, n, ni, sigma, sigma2 = args[:7]
+            cor_sums1 = cor_sums + x[0]
+            cor_sums2 = cor_sums1 ** 2.0
+            M = numpy.sum(counts * cor_sums2 + sums[:, 1] - 2.0 * cor_sums1 * sums[:, 0])
+            N = 1.0 / (n - 1.0) * numpy.sum(2.0 * counts * cor_sums1 - 2.0 * sums[:, 0])
+            O = N / (2.0 * sigma)
+            grad = (ni / sigma * O - M * N / (2.0 * sigma2 ** 2.0) + 1.0 / sigma2 *
+                    (ni * x[0] + numpy.sum(counts * cor_sums) - numpy.sum(sums[:, 0])))
+            return numpy.array(grad, dtype=numpy.float64)
 
-        ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
-                     bin_counts, prior, min_p)
+        cor_sums = numpy.zeros(bin_counts.shape[0], dtype=numpy.float64)
+        find_cor_sums(-1, all_indices, all_corrections, correction_indices, cor_sums)
+        sigma2 = find_sigma2(bin_counts, bin_sums, cor_sums, n)
+        sigma = sigma2 ** 0.5
+        ll = find_ll(bin_counts, bin_sums, cor_sums, n, sigma, sigma2)
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:00  ll:%f") % (' ' * 80, ll),
         iteration = 0
         delta = numpy.inf
         pgtol = 1e-8
-        numpy.seterr(invalid='ignore', divide='ignore')
+        old_settings = numpy.seterr(invalid='ignore', divide='ignore')
         while iteration < max_iterations and delta >= learning_threshold:
             new_corrections = numpy.copy(all_corrections)
             for h in range(len(model)):
@@ -915,22 +807,23 @@ class FiveC(object):
                     continue
                 num_cor = correction_indices[h + 1] - correction_indices[h]
                 bins = bin_counts.shape[0] / num_cor
-                temp_sum_log = numpy.zeros(bins, dtype=numpy.float64)
-                temp_prod = numpy.ones(bins, dtype=numpy.float64)
+                temp_cor_sums = numpy.zeros(bins, dtype=numpy.float64)
                 for i in range(num_cor):
                     where = numpy.where(all_indices[:, h] == i)[0]
-                    temp_bin_counts = bin_counts[where, :]
+                    temp_bin_counts = bin_counts[where]
+                    temp_bin_sums = bin_sums[where]
+                    find_cor_sums(h, all_indices[where, :], all_corrections, correction_indices, temp_cor_sums)
+                    ni = numpy.sum(temp_bin_counts)
                     x0 = all_corrections[(correction_indices[h] + i):(correction_indices[h] + i + 1)]
-                    find_sum_log_prod(h, all_indices[where, :], all_corrections, correction_indices,
-                                      distance_corrections, distance_indices, temp_sum_log,
-                                      temp_prod)
                     x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
-                                   args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2, min_p))
+                                   args=(temp_bin_counts, temp_bin_sums, temp_cor_sums, n, ni, sigma, sigma2))
                     new_corrections[correction_indices[h] + i] = x[0]
             all_corrections = new_corrections
             iteration += 1
-            new_ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
-                         bin_counts, prior, min_p)
+            find_cor_sums(-1, all_indices, all_corrections, correction_indices, cor_sums)
+            sigma2 = find_sigma2(bin_counts, bin_sums, cor_sums, n)
+            sigma = sigma2 ** 0.5
+            new_ll = find_ll(bin_counts, bin_sums, cor_sums, n, sigma, sigma2)
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:%02i  ll:%f\n") % (' ' * 80,
                                       iteration, new_ll),
@@ -938,12 +831,19 @@ class FiveC(object):
             if delta < 0.0:
                 delta = numpy.inf
             ll = new_ll
-        self.binning_corrections = numpy.log(all_corrections).astype(numpy.float32)
+        numpy.seterr(**old_settings)
+        self.binning_corrections = all_corrections.astype(numpy.float32)
         self.model_parameters = numpy.array(model)
         self.binning_correction_indices = correction_indices
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning binning corrections... Final ll:%f") % (' ' * 80, ll),
-        self.normalization = 'binning'
+            print >> sys.stderr, ("\r%s\rLearning binning corrections... Final ll:%f\n") % (' ' * 80, ll),
+        if precorrect:
+            if self.normalization == 'probability':
+                self.normalization = 'probability-binning'
+            else:
+                self.normalization = 'express-binning'
+        else:
+            self.normalization = 'binning'
         self.history += "Success\n"
         return None
 

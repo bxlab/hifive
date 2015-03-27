@@ -147,7 +147,6 @@ class HiC(object):
             return None
         if not out_fname is None:
             original_file = os.path.abspath(self.file)
-            self.file = out_fname
             if 'datafilename' in self.__dict__:
                 datafilename = self.datafilename
                 if datafilename[:2] == './':
@@ -166,7 +165,9 @@ class HiC(object):
                                         fendfilename.lstrip('/').split('/')[parent_count:])
                 self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
                                                os.path.dirname(self.file)), os.path.basename(fendfilename))
-        datafile = h5py.File(self.file, 'w')
+        else:
+            out_fname = self.file
+        datafile = h5py.File(out_fname, 'w')
         for key in self.__dict__.keys():
             if key in ['data', 'fends', 'file', 'chr2int', 'comm', 'rank', 'num_procs', 'silent']:
                 continue
@@ -187,6 +188,18 @@ class HiC(object):
 
         :returns: None
         """
+        # set parameters to init state
+        self.binning_corrections = None
+        self.binning_correction_indices = None
+        self.binning_fend_indices = None
+        self.binning_num_bins = None
+        self.model_parameters = None
+        self.corrections = None
+        self.distance_parameters = None
+        self.chromosome_means = None
+        self.normalization = 'none'
+        self.history = ''
+        # load data hdf5 dict 
         datafile = h5py.File(self.file, 'r')
         for key in datafile.keys():
             self[key] = numpy.copy(datafile[key])
@@ -466,7 +479,8 @@ class HiC(object):
                 print >> sys.stderr, ("This normalization requires a project that has already had 'find_distance_parameters' run.\n"),
             self.history += "Error: 'find_distance_parameters()' not run yet\n"
             return None
-        self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
+        if self.corrections is None:
+            self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -821,7 +835,8 @@ class HiC(object):
             return None
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
-        self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
+        if self.corrections is None:
+            self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
         if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
             binned = 1
         else:
@@ -1087,7 +1102,7 @@ class HiC(object):
         :type chroms: list
         :param remove_distance: Use distance dependence curve in prior probability calculation for each observation.
         :type remove_distance: bool.
-        :param model: A list of fend features to be used in model. Valid values are len', 'distance', and any features included in the creation of the associated Fend object. The 'distance' parameter is only good with 'cis' or 'all' reads. If used with 'all', distances will be partitioned into n - 1 bins and the final distance bin will contain all trans data.
+        :param model: A list of fend features to be used in model. Valid values are 'len', 'distance', and any features included in the creation of the associated Fend object. The 'distance' parameter is only good with 'cis' or 'all' reads. If used with 'all', distances will be partitioned into n - 1 bins and the final distance bin will contain all trans data.
         :type model: list
         :param num_bins: A list of the number of approximately equal-sized bins two divide model components into.
         :type num_bins: list
@@ -1344,12 +1359,12 @@ class HiC(object):
         min_p = 1.0 / numpy.sum(bin_counts[:, 1])
         all_indices = numpy.zeros((bin_counts.shape[0], len(model)), dtype=numpy.int32)
         for i in range(correction_indices.shape[0] - 1):
+            all_indices[:, i] = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / bin_divs[i]) %
+                                 (correction_indices[i + 1] - correction_indices[i]))
             temp0 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 0], minlength=num_bins[i])
             temp1 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 1], minlength=num_bins[i])
             where = numpy.where(temp1 > 0)[0]
-            all_indices[:, i] = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / bin_divs[i]) %
-                                 (correction_indices[i + 1] - correction_indices[i]))
-            all_corrections[where + correction_indices[i]:] = temp0[where] / temp1[where].astype(numpy.float64) / prior
+            all_corrections[where + correction_indices[i]] = temp0[where] / temp1[where].astype(numpy.float64) / prior
         if distance_bins > 0:
             distance_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / distance_div) %
                                 distance_corrections.shape[0])
@@ -1369,8 +1384,8 @@ class HiC(object):
             if not distance_c is None:
                 prod *= distance_c[distance_i]
             prod *= prior
+            prod = numpy.minimum(1.0 - min_p, numpy.maximum(1.0 - prod, min_p))
             sum_log = numpy.log2(prod)
-            prod = numpy.maximum(1.0 - prod, min_p)
             return (-numpy.sum(counts[:, 0] * sum_log + counts[:, 1] * numpy.log2(prod)))
 
         def find_sum_log_prod(index, indices, corrections, correction_indices, distance_c, distance_i, sum_log, prod):
@@ -1390,9 +1405,9 @@ class HiC(object):
                              counts[:, 1] * numpy.log2(numpy.maximum(min_p, 1.0 - prior * prod * x[0])))
 
         def temp_ll_grad(x, *args):
-            counts, sum_log, prod, prior, log_prior, log_2 = args[:6]
+            counts, sum_log, prod, prior, log_prior, log_2, min_p = args[:7]
             grad = numpy.array(-numpy.sum(counts[:, 0] / (log_2 * x[0]) - counts[:, 1] *
-                               prior * prod / (log_2 * (1.0 - prior * prod * x[0]))), dtype=numpy.float64)
+                               prior * prod / (log_2 * numpy.maximum(min_p, 1.0 - prior * prod * x[0]))), dtype=numpy.float64)
             return grad
 
         ll = find_ll(all_indices, all_corrections, correction_indices, distance_corrections, distance_indices,
@@ -1404,7 +1419,7 @@ class HiC(object):
         pgtol = 1e-8
 
 
-        numpy.seterr(invalid='ignore', divide='ignore')
+        old_settings = numpy.seterr(invalid='ignore', divide='ignore')
         while iteration < max_iterations and delta >= learning_threshold:
             new_corrections = numpy.copy(all_corrections)
             for h in range(len(model)):
@@ -1422,7 +1437,7 @@ class HiC(object):
                     temp_bin_counts = bin_counts[where, :]
                     x0 = all_corrections[(correction_indices[h] + i):(correction_indices[h] + i + 1)]
                     find_sum_log_prod(h, all_indices[where, :], all_corrections, correction_indices,
-                                      distance_corrections, distance_indices, temp_sum_log,
+                                      distance_corrections, distance_indices[where], temp_sum_log,
                                       temp_prod)
                     x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
                                    args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2, min_p))
@@ -1452,6 +1467,7 @@ class HiC(object):
             if delta < 0.0:
                 delta = numpy.inf
             ll = new_ll
+        numpy.seterr(**old_settings)
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning binning corrections... Final ll:%f\n") % (' ' * 80, ll),
         self.normalization = 'binning'

@@ -38,20 +38,22 @@ cdef extern from "_normal.hpp":
 def find_binning_correction_adjustment(
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_int_t, ndim=2] indices not None,
-        np.ndarray[DTYPE_t, ndim=2] gc_corrections,
-        np.ndarray[DTYPE_t, ndim=2] len_corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] gc_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] len_indices):
-    cdef long long int i, frag1, frag2
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
+        np.ndarray[DTYPE_int_t, ndim=2] frag_indices):
+    cdef long long int i, frag1, frag2, bin1, bin2, index
     cdef long long int num_frags = corrections.shape[0]
+    cdef long long int num_parameters = frag_indices.shape[1]
     with nogil:
         for i in range(num_frags):
             frag1 = indices[i, 0]
             frag2 = indices[i, 1]
-            if not gc_indices is None:
-                corrections[i] += gc_corrections[gc_indices[frag1], gc_indices[frag2]]
-            if not len_indices is None:
-                corrections[i] += len_corrections[len_indices[frag1], len_indices[frag2]]
+            for j in range(num_parameters):
+                bin1 = min(frag_indices[frag1, j], frag_indices[frag2, j])
+                bin2 = max(frag_indices[frag1, j], frag_indices[frag2, j])
+                index = (num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
+                corrections[i] *= binning_corrections[index]
     return None
 
 

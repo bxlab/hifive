@@ -514,17 +514,21 @@ def dynamically_bin_trans(
 def binning_bin_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_int_t, ndim=1] regions,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
-        np.ndarray[DTYPE_int64_t, ndim=2] counts,
+        np.ndarray[DTYPE_int64_t, ndim=1] counts,
+        np.ndarray[DTYPE_64_t, ndim=2] sums,
         np.ndarray[DTYPE_int_t, ndim=2] all_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
         np.ndarray[DTYPE_int_t, ndim=1] num_bins,
         np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
-        int distance_div,
-        int distance_bins,
+        np.ndarray[DTYPE_t, ndim=1] region_means,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
         int mindistance,
-        int maxdistance):
+        int maxdistance,
+        float gamma,
+        float trans_mean):
     cdef long long int i, k, distance, frag1, frag2, index, bin1, bin2, prev_frag, num_data, num_trans
+    cdef double log_dist, signal, log_count
     cdef long long int num_features = all_indices.shape[1]
     if not data is None:
         num_data = data.shape[0]
@@ -550,11 +554,14 @@ def binning_bin_observed(
                 bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
                 bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
                 index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
-            if distance_div > 0:
-                while distance > distance_cutoffs[k]:
-                    k += 1
-                index += k * distance_div
-            counts[index, 0] += 1
+            counts[index] += 1
+            log_dist = log(distance)
+            signal = region_means[regions[frag1]] - log_dist * gamma
+            log_count = log(data[i, 2])
+            if not corrections is None:
+                log_count -= corrections[frag1] - corrections[frag2]
+            sums[index, 0] += log_count - signal
+            sums[index, 1] += pow(log_count - signal, 2.0)
         for i in range(num_trans):
             frag1 = trans_data[i, 0]
             frag2 = trans_data[i, 1]
@@ -563,90 +570,10 @@ def binning_bin_observed(
                 bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
                 bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
                 index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
-            if distance_div > 0:
-                index += (distance_bins - 1) * distance_div
-            counts[index, 0] += 1
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def binning_bin_cis_expected(
-        np.ndarray[DTYPE_int_t, ndim=1] filt,
-        np.ndarray[DTYPE_int_t, ndim=1] mids,
-        np.ndarray[DTYPE_int_t, ndim=1] strands,
-        np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
-        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
-        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
-        int distance_div,
-        int distance_bins,
-        int mindistance,
-        int maxdistance,
-        int startfrag,
-        int stopfrag):
-    cdef long long int i, j, k, distance, frag1, frag2, index, bin1, bin2
-    cdef long long int num_features = all_indices.shape[1]
-    with nogil:
-        for frag1 in range(startfrag, stopfrag - 1):
-            if filt[frag1] == 0:
-                continue
-            k = 0
-            for frag2 in range(frag1 + 1, stopfrag):
-                if filt[frag2] == 0 or strands[frag1] == strands[frag2]:
-                    continue
-                distance = mids[frag2] - mids[frag1]
-                if distance < mindistance or distance > maxdistance:
-                    continue
-                index = 0
-                for j in range(num_features):
-                    bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
-                    bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
-                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
-                if distance_div > 0:
-                    while distance > distance_cutoffs[k]:
-                        k += 1
-                    index += k * distance_div
-                counts[index, 1] += 1
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def binning_bin_trans_expected(
-        np.ndarray[DTYPE_int_t, ndim=1] filt,
-        np.ndarray[DTYPE_int_t, ndim=1] mids,
-        np.ndarray[DTYPE_int_t, ndim=1] strands,
-        np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] num_bins,
-        np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
-        int distance_div,
-        int distance_bins,
-        int mindistance,
-        int maxdistance,
-        int startfrag1,
-        int stopfrag1,
-        int startfrag2,
-        int stopfrag2):
-    cdef long long int i, j, k, frag1, frag2, index, bin1, bin2
-    cdef long long int num_features = all_indices.shape[1]
-    with nogil:
-        for frag1 in range(startfrag1, stopfrag1):
-            if filt[frag1] == 0:
-                continue
-            for frag2 in range(startfrag2, stopfrag2):
-                if filt[frag2] == 0 or strands[frag1] == strands[frag2]:
-                    continue
-                index = 0
-                for j in range(num_features):
-                    bin1 = min(all_indices[frag1, j], all_indices[frag2, j])
-                    bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
-                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
-                if distance_div > 0:
-                    index += (distance_bins - 1) * distance_div
-                counts[index, 1] += 1
+            counts[index] += 1
+            log_count = log(trans_data[i, 2])
+            if not corrections is None:
+                log_count -= corrections[frag1] - corrections[frag2]
+            sums[index, 0] += log_count - trans_mean
+            sums[index, 1] += pow(log_count - trans_mean, 2.0)
     return None

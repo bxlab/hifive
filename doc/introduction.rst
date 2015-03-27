@@ -7,10 +7,10 @@ Introduction
 
 :mod:`HiFive` is a Python package for normalization and analysis of chromatin structural data produced using either the 5C of HiC assay. The aim of HiFive is to create an efficient framework for handling the large amounts of data associated chromatin interaction studies and provide an easy interface for working with and normalizing these data. There are two ways of utilizing HiFive, either through its binary executable or by using its set of classes and functions for more flexibility in analysis. In order to use HiFive, only two types of information are required. First, you need a record of restriction enzyme fragments in an appropriate format (see :class:`hifive.fragment.Fragment` or :class:`hifive.fend.Fend`) for either the subset of targeted fragments or the whole genome for 5C and HiC, respectively. Second, you need 5C or HiC chromatin interaction data, either in a mapped BAM format or in an appropriate post-processed format (see :class:`hifive.fragment.Fragment` or :class:`hifive.fend.Fend`). HiFive will handle everything else. In addition, because of the large memory and time requirements, HiFive uses modularity to avoid repeating processes such as loading data. This allows easy exploration of analysis parameters at a faster rate.
 
-.. _using_hifive:
+.. _overview_hifive:
 
-Using HiFive
-============
+HiFive Overview
+======================
 
 ::
 
@@ -32,7 +32,7 @@ There are eight major functions for both 5C and HiC data types available as subc
 :5c-complete:           Perform all of the steps of the subcommands fragments, 5c-data, 5c-project, and 5c-normalization in one command.
 :5c-heatmap:            Using an already created 5C project, generate an HDF5-formatted heatmap file and optional image.
 :5c-interval:           Using an already created 5C project, generate a tabular genomic-interval file for a specified region and optional image.
-:combine-5c-replicates: Combine multiple 5C data files into a single file without needing to reload the data.
+:5c-combine-replicates: Combine multiple 5C data files into a single file without needing to reload the data.
 
 .. _normalization: normalization.html
 
@@ -46,11 +46,15 @@ HiC
 :hic-complete:            Perform all of the steps of the subcommands fends, hic-data, hic-project, and hic-normalization in one command.
 :hic-heatmap:             Using an already created HiC project, generate an HDF5-formatted heatmap file and optional image.
 :hic-interval:            Using an already created HiC project, generate a tabular genomic-interval file for a specified region and optional image.
-:combine-hic-replicates:  Combine multiple HiC data files into a single file without needing to reload the data.
+:hic-combine-replicates:  Combine multiple HiC data files into a single file without needing to reload the data.
+
+A more detailed explanation of the subcommands and all of the command options is here_.
+
+.. _here: hifive.html
 
 .. _organization_of_the_hifive_package:
 
-Organization of the :mod:`HiFive` package
+Organization of the HiFive package
 =========================================
 
 The :mod:`HiFive` package is split into several modules, each serving a specific purpose.

@@ -17,13 +17,13 @@ class HiCProject(unittest.TestCase):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
         self.data_fname = '%s/tests/data/test.hcd' % self.basedir
         self.project_fname = '%s/tests/data/test.hcp' % self.basedir
-        self.analyzed_fname = '%s/tests/data/test_analyzed.hcp' % self.basedir
+        self.probability_fname = '%s/tests/data/test_probability.hcp' % self.basedir
         self.express_fname = '%s/tests/data/test_express.hcp' % self.basedir
-        self.regression_fname = '%s/tests/data/test_regression.hcp' % self.basedir
+        self.binning_fname = '%s/tests/data/test_binning.hcp' % self.basedir
         self.data = h5py.File(self.project_fname, 'r')
-        self.analyzed = hic.HiC(self.analyzed_fname, 'r')
+        self.probability = hic.HiC(self.probability_fname, 'r')
         self.express = hic.HiC(self.express_fname, 'r')
-        self.regression = hic.HiC(self.regression_fname, 'r')
+        self.binning = hic.HiC(self.binning_fname, 'r')
 
     def test_hic_project_preanalysis(self):
         project = hic.HiC('%s/tests/data/test_temp.hcp' % self.basedir, 'w', silent=True)
@@ -49,9 +49,9 @@ class HiCProject(unittest.TestCase):
         project.find_probability_fend_corrections(mindistance=10000, maxdistance=1000000, minchange=0.0015,
                                                   burnin_iterations=100, annealing_iterations=10, learningrate=0.4,
                                                   display=0)
-        self.assertTrue(numpy.allclose(self.analyzed.corrections, project.corrections),
+        self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
             "learned correction values don't match target values")
-        self.assertTrue(numpy.allclose(self.analyzed.chromosome_means, project.chromosome_means),
+        self.assertTrue(numpy.allclose(self.probability.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
     def test_hic_project_express(self):
@@ -59,15 +59,17 @@ class HiCProject(unittest.TestCase):
         project.find_express_fend_corrections(mindistance=10000, iterations=100)
         self.assertTrue(numpy.allclose(self.express.corrections, project.corrections),
             "learned express correction values don't match target values")
+        print list(self.express.chromosome_means)
+        print list(project.chromosome_means)
         self.assertTrue(numpy.allclose(self.express.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
-    def test_hic_project_express(self):
+    def test_hic_project_binning(self):
         project = hic.HiC(self.project_fname, 'r', silent=True)
-        project.find_regression_fend_corrections(model=['len','distance'], num_bins=[3, 3], usereads='cis',
+        project.find_binning_fend_corrections(model=['len','distance'], num_bins=[3, 3], usereads='cis',
                                                  max_iterations=5)
-        self.assertTrue(numpy.allclose(self.regression.len_corrections, project.len_corrections),
-            "learned regression correction values don't match target values")
+        self.assertTrue(numpy.allclose(self.binning.binning_corrections, project.binning_corrections),
+            "learned binning correction values don't match target values")
 
     def tearDown(self):
         subprocess.call('rm -f %s/tests/data/test_temp.hcp' % self.basedir, shell=True)

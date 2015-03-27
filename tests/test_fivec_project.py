@@ -17,13 +17,13 @@ class FiveCProject(unittest.TestCase):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
         self.data_fname = '%s/tests/data/test.fcd' % self.basedir
         self.project_fname = '%s/tests/data/test.fcp' % self.basedir
-        self.analyzed_fname = '%s/tests/data/test_analyzed.fcp' % self.basedir
+        self.probability_fname = '%s/tests/data/test_probability.fcp' % self.basedir
         self.express_fname = '%s/tests/data/test_express.fcp' % self.basedir
-        self.regression_fname = '%s/tests/data/test_regression.fcp' % self.basedir
+        self.binning_fname = '%s/tests/data/test_binning.fcp' % self.basedir
         self.raw = h5py.File(self.project_fname, 'r')
-        self.analyzed = fivec.FiveC(self.analyzed_fname, 'r')
+        self.probability = fivec.FiveC(self.probability_fname, 'r')
         self.express = fivec.FiveC(self.express_fname, 'r')
-        self.regression = fivec.FiveC(self.regression_fname, 'r')
+        self.binning = fivec.FiveC(self.binning_fname, 'r')
 
     def test_fivec_project_preanalysis(self):
         project = fivec.FiveC('%s/tests/data/test_temp.fcp' % self.basedir, 'w', silent=True)
@@ -48,9 +48,9 @@ class FiveCProject(unittest.TestCase):
         project = fivec.FiveC(self.project_fname, 'r', silent=True)
         project.find_probability_fragment_corrections(maxdistance=0, burnin_iterations=100, annealing_iterations=10,
                                                       learningrate=0.01)
-        self.assertTrue(numpy.allclose(self.analyzed.corrections, project.corrections),
+        self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
             "learned correction values don't match target values")
-        self.assertTrue(numpy.allclose(self.analyzed.region_means, project.region_means),
+        self.assertTrue(numpy.allclose(self.probability.region_means, project.region_means),
                                        "region means don't match target values")
 
     def test_fivec_project_express(self):
@@ -61,12 +61,14 @@ class FiveCProject(unittest.TestCase):
         self.assertTrue(numpy.allclose(self.express.region_means, project.region_means),
                                        "region means don't match target values")
 
-    def test_fivec_project_regression(self):
-        project = fivec.FiveC(self.regression_fname, 'r', silent=True)
-        project.find_regression_fragment_corrections(model=['len','distance'], num_bins=[3, 3], usereads='all',
-                                                     max_iterations=5)
-        self.assertTrue(numpy.allclose(self.regression.len_corrections, project.len_corrections),
-            "learned regression correction values don't match target values")
+    def test_fivec_project_binning(self):
+        project = fivec.FiveC(self.project_fname, 'r', silent=True)
+        project.find_binning_fragment_corrections(model=['len'], num_bins=[5], parameters=['even'], usereads='cis',
+                                                     max_iterations=0)
+        print list(self.binning.binning_corrections)
+        print list(project.binning_corrections)
+        self.assertTrue(numpy.allclose(self.binning.binning_corrections, project.binning_corrections),
+            "learned binning correction values don't match target values")
 
     def tearDown(self):
         subprocess.call('rm -f %s/tests/data/test_temp.fcp' % self.basedir, shell=True)

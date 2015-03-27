@@ -1,20 +1,20 @@
 .. _5C_tutorial:
 
 
-********************
-A Brief 5C Tutorial
-********************
+*****************************
+Tutorial for 5C Classes
+*****************************
 
-In order to perform analysis with :mod:`HiFive`, you must construct a series of objects, each one relying on the previous one. This tutorial will walk you through the process for doing a basic analysis of 5C data.
+In order to perform analysis using the classes defined in :mod:`HiFive`, you must construct a series of objects, each one relying on the previous one. This tutorial will walk you through the process for doing a basic analysis of 5C data directly using the library of classes and functions.
 
 .. _creating_a_fragment_object:
 
 Creating a :class:`Fragment <hifive.fragment.Fragment>`  object
 =================================================================
 
-In order to use :mod:`HiFive` to process 5C data, the first thing that you need to do is create a :class:`Fragment <hifive.fragment.Fragment>` object. The :class:`Fragment <hifive.fragment.Fragment>`  object is an set of information contained in an HDF5 file. The object contains information about fragment sizes as determined by a series of boundary coordinates and orientations given in a BED formatted file, as well as an index for converting between string-based region names and numerical identifiers. The user may also include information about the genome and restriction enzyme, although these are optional and do not affect the functionality.
+In order to use :mod:`HiFive` to process 5C data, the first thing that you need to do is create a :class:`Fragment <hifive.fragment.Fragment>` object. The :class:`Fragment <hifive.fragment.Fragment>`  object is an set of information contained in an HDF5 file. The object contains information about fragment sizes as determined by a series of boundary coordinates and orientations given in a BED formatted file, as well as an index for converting between string-based region names and numerical identifiers and any addition fragment features included in that bed file. The user may also include information about the genome and restriction enzyme, although these are optional and do not affect the functionality.
 
-To create the :class:`Fragment <hifive.fragment.Fragment>`  object, you must provide a bed file in which each line contains the up- and downstream boundaries of a fragment and the strand to which this fragment belongs. Fragment names are also stored from the BED file but are not required. Finally, groups of fragments can be separated into distinct regions which will be handled separately in downstream normalization and analysis. Fragments occuring on different chromosomes are always assigned to different regions. In addition, the user has the option of either explicitly specifying a list of regions or giving a minimum separation distance between fragments that is used to partition fragments into distinct regions.
+To create the :class:`Fragment <hifive.fragment.Fragment>`  object, you must provide a bed file in which each line contains the up- and downstream boundaries of a fragment and the strand to which this fragment belongs. Fragment names are also stored from the BED file and are used to connect mapped reads to fragments. Finally, groups of fragments can be separated into distinct regions which will be handled separately in downstream normalization and analysis. Fragments occurring on different chromosomes are always assigned to different regions. In addition, the user has the option of either explicitly specifying a list of regions or giving a minimum separation distance between fragments that is used to partition fragments into distinct regions.
 
 To create a basic :class:`Fragment <hifive.fragment.Fragment>`  object, use the following command::
 
@@ -23,9 +23,9 @@ To create a basic :class:`Fragment <hifive.fragment.Fragment>`  object, use the 
   fragment.load_fragments(bed_filename, genome_name='MM9', re_name='HindIII')
   fragment.save()
 
-In this case, the 'out_filename' specifies the location to save the :class:`Fragment <hifive.fragment.Fragment>`  object to and should end with the '.hdf5' extension. The 'bed_filename' contains the fragment boundaries, primer names, and strand information in BED format. The 'genome_name' and 're_name' are option strings that may be passed. In this case, the regions would be automatically determined using the default minimum distance between regions of 1 Mb. This could set by specifying a value with the keyword 'minregionspacing'.
+In this case, the 'out_filename' specifies the location to save the :class:`Fragment <hifive.fragment.Fragment>`  object to. The 'bed_filename' contains the fragment boundaries, primer names, and strand information in BED format. The 'genome_name' and 're_name' are option strings that may be passed. In this case, the regions would be automatically determined using the default minimum distance between regions of 1 Mb. This could set by specifying a value with the keyword 'minregionspacing'.
 
-In order to specifiy how to partion fragments into regions, we could use the following commands::
+In order to specify how to partition fragments into regions, we could use the following commands::
 
   import hifive
   fragment = hifive.Fragment(out_filename, mode='w')
@@ -46,7 +46,7 @@ In order to create a 5C dataset, you first need to have created an appropriate :
 
   primer1   primer2 #_observed
 
-where values are separated by tabs and '#_observed' is an integer. With either format the primer names must exacly match those in the BED file used to create the :class:`Fragment <hifive.fragment.Fragment>`  object.
+where values are separated by tabs and '#_observed' is an integer. With either format the primer names must exactly match those in the BED file used to create the :class:`Fragment <hifive.fragment.Fragment>`  object.
 
 To create the 5C dataset, you can run the following commands::
 
@@ -55,23 +55,23 @@ To create the 5C dataset, you can run the following commands::
   data.load_data_from_counts(fragment_filename, [counts1.txt, counts2.txt])
   data.save()
 
-In this case, 'out_filename' specifies the location to save the :class:`FiveCData <hifive.fivec_data.FiveCData>` object to and should end with the '.hdf5' extension. The 'fragment_filename' value is the location of the appropriate :class:`Fragment <hifive.fragment.Fragment>`  object. Multiple files containing counts data may be passed to the function as a list or, if only a single counts file is needed, it may be passed as a string. In order to load data from a set of BAM files, a similar procedure is used::
+In this case, 'out_filename' specifies the location to save the :class:`FiveCData <hifive.fivec_data.FiveCData>` object to. The 'fragment_filename' value is the location of the appropriate :class:`Fragment <hifive.fragment.Fragment>`  object. Multiple files containing counts data may be passed to the function as a list or, if only a single counts file is needed, it may be passed as a string. In order to load data from a set of BAM files, a similar procedure is used::
 
   import hifive
   data = hifive.FiveCDataset(out_filename, mode='w')
-  data.load_data_from_bam(fragment_filename, [bam_prefix1, bam_prefix2])
-  data.close()
+  data.load_data_from_bam(fragment_filename, [[bam_file1, bam_file2]])
+  data.save()
 
-In this case, the only difference is that prefices are passed instead of complete file names. The prefices should be the entire file path up until the strand specifier such that the two file names are created by appending either '_1.bam' or '_2.bam' to the prefix. Like the function for counts data, if only a single prefix is needed it may be passed as a string.
+In this case, the only difference is that pairs of file names corresponding to the two mapped read ends are passed as lists. Like the function for counts data, if only a single pair of files is needed, it may be passed as a list (not nested).
 
   Note: The :class:`FiveCData <hifive.fivec_data.FiveCData>` object can now be used by multiple analyses of this sample and does not need to be created separately for each one.
 
 .. _creating_a_5C_analysis_object:
 
-Creating a :class:`FiveC <hifive.fivec.FiveC>` analysis object
+Creating a :class:`FiveC <hifive.fivec.FiveC>` project object
 ================================================================
 
-The 5C analysis object, :class:`FiveC <hifive.fivec.FiveC>`, contains links to a :class:`FiveCData <hifive.fivec_data.FiveCData>` and :class:`Fragment <hifive.fragment.Fragment>`  object, information about which fragments to include in the analysis, model parameters, and learned model values. This is the standard way of working with 5C data in HiFive and this object will be used for learning the model, extracting portions of data, plotting, and downstream analysis.
+The 5C project object, :class:`FiveC <hifive.fivec.FiveC>`, contains links to a :class:`FiveCData <hifive.fivec_data.FiveCData>` and :class:`Fragment <hifive.fragment.Fragment>`  object, information about which fragments to include in the analysis, model parameters, and learned model values. This is the standard way of working with 5C data in HiFive and this object will be used for learning the model, extracting portions of data, plotting, and downstream analysis.
 
 To create a :class:`FiveC <hifive.fivec.FiveC>` object, you can use the following commands::
 
@@ -80,9 +80,9 @@ To create a :class:`FiveC <hifive.fivec.FiveC>` object, you can use the followin
   fivec.load_data(data_filename)
   fivec.save()
 
-In this case, 'out_filename' specifies the location to save the :class:`FiveC <hifive.fivec.FiveC>` object to and should end with the '.hdf5' extension. The 'data_filename' value is the location of the appropriate :class:`FiveCData <hifive.fivec_data.FiveCData>` object.
+In this case, 'out_filename' specifies the location to save the :class:`FiveC <hifive.fivec.FiveC>` object to. The 'data_filename' value is the location of the appropriate :class:`FiveCData <hifive.fivec_data.FiveCData>` object.
 
-.. warning:: Becauase data and fragment data are stored in their own objects, each object keeps track of the location of its dependents through relative file names. This means that links between them will break if the relative pathway is changed.
+.. warning:: Because data and fragment data are stored in their own objects, each object keeps track of the location of its dependents through relative file names. This means that links between them will break if the relative pathway is changed.
 
 .. _filter_5C_fragments:
 
@@ -114,40 +114,81 @@ Find 5C distance function
 Learn 5C normalization parameters
 =================================
 
-In order to learn the correction model for 5C data, :mod:`HiFive` uses two rounds of gradient descent, one with constant learning rate (the 'burn-in' phase) and the second with a linearly decreasing learning rate (the 'annealing' phase). In addition, :mod:`HiFive` can recalculate the distance function parameters periodically using the correction-adjusted interaction values. Finally, :mod:`HiFive` limits which interactions it uses to learn the model parameters to those that fall within a user-specified maximum interaction distance.
+Using the probability algorithm
++++++++++++++++++++++++++++++++
 
-To learn 5C corrections using the modeling approach, you can use the following command::
+When using the probability algorithm for learning fragment corrections, :mod:`HiFive` uses two rounds of gradient descent, one with constant learning rate (the 'burn-in' phase) and the second with a linearly decreasing learning rate (the 'annealing' phase). :mod:`HiFive` limits which interactions it uses to learn the model parameters to those that fall within a user-specified maximum interaction distance.
 
-  fivec.find_fragment_corrections(display=100,
-                                  maxdistance=0,
-                                  learningrate=0.01,
-                                  burnin_iterations=5000,
-                                  annealing_iterations=10000,
-                                  recalculate_distance=100)
+To learn 5C corrections using the probability approach, you can use the following command::
 
-In the above call, 'maxdistance' is set to zero, indicating that there is no upper limit on interaction distance to be used for learning model parameters. The 'recalculate_distance' parameters specifies how many iterations to wait before recalculating the distance parameters. The 'learningrate' specifies what percentage of the gradient to apply towards value updates. One last value passed to the function in 'display', which specifies how many iterations should pass before updating the display (via STDERR). This can also be set to zero to not display the progress.
+  fivec.find_probability_fragment_corrections(mindistance=50000,
+                                              maxdistance=0,
+                                              learningrate=0.01,
+                                              burnin_iterations=5000,
+                                              annealing_iterations=10000,
+                                              regions=[0, 1, 2])
 
-.. _approximate_5C_normalization_parameters:
+In the above call, 'mindistance' is set to 50 kb, indicating that interactions shorter than that distance are no useed in calculating correction values. maxdistance' is set to zero, indicating that there is no upper limit on interaction distance to be used for learning model parameters. The 'learningrate' specifies what percentage of the gradient to apply towards value updates. Finally, the 'regions' parameter specifies that we only want to learn corrections for regions 0 - 3. Not specifying a value for this parameter would default to including all regions.
 
-Approximate 5C normalization parameters
-=======================================
 
-:mod:`HiFive` also offers an approximation approach for learning correction values. The primary differences to the correction model from the user's perspective are a single learning phase and a lack of learning rate. The approximation learning approach can still recalculate the distance function parameters periodically.
+Using the express algorithm
++++++++++++++++++++++++++++++++
+
+:mod:`HiFive` also offers a matrix-balancing approach for learning correction values. The primary differences to the probability model from the user's perspective are a single learning phase and a lack of learning rate.
 
 To learn 5C corrections using the approximation approach, you can use the following command::
 
-  fivec.find_fragment_corrections(iterations=1000,
-                                  recalculate_distance=100,
-                                  remove_distance=True)
+  fivec.find_express_fragment_corrections(iterations=1000,
+                                          mindistance=50000,
+                                          maxdistance=0,
+                                          remove_distance=True)
 
 In the above call, the 'remove_distance' argument specifies whether to remove the distance-dependent portion of the signal prior to approximating correction values. For best results, this should set to true (its default value).
+
+
+Using the binning algorithm
++++++++++++++++++++++++++++++++
+
+:mod:`HiFive` also offers a fragment characteristic-based approach adapted from the learning model used by `HiCPipe <http://www.wisdom.weizmann.ac.il/~eitany/hicpipe/>`_. This algorithm takes a list of features to be partitioned and a number of bins to partition them into and learns correction values associated with each partition based on a log-normal distribution of non-zero interactions corrected for distance-dependence.
+
+To learn 5C corrections using the binning approach, you can use the following command::
+
+  fivec.find_binning_fragment_corrections(max_iterations=1000,
+                                          mindistance=50000,
+                                          maxdistance=0,
+                                          num_bins=[10, 10],
+                                          model=['len', 'gc'],
+                                          parameters=['even', 'fixed-const'],
+                                          usereads='cis',
+                                          learning_threshold=1.0)
+
+Unlike the other two learning algorithms, this approach caps the learning iterations using 'max_iterations' and provides a means of early termination. This is done with the 'learning_threhold' parameter, which specifies that if the change in log-likelihood drops below 1.0, then cease iterating. The 'model', 'num_bins', and 'parameters' values should consist of equal-length lists and describe the correction values that are to be learned. Here, we told HiFive to use the length and gc content (specified in our BED file) for each fragment. Each feature was partitioned into a number of bins specified in 'num_bins'. The partitioning of length was done to create bins containing equal numbers of fragments while the gc content was divided such that each bin spanned an equal portion of the characteristic's range. Finally, the '-const' suffix told HiFive not to optimize the values for gc content. The 'usereads' value 'cis' specified that only within-region interactions should be used to learn these correction values.
+
+Chaining learning algorithms
+++++++++++++++++++++++++++++++
+
+Because they work in very different ways, :mod:`HiFive` allows the binning algorithm to be chained with either the probability or express algorithm. The learning algorithms can be run in either order and the corrections from the first algorithm are applied prior to learning corrections for the second algorithm. This can be done by using the 'precorrect' option as follows::
+
+  fivec.find_express_fragment_corrections(iterations=1000,
+                                          mindistance=50000,
+                                          maxdistance=0,
+                                          remove_distance=True)
+  fivec.find_binning_fragment_corrections(max_iterations=1000,
+                                          mindistance=50000,
+                                          maxdistance=0,
+                                          num_bins=[10],
+                                          model=['len'],
+                                          parameters=['even'],
+                                          usereads='cis',
+                                          learning_threshold=1.0,
+                                          precorrect=True)
 
 .. _generating_a_fivec_heatmap:
 
 Generating a heatmap
 ====================
 
-In order to immediately make use of data, :mod:`HiFive` allows you to pull data from a regions and create a heatmap. The data can be returned unbinned, binned using a fixed-width bin size, or binned using boundaries passed by the user. There are  several options for the format the data can be passed back in. Please refer to the :meth:`cis_heatmap <hifive.fivec.FiveC.cis_heatmap>` function for more details. There are also several options for transformations to the data. These are used to remove the distance-dependence signal, fragment bias, both, or to return only the predicted signal. In this example, we'll get a set of data from an entire region binned into 10 Kb bins as follows::
+In order to immediately make use of data, :mod:`HiFive` allows you to pull data from a region and create a heatmap. The data can be returned unbinned, binned using a fixed-width bin size, or binned using boundaries passed by the user. There are  several options for the format the data can be passed back in. Please refer to the :meth:`cis_heatmap <hifive.fivec.FiveC.cis_heatmap>` function for more details. There are also several options for transformations to the data. These are used to remove the distance-dependence signal, fragment bias, both, or to return only the predicted signal. In this example, we'll get a set of data from an entire region binned into 10 Kb bins as follows::
 
   heatmap = fivec.cis_heatmap(region=1,
                               binsize=10000,
@@ -156,9 +197,9 @@ In order to immediately make use of data, :mod:`HiFive` allows you to pull data 
 
 In the above call, 'enrichment' specifies to find the observed counts and expected counts, which includes the distance-dependence and fragment bias values. The observed counts are in the first index of the last dimension of the returned array, the expected counts are in the second index of the last dimension. 'compact' specifies a rectangular array where the first axis is the forward primers and the second axis is the reverse primers. 'region' refers to the region index given by :mod:`HiFive`. To find out more details about that region, we could do the following::
 
-  fivec.frags['regions'][1]
+  print fivec.frags['regions'][1]
 
-This returns the region's chromosome, starting fragment, stopping fragment (first fragment outside the region), starting coordinate and stopping coordinate.
+This returns the region's index, chromosome, starting fragment, stopping fragment (first fragment outside the region), starting coordinate and stopping coordinate.
 
 .. _plotting_a_fivec_heatmap:
 
@@ -171,5 +212,3 @@ In order to visualize the heatmap we just produced, :mod:`HiFive` has several pl
   img.save(out_fname)
 
 In calling the function, we pass the heatmap and that would be sufficient. There are, however, additional options. For example, 'symmetric_scaling' specifies whether the color scale should be expanded to run from the minimum value to the maximum (False) or so that the maximum absolute value determine both upper and lower color bounds. The image returned is a PIL image of type 'png'.
-
-.. note:: The next thing on the todo list is write wrappers within the :class:`FiveC <hifive.fivec.FiveC>` and :class:`HiC <hifive.hic.HiC>` classes for running plotting through the analysis objects themselves.
