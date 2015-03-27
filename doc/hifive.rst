@@ -6,7 +6,7 @@ Using HiFive
 
 HiFive contains a variety of subcommands for handling different aspects of 5C and HiC analysis. To learn about a specific subcommand, you can use the following command::
 
-    hifive <subcommand> -h
+  > hifive <subcommand> -h
 
 The available subcommands are:
 
@@ -41,7 +41,7 @@ fragments
 
 ::
 
-    hifive fragments [-h] [-r RE] [-g GENOME] [-q] bed output
+  > hifive fragments [-h] [-r RE] [-g GENOME] [-q] bed output
 
 Arguments:
 
@@ -59,7 +59,7 @@ Options:
 
 ::
 
-    hifive 5c-data [-h] (-B BAM BAM | -C COUNT) [-q] fragment output
+  > hifive 5c-data [-h] (-B BAM BAM | -C COUNT) [-q] fragment output
 
 Arguments:
 
@@ -77,7 +77,7 @@ Options:
 
 ::
 
-    hifive 5c-project [-h] [-f MININT] [-m MINDIST] [-x MAXDIST] [-q]
+  > hifive 5c-project [-h] [-f MININT] [-m MINDIST] [-x MAXDIST] [-q]
         data output
 
 Arguments:
@@ -96,7 +96,7 @@ Options:
 
 ::
 
-    hifive 5c-normalize <SUBCOMMAND> [-h] [-m MINDIST] [-x MAXDIST]
+  > hifive 5c-normalize <SUBCOMMAND> [-h] [-m MINDIST] [-x MAXDIST]
         [-r REGIONS] [-o OUTPUT] [-q] [subcommand options] project
 
 HiFive's 5C normalization subcommand allows the user to select the normalization approach to use. Each approach has its own set of options.
@@ -120,7 +120,7 @@ probability, express, binning, probability-binning, express-binning, binning-pro
 
 ::
 
-    hifive 5c-complete <SUBCOMMAND> [-h] [-r RE] [-g GENOME]
+  > hifive 5c-complete <SUBCOMMAND> [-h] [-r RE] [-g GENOME]
         (-B BAM BAM | -C COUNT) [-f MININT] [-m MINDIST] [-x MAXDIST]
         [-r REGIONS] (-o OUTPUT OUTPUT OUTPUT | -P PREFIX) [-q]
         [subcommand options] bed
@@ -148,7 +148,7 @@ This command is MPI-compatible.
 
 ::
 
-    [mpirun -np NP] hifive 5c-heatmap [-h] [-b BINSIZE] [-t]
+  > [mpirun -np NP] hifive 5c-heatmap [-h] [-b BINSIZE] [-t]
                         [-r REGIONS]
                         [-d {raw,fragment,distance,enrichment,expected}]
                         [-a {compact,full}] [-i IMAGE] [-p] [-l] [-n]
@@ -170,7 +170,7 @@ Options:
 
 ::
 
-    hifive 5c-interval [-h] -c REGION [-s START] [-e STOP] [-b BINSIZE]
+  > hifive 5c-interval [-h] -c REGION [-s START] [-e STOP] [-b BINSIZE]
         [-d {raw,fragment,distance,enrichment,expected}] [-i IMAGE] [-p]
         [-r] [-t] [-l] [-k KEYWORDS] [-q] project output
 
@@ -190,7 +190,7 @@ Options:
 
 ::
 
-    hifive 5c-combine-replicates [-h] [-q] output replicate
+  > hifive 5c-combine-replicates [-h] [-q] output replicate
         [replicate ...]
 
 Arguments:
@@ -306,7 +306,7 @@ fends
 
 ::
 
-    hifive fends [-h] (-F FEND | -B BED) [-r RE] [-g GENOME] [-q] output
+  > hifive fends [-h] (-F FEND | -B BED) [-r RE] [-g GENOME] [-q] output
 
 Arguments:
 
@@ -323,7 +323,7 @@ hic-data
 
 ::
 
-    hifive hic-data [-h] (-S BAM BAM | -R RAW | -M MAT) [-i INSERT] [-q]
+  > hifive hic-data [-h] (-S BAM BAM | -R RAW | -M MAT) [-i INSERT] [-q]
         fend output
 
 Arguments:
@@ -344,7 +344,7 @@ This command is MPI-compatible.
 
 ::
 
-    [mpirun -np NP] hifive hic-project [-h] [-f MININT] [-m MINDIST]
+  > [mpirun -np NP] hifive hic-project [-h] [-f MININT] [-m MINDIST]
                         [-x MAXDIST] [-j MINBIN] [-n NUMBINS] [-q] data
                         output
 
@@ -366,7 +366,7 @@ This command is MPI-compatible.
 
 ::
 
-    [mpirun -np NP] hifive hic-normalize <SUBCOMMAND> [-h] [-m MINDIST]
+  > [mpirun -np NP] hifive hic-normalize <SUBCOMMAND> [-h] [-m MINDIST]
                         [-x MAXDIST] [-c CHROMS] [-o OUTPUT] [-q]
                         [subcommand options] project
 
@@ -393,7 +393,7 @@ This command is MPI-compatible.
 
 ::
 
-    [mpirun -np NP] hifive hic-complete <SUBCOMMAND> [-h]
+   > [mpirun -np NP] hifive hic-complete <SUBCOMMAND> [-h]
                         (-F FEND | -B BED) [-r RE] [-g GENOME]
                         (-S BAM BAM | -R RAW | -M MAT) [-i INSERT]
                         [-f MININT] [-m MINDIST] [-x MAXDIST]
@@ -420,7 +420,7 @@ This command is MPI-compatible.
 
 ::
 
-    [mpirun -np NP] hifive hic-heatmap [-h] [-b BINSIZE] [-t]
+  > [mpirun -np NP] hifive hic-heatmap [-h] [-b BINSIZE] [-t]
                         [-c CHROMS]
                         [-d {raw,fend,distance,enrichment,expected}]
                         [-i IMAGE] [-p] [-l] [-n] [-k KEYWORDS] [-q]
@@ -442,7 +442,7 @@ hic-interval
 
 ::
 
-    hifive hic-interval [-h] -c CHROM [-s START] [-e STOP] [-b BINSIZE]
+  > hifive hic-interval [-h] -c CHROM [-s START] [-e STOP] [-b BINSIZE]
         [-m MAXDIST] [-d {raw,fend,distance,enrichment,expected}]
         [-i IMAGE] [-p] [-r] [-t] [-l] [-k KEYWORDS] [-q] project output
 
@@ -462,7 +462,7 @@ hic-combine-replicates
 
 ::
 
-    hifive hic-combine-replicates [-h] [-q] replicate1 replicate2 output
+  > hifive hic-combine-replicates [-h] [-q] replicate1 replicate2 output
 
 Arguments:
 
