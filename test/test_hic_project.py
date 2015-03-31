@@ -15,23 +15,23 @@ import h5py
 class HiCProject(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.data_fname = '%s/tests/data/test.hcd' % self.basedir
-        self.project_fname = '%s/tests/data/test.hcp' % self.basedir
-        self.probability_fname = '%s/tests/data/test_probability.hcp' % self.basedir
-        self.express_fname = '%s/tests/data/test_express.hcp' % self.basedir
-        self.binning_fname = '%s/tests/data/test_binning.hcp' % self.basedir
+        self.data_fname = '%s/test/data/test.hcd' % self.basedir
+        self.project_fname = '%s/test/data/test.hcp' % self.basedir
+        self.probability_fname = '%s/test/data/test_probability.hcp' % self.basedir
+        self.express_fname = '%s/test/data/test_express.hcp' % self.basedir
+        self.binning_fname = '%s/test/data/test_binning.hcp' % self.basedir
         self.data = h5py.File(self.project_fname, 'r')
         self.probability = hic.HiC(self.probability_fname, 'r')
         self.express = hic.HiC(self.express_fname, 'r')
         self.binning = hic.HiC(self.binning_fname, 'r')
 
     def test_hic_project_preanalysis(self):
-        project = hic.HiC('%s/tests/data/test_temp.hcp' % self.basedir, 'w', silent=True)
+        project = hic.HiC('%s/test/data/test_temp.hcp' % self.basedir, 'w', silent=True)
         project.load_data(self.data_fname)
         project.filter_fends(mininteractions=10, mindistance=20000, maxdistance=1000000)
         project.find_distance_parameters(numbins=5, minsize=30000, maxsize=1000000)
         project.save()
-        project = h5py.File('%s/tests/data/test_temp.hcp' % self.basedir, 'r')
+        project = h5py.File('%s/test/data/test_temp.hcp' % self.basedir, 'r')
         for name in self.data['/'].attrs.keys():
             if name == 'history':
                 continue
@@ -57,10 +57,11 @@ class HiCProject(unittest.TestCase):
     def test_hic_project_express(self):
         project = hic.HiC(self.project_fname, 'r', silent=True)
         project.find_express_fend_corrections(mindistance=10000, iterations=100)
+        for i in range(project.corrections.shape[0]):
+            if project.filter[i] == 1:
+                print self.express.corrections[i], project.corrections[i]
         self.assertTrue(numpy.allclose(self.express.corrections, project.corrections),
             "learned express correction values don't match target values")
-        print list(self.express.chromosome_means)
-        print list(project.chromosome_means)
         self.assertTrue(numpy.allclose(self.express.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
@@ -72,7 +73,7 @@ class HiCProject(unittest.TestCase):
             "learned binning correction values don't match target values")
 
     def tearDown(self):
-        subprocess.call('rm -f %s/tests/data/test_temp.hcp' % self.basedir, shell=True)
+        subprocess.call('rm -f %s/test/data/test_temp.hcp' % self.basedir, shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

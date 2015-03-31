@@ -16,8 +16,6 @@ import sys
 import os
 import shlex
 from mock import Mock as MagicMock
-from hifive.version import version as VERSION
-from hifive.version import full_version as FULL_VERSION
 
 class Mock(MagicMock):
     @classmethod
@@ -68,6 +66,8 @@ author = u'Michael Sauria'
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
+from hifive.version import version as VERSION
+from hifive.version import full_version as FULL_VERSION
 # The short X.Y version.
 version = VERSION
 # The full version, including alpha/beta/rc tags.

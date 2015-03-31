@@ -15,9 +15,9 @@ import h5py
 class FiveCBinning(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.project_fname = '%s/tests/data/test_probability.fcp' % self.basedir
-        self.binned_fname = '%s/tests/data/test_binned.hdf5' % self.basedir
-        self.heatmap_fname = '%s/tests/data/test.fch' % self.basedir
+        self.project_fname = '%s/test/data/test_probability.fcp' % self.basedir
+        self.binned_fname = '%s/test/data/test_binned.hdf5' % self.basedir
+        self.heatmap_fname = '%s/test/data/test.fch' % self.basedir
         self.data = h5py.File(self.binned_fname, 'r')
         self.heatmap = h5py.File(self.heatmap_fname, 'r')
         self.project = fivec.FiveC(self.project_fname, 'r', silent=True)
@@ -40,9 +40,9 @@ class FiveCBinning(unittest.TestCase):
         self.compare_arrays(self.data['fivec_mapping2'][...], mapping2, 'trans mappings')
 
     def test_generate_heatmap(self):
-        self.project.write_heatmap("%s/tests/data/test_temp.fch" % self.basedir, 50000, includetrans=True,
+        self.project.write_heatmap("%s/test/data/test_temp.fch" % self.basedir, 50000, includetrans=True,
                                    datatype='fragment')
-        heatmap = h5py.File("%s/tests/data/test_temp.fch" % self.basedir)
+        heatmap = h5py.File("%s/test/data/test_temp.fch" % self.basedir)
         for name in self.heatmap['/'].attrs.keys():
             if name == 'history':
                 continue
@@ -56,7 +56,7 @@ class FiveCBinning(unittest.TestCase):
             self.compare_arrays(self.heatmap[name][...], heatmap[name][...], name)
 
     def tearDown(self):
-        subprocess.call('rm -f %s/tests/data/test_temp.fch' % self.basedir, shell=True)
+        subprocess.call('rm -f %s/test/data/test_temp.fch' % self.basedir, shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

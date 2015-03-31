@@ -400,12 +400,12 @@ class HiC(object):
         if self.rank == 0:
             # exchange arrays
             if not self.silent:
-                print >> sys.stderr, ('\r%s\rExchanging distance arrays...') % (' ' * 80),
+                print >> sys.stderr, ('\r%s\rCalculating distance function...') % (' ' * 80),
             for i in range(1, self.num_procs):
                 bin_size += self.comm.recv(source=i, tag=11)
                 count_sum += self.comm.recv(source=i, tag=11)
                 logdistance_sum += self.comm.recv(source=i, tag=11)
-            valid = numpy.where(count_sum > 0.0)[0]
+            valid = numpy.where(count_sum > 0)[0]
             count_means = numpy.log(count_sum[valid].astype(numpy.float64) / bin_size[valid])
             distance_means = logdistance_sum[valid] / bin_size[valid]
             # find distance line parameters, cutoffs, slopes and intercepts
@@ -834,12 +834,14 @@ class HiC(object):
                 (len(chroms) == 1 and chroms[0] == ''))) or
                 chroms == ''):
             chroms = self.chr2int.keys()
+            chroms.sort()
         elif not chroms is None and isinstance(chroms, str):
             chroms = [chroms]
         chrints = numpy.zeros(len(chroms), dtype=numpy.int32)
         for i in range(len(chroms)):
             chrints[i] = self.chr2int[chroms[i]]
         chroms = list(numpy.array(chroms)[numpy.argsort(chrints)])
+        chrints = chrints[numpy.argsort(chrints)]
         for chrm, i in self.chr2int.iteritems():
             if chrm not in chroms:
                 filt[chr_indices[i]:chr_indices[i + 1]] = 0
@@ -849,7 +851,7 @@ class HiC(object):
                                                     self.num_procs + 1)).astype(numpy.int64)
             data = self.data['cis_data'][cis_ranges[self.rank]:cis_ranges[self.rank + 1], :]
             distances = mids[data[:, 1]] - mids[data[:, 0]]
-            if maxdistance == 0:
+            if maxdistance == 0 or maxdistance is None:
                 maxdistance = numpy.amax(distances) + 1
                 if self.rank == 0:
                     for i in range(1, self.num_procs):
@@ -1030,6 +1032,9 @@ class HiC(object):
                 for i in range(1, self.num_procs):
                     self.comm.Recv(temp, source=i, tag=13)
                     fend_means += temp
+                #for i in range(filt.shape[0]):
+                #    if filt[i] == 1:
+                #        print interactions[i], fend_means[i], corrections[i]
                 cost = _optimize.update_express_corrections(filt,
                                                             interactions,
                                                             fend_means,

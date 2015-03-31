@@ -306,17 +306,18 @@ def find_distancebound_possible_interactions(
                             total -= filter[j + 3]
                             if mids[j + 2] - mids[j] < mindistance:
                                 total -= filter[j + 2]
-                        else:
-                            # remove same fragment fend
-                            total -= filter[j - 1]
-                            # remove previous fragment fends if necessary
-                            if j > 1:
-                                total -= filter[j - 3]
-                                if mids[j] - mids[j - 2] < mindistance:
-                                    total -= filter[j - 2]
-                            # remove next fragment fends if necessary
-                            if j < chr_indices[i + 1] - 2:
-                                total -= filter[j + 1]
-                                if mids[j + 2] - mids[j] < mindistance:
-                                    total -= filter[j + 2]
+                    else:
+                        # remove same fragment fend
+                        total -= filter[j - 1]
+                        # remove previous fragment fends if necessary
+                        if j > 1:
+                            total -= filter[j - 3]
+                            if mids[j] - mids[j - 2] < mindistance:
+                                total -= filter[j - 2]
+                        # remove next fragment fends if necessary
+                        if j < chr_indices[i + 1] - 2:
+                            total -= filter[j + 1]
+                            if mids[j + 2] - mids[j] < mindistance:
+                                total -= filter[j + 2]
+                    interactions[j] += total
     return None

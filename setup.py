@@ -49,7 +49,7 @@ def main():
         zip_safe = False,
         include_package_data = True,
         package_dir = {'':'./'},
-        packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py'], where='./'),
+        packages = find_packages(exclude=['examples', 'test', 'ez_setup.py'], where='./'),
         install_requires = ['numpy', 'scipy', 'h5py'],
         setup_requires = build_requires,
         ext_modules = get_extension_modules(),

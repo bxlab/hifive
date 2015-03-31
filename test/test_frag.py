@@ -15,14 +15,14 @@ import h5py
 class Frags(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.frags = h5py.File('%s/tests/data/test.frags' % self.basedir, 'r')
-        self.bed_fname = '%s/tests/data/test_frag.bed' % self.basedir
+        self.frags = h5py.File('%s/test/data/test.frags' % self.basedir, 'r')
+        self.bed_fname = '%s/test/data/test_frag.bed' % self.basedir
 
     def test_fragment_creation(self):
-        frags = fragment.Fragment('%s/tests/data/test_temp.frags' % self.basedir, 'w', silent=True)
+        frags = fragment.Fragment('%s/test/data/test_temp.frags' % self.basedir, 'w', silent=True)
         frags.load_fragments(self.bed_fname, genome_name="mm9", re_name='HindIII')
         frags.save()
-        frags = h5py.File('%s/tests/data/test_temp.frags' % self.basedir, 'r')
+        frags = h5py.File('%s/test/data/test_temp.frags' % self.basedir, 'r')
         for name in self.frags['/'].attrs.keys():
             if name == 'history':
                 continue
@@ -36,7 +36,7 @@ class Frags(unittest.TestCase):
             self.compare_arrays(self.frags[name][...], frags[name][...], name)
 
     def tearDown(self):
-        subprocess.call('rm -f %s/tests/data/test_temp.frags' % self.basedir, shell=True)
+        subprocess.call('rm -f %s/test/data/test_temp.frags' % self.basedir, shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

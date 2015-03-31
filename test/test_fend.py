@@ -15,14 +15,14 @@ import h5py
 class Fends(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.fends = h5py.File('%s/tests/data/test.fends' % self.basedir, 'r')
-        self.bed_fname = '%s/tests/data/test_fend.bed' % self.basedir
+        self.fends = h5py.File('%s/test/data/test.fends' % self.basedir, 'r')
+        self.bed_fname = '%s/test/data/test_fend.bed' % self.basedir
 
     def test_fend_creation(self):
-        fends = fend.Fend('%s/tests/data/test_temp.fends' % self.basedir, 'w', silent=True)
+        fends = fend.Fend('%s/test/data/test_temp.fends' % self.basedir, 'w', silent=True)
         fends.load_fends(self.bed_fname, genome_name="hg19", re_name='HindIII')
         fends.save()
-        fends = h5py.File('%s/tests/data/test_temp.fends' % self.basedir, 'r')
+        fends = h5py.File('%s/test/data/test_temp.fends' % self.basedir, 'r')
         for name in self.fends['/'].attrs.keys():
             if name == 'history':
                 continue
@@ -36,7 +36,7 @@ class Fends(unittest.TestCase):
             self.compare_arrays(self.fends[name][...], fends[name][...], name)
 
     def tearDown(self):
-        subprocess.call('rm -f %s/tests/data/test_temp.fends' % self.basedir, shell=True)
+        subprocess.call('rm -f %s/test/data/test_temp.fends' % self.basedir, shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

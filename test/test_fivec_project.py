@@ -15,23 +15,23 @@ import h5py
 class FiveCProject(unittest.TestCase):
     def setUp(self):
         self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.data_fname = '%s/tests/data/test.fcd' % self.basedir
-        self.project_fname = '%s/tests/data/test.fcp' % self.basedir
-        self.probability_fname = '%s/tests/data/test_probability.fcp' % self.basedir
-        self.express_fname = '%s/tests/data/test_express.fcp' % self.basedir
-        self.binning_fname = '%s/tests/data/test_binning.fcp' % self.basedir
+        self.data_fname = '%s/test/data/test.fcd' % self.basedir
+        self.project_fname = '%s/test/data/test.fcp' % self.basedir
+        self.probability_fname = '%s/test/data/test_probability.fcp' % self.basedir
+        self.express_fname = '%s/test/data/test_express.fcp' % self.basedir
+        self.binning_fname = '%s/test/data/test_binning.fcp' % self.basedir
         self.raw = h5py.File(self.project_fname, 'r')
         self.probability = fivec.FiveC(self.probability_fname, 'r')
         self.express = fivec.FiveC(self.express_fname, 'r')
         self.binning = fivec.FiveC(self.binning_fname, 'r')
 
     def test_fivec_project_preanalysis(self):
-        project = fivec.FiveC('%s/tests/data/test_temp.fcp' % self.basedir, 'w', silent=True)
+        project = fivec.FiveC('%s/test/data/test_temp.fcp' % self.basedir, 'w', silent=True)
         project.load_data(self.data_fname)
         project.filter_fragments(mininteractions=20)
         project.find_distance_parameters()
         project.save()
-        project = h5py.File('%s/tests/data/test_temp.fcp' % self.basedir, 'r')
+        project = h5py.File('%s/test/data/test_temp.fcp' % self.basedir, 'r')
         for name in self.raw['/'].attrs.keys():
             if name == 'history':
                 continue
@@ -71,7 +71,7 @@ class FiveCProject(unittest.TestCase):
             "learned binning correction values don't match target values")
 
     def tearDown(self):
-        subprocess.call('rm -f %s/tests/data/test_temp.fcp' % self.basedir, shell=True)
+        subprocess.call('rm -f %s/test/data/test_temp.fcp' % self.basedir, shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,
