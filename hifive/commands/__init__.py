@@ -17,10 +17,6 @@ import create_hic_heatmap
 import combine_hic_replicates
 import get_hic_interval
 
-
-__version__ = '2.2.0'
-__author__ = 'Michael Sauria'
-
 #------------------------------------------------
 
 class Std( object ):

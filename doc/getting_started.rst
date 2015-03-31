@@ -44,7 +44,7 @@ For a more traditional Python installation simply setup a virtualevn for :mod:`H
 
 ::
 
-  > virtualenv ~/.venv; ~/.venv/bin/activate
+  > virtualenv ~/.venv; source ~/.venv/bin/activate
 
 To install :mod:`HiFive`, simply enter the directory that the repository was cloned or downloaded to and use the following command::
 

@@ -17,9 +17,7 @@ from fragment import Fragment
 from hic_data import HiCData
 from fivec_data import FiveCData
 
-
-__version__ = '2.2.0'
-__author__ = 'Michael Sauria'
+from .version import version as __version__
 
 #------------------------------------------------
 

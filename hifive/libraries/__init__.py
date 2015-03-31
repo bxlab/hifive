@@ -7,10 +7,6 @@ import _hic_distance
 import _hic_interactions
 import _hic_optimize
 
-
-__version__ = '2.2.0'
-__author__ = 'Michael Sauria'
-
 #------------------------------------------------
 
 class Std( object ):

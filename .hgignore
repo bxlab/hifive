@@ -11,5 +11,5 @@ hifive.egg-info
 *_fivec*.cpp
 *_hic*.cpp
 *.so
-tests/generate_test_data.py
+test/generate_test_data.py
 doc/_static/hic_distance.py

@@ -9,29 +9,58 @@ from setuptools import setup, find_packages
 from distutils.extension import Extension
 import numpy
 
+MAJOR = 2
+MINOR = 2
+MICRO = 0
+ISRELEASED = False
+VERSION = '%d.%d' % (MAJOR, MINOR)
+FULLVERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 if 'setuptools.extension' in sys.modules:
     m = sys.modules['setuptools.extension']
     m.Extension.__dict__ = m._Extension.__dict__
 
+def write_version_py(filename='hifive/version.py'):
+    cnt = """
+# THIS FILE IS GENERATED FROM HIFIVE SETUP.PY
+version = '%(version)s'
+full_version = '%(full_version)s'
+release = %(isrelease)s
+if not release:
+    version = full_version
+    """
+    a = open(filename, 'w')
+    try:
+        a.write(cnt % {'version': VERSION,
+        'full_version' : FULLVERSION,
+        'isrelease': str(ISRELEASED)})
+    finally:
+        a.close()
+
 def main():
-    setup(name = "hifive",
-          version = "2.2.0",
-          description = 'Python library for normalizing and analyzing HiC and 5C data',
-          zip_safe = False,
-          include_package_data = True,
-          package_dir = {'':'./'},
-          packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py'], where='./'),
-          install_requires = ['numpy', 'scipy', 'h5py'],
-          setup_requires = ['setuptools_cython'],
-          ext_modules = get_extension_modules(),
-          scripts = ['bin/hifive',],
-          test_suite = 'nose.collector',
-          tests_require = 'nose',
-          #extras_require = {'pyx':[], 'PIL':[], 'mlpy':[]},
-          author = "Michael Sauria",
-          author_email = "mike.sauria@jhu.edu",
-          url='https://bitbucket.org/bxlab/hifive')
+    write_version_py()
+
+    build_requires = ['setuptools_cython']
+
+    metadata = dict(
+        name = "hifive",
+        version = VERSION,
+        description = 'Python library for normalizing and analyzing HiC and 5C data',
+        zip_safe = False,
+        include_package_data = True,
+        package_dir = {'':'./'},
+        packages = find_packages(exclude=['examples', 'tests', 'ez_setup.py'], where='./'),
+        install_requires = ['numpy', 'scipy', 'h5py'],
+        setup_requires = build_requires,
+        ext_modules = get_extension_modules(),
+        scripts = ['bin/hifive',],
+        test_suite = 'nose.collector',
+        tests_require = 'nose',
+        #extras_require = {'pyx':[], 'PIL':[], 'mlpy':[]},
+        author = "Michael Sauria",
+        author_email = "mike.sauria@jhu.edu",
+        url='https://bitbucket.org/bxlab/hifive')
+    setup(**metadata)
 
 # ---- Extension Modules ----------------------------------------------------
 
