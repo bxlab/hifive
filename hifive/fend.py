@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+"""A class for handling HiC fend information."""
+
 import os
 import sys
 
@@ -8,6 +10,7 @@ import h5py
 
 
 class Fend(object):
+
     """
     This class handles restriction enzyme digest-generated fragment data for HiC experiments.
 
@@ -28,9 +31,7 @@ class Fend(object):
     """
 
     def __init__(self, filename, mode='r', silent=False):
-        """
-        Create a Fend object.
-        """
+        """Create a Fend object."""
         self.file = filename
         self.silent = silent
         self.history = ''
@@ -39,12 +40,14 @@ class Fend(object):
         return None
 
     def __getitem__(self, key):
+        """Dictionary-like lookup."""
         if key in self.__dict__:
             return self.__dict__[key]
         else:
             return None
 
     def __setitem__(self, key, value):
+        """Dictionary-like value setting."""
         self.__dict__[key] = value
         return None
 
@@ -135,10 +138,7 @@ class Fend(object):
         chromosomes = []
         chr2int = {}
         data = {}
-        gcscore = {}
-        mapscore = {}
         input = open(fname, 'r')
-        fragment_index = 1
         chromosome_index = 2
         coordinate_index = 3
         length_index = 5

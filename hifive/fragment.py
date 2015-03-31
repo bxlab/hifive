@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+"""A class for handling 5C fragment information."""
+
 import os
 import sys
 
@@ -8,6 +10,7 @@ import h5py
 
 
 class Fragment(object):
+
     """
     This class handles restriction enzyme digest-generated fragment data for 5C experiments.
 
@@ -28,9 +31,7 @@ class Fragment(object):
     """
 
     def __init__(self, filename, mode='r', silent=False):
-        """
-        Create a Fragment object.
-        """
+        """Create a Fragment object."""
         self.file = filename
         self.silent = silent
         self.history = ""
@@ -39,12 +40,14 @@ class Fragment(object):
         return None
 
     def __getitem__(self, key):
+        """Dictionary-like lookup."""
         if key in self.__dict__:
             return self.__dict__[key]
         else:
             return None
 
     def __setitem__(self, key, value):
+        """Dictionary-like value setting."""
         self.__dict__[key] = value
         return None
 

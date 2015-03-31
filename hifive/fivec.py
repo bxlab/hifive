@@ -1,22 +1,24 @@
 #!/usr/bin/env python
 
+"""A class for handling 5C analysis."""
+
 import os
 import sys
-from math import ceil, floor, log, exp
+from math import log
 
 import numpy
 from scipy.stats import linregress
 import h5py
 from scipy.optimize import fmin_l_bfgs_b as bfgs
 
-from fragment import Fragment
-from fivec_data import FiveCData
 import libraries._fivec_binning as _binning
 import libraries._fivec_optimize as _optimize
 import fivec_binning
+import plotting
 
 
 class FiveC(object):
+
     """
     This is the class for handling 5C analysis.
 
@@ -37,9 +39,7 @@ class FiveC(object):
     """
 
     def __init__(self, filename, mode='r', silent=False):
-        """
-        Create a FiveC object.
-        """
+        """Create a FiveC object."""
         self.file = os.path.abspath(filename)
         self.silent = silent        
         self.binning_corrections = None
@@ -59,12 +59,14 @@ class FiveC(object):
         return None
 
     def __getitem__(self, key):
+        """Dictionary-like lookup."""
         if key in self.__dict__:
             return self.__dict__[key]
         else:
             return None
 
     def __setitem__(self, key, value):
+        """Dictionary-like value setting."""
         self.__dict__[key] = value
         return None
 
@@ -350,11 +352,9 @@ class FiveC(object):
         distance_signal += self.region_means[self.frags['fragments']['region'][data[:, 0]]]
         # create empty arrays
         gradients = numpy.zeros(self.filter.shape[0], dtype=numpy.float32)
-        sigma_gradient = numpy.zeros(1, dtype=numpy.float32)
         # find number of interactions for each fragment
         interactions = numpy.bincount(data[:, 0], minlength=self.filter.shape[0]).astype(numpy.int32)
         interactions += numpy.bincount(data[:, 1], minlength=self.filter.shape[0]).astype(numpy.int32)
-        all_interactions = numpy.sum(interactions) / 2
         # if precalculation requested, find fragment means
         if precalculate:
             enrichments = log_counts - distance_signal
@@ -373,7 +373,6 @@ class FiveC(object):
         # cycle through learning phases
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
-        find_variance = 0
         for phase in ['burnin', 'annealing']:
             learningstep = learningrate / max(1, annealing_iterations)
             if (phase == 'burnin' and burnin_iterations == 0) or (phase == 'annealing' and annealing_iterations == 0):
@@ -622,7 +621,6 @@ class FiveC(object):
         :returns: None
         """
         self.history += "FiveC.find_binning_fragment_corrections(mindistance=%i, maxdistance=%i, num_bins=%s, model=%s, learning_threshold=%f, max_iterations=%i, usereads='%s', regions=%s) - " % (mindistance, maxdistance, str(num_bins), str(model), learning_threshold, max_iterations, usereads, str(regions))
-        present = True
         for parameter in model:
             if not parameter in ['len'] and parameter not in self.frags['fragments'].dtype.names:
                 if not self.silent:
@@ -663,7 +661,6 @@ class FiveC(object):
             for i in range(self.frags['regions'].shape[0]):
                 maxdistance = max(maxdistance, self.frags['regions']['stop'][i] -
                                                self.frags['regions']['start'][i]) + 1
-        valid = numpy.where(filt == 1)[0]
         if not self.silent:
             print >> sys.stderr, ("\r%s\rPartitioning features into bins...") % (' ' * 80),
         num_bins = numpy.array(num_bins, dtype=numpy.int32)
@@ -707,11 +704,8 @@ class FiveC(object):
         if not self.silent:
             print >> sys.stderr, ("\r%s\rFinding bin counts...") % (' ' * 80),
         # Find number of observations in each bin
-        strands = self.frags['fragments']['strand'][...]
         data = None
         trans_data = None
-        corrected_counts = None
-        data_indices = None
         trans_mean = 0.0
         gamma = 0.0
         frag_corrections = None

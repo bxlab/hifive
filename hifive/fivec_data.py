@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
+"""A class for handling 5C read data."""
+
 import os
 import sys
-from glob import glob
 
 import numpy
 import h5py
@@ -11,10 +12,10 @@ try:
 except:
     pass
 
-from fragment import Fragment
 
 
 class FiveCData(object):
+
     """
     This class handles interaction count data for 5C experiments.
 
@@ -35,9 +36,7 @@ class FiveCData(object):
     """
 
     def __init__(self, filename, mode='r', silent=False):
-        """
-        Create a :class:`FiveCData` object.
-        """
+        """Create a :class:`FiveCData` object."""
         self.file = os.path.abspath(filename)
         self.silent = silent
         self.history = ''
@@ -46,12 +45,14 @@ class FiveCData(object):
         return None
 
     def __getitem__(self, key):
+        """Dictionary-like lookup."""
         if key in self.__dict__:
             return self.__dict__[key]
         else:
             return None
 
     def __setitem__(self, key, value):
+        """Dictionary-like value setting."""
         self.__dict__[key] = value
         return None
 
@@ -307,8 +308,7 @@ class FiveCData(object):
         return None
 
     def _parse_fragment_pairs(self, frag_pairs):
-        """Separate frag pairs into cis (within region) and trans (between region) interactions and write to
-        h5dict with index arrays."""
+        """Separate frag pairs into cis (within region) and trans (between region) interactions and write to h5dict with index arrays."""
         if not self.silent:
             print >> sys.stderr, ("Writing fragment pair data to file..."),
         cis = {}

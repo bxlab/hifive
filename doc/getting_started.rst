@@ -5,6 +5,10 @@
 Getting started
 ***************
 
+:mod:`HiFive` requires Python 2.7. To check your version, run::
+
+  > python -V
+
 .. _installing_HiFive:
 
 Installing HiFive
@@ -35,6 +39,12 @@ Recommended Packages
   * `PIL <http://www.pythonware.com/products/pil/>`_ for generating bitmap images
   * `mpi4py <http://mpi4py.scipy.org>`_ for utilizing MPI capabilities of several HiC functions
   * `mlpy <http://mlpy.sourceforge.net>`_ for modeling 3D structure
+
+For a more traditional Python installation simply setup a virtualevn for :mod:`HiFive` (this example creates one in .venv in your home directory) and then install the required packages and HiFive.
+
+::
+
+  > virtualenv ~/.venv; ~/.venv/bin/activate
 
 To install :mod:`HiFive`, simply enter the directory that the repository was cloned or downloaded to and use the following command::
 

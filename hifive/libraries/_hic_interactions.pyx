@@ -124,7 +124,6 @@ def find_fend_ranges(
         int maxdistance,
         long long int start,
         long long int stop,
-        int binned,
         int startfend):
     cdef long long int i, j, pos, total
     cdef long long int total_fends = mapping.shape[0]
@@ -140,16 +139,15 @@ def find_fend_ranges(
                 j -= 1
             ranges[i, 2] = j
             total = ranges[i, 2] - ranges[i, 1]
-            if binned == 0:
-                if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 1:
+            if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 1:
+                total -= 1
+            if (mapping[i] + startfend) % 2 == 0:
+                if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 3:
                     total -= 1
-                if (mapping[i] + startfend) % 2 == 0:
-                    if ranges[i, 1] < total_fends and mapping[ranges[i, 1]] - mapping[i] == 3:
-                        total -= 1
-                    if ranges[i, 1] + 1 < total_fends and mapping[ranges[i, 1] + 1] - mapping[i] == 3:
-                        total -= 1
-                    if ranges[i, 1] + 2 < total_fends and mapping[ranges[i, 1] + 2] - mapping[i] == 3:
-                        total -= 1
+                if ranges[i, 1] + 1 < total_fends and mapping[ranges[i, 1] + 1] - mapping[i] == 3:
+                    total -= 1
+                if ranges[i, 1] + 2 < total_fends and mapping[ranges[i, 1] + 2] - mapping[i] == 3:
+                    total -= 1
             ranges[i, 0] = total
     return None
 
@@ -208,7 +206,6 @@ def find_zero_node_indices(
         np.ndarray[DTYPE_int_t, ndim=1] zindices1,
         long long int start,
         long long int stop,
-        int binned,
         int startfend):
     cdef long long int i, j, m1, m2, nzpos, zpos
     cdef long long int num_nz = nzindices0.shape[0]
@@ -218,26 +215,17 @@ def find_zero_node_indices(
         for i in range(start, stop):
             while nzpos < num_nz and nzindices0[nzpos] < i:
                 nzpos += 1
-            if binned == 0:
-                for j in range(ranges[i, 1], ranges[i, 2]):
-                    while nzpos < num_nz and nzindices0[nzpos] == i and nzindices1[nzpos] < j:
-                        nzpos += 1
-                    m1 = mapping[i]
-                    m2 = mapping[j]
-                    if m2 - m1 < 4 and (m2 - m1 == 1 or ((m1 + startfend) % 2 == 0 and m2 - m1 == 3)):
-                        continue
-                    elif nzpos == num_nz or nzindices1[nzpos] != j or nzindices0[nzpos] != i:
-                        zindices0[zpos] = i
-                        zindices1[zpos] = j
-                        zpos += 1
-            else:
-                for j in range(ranges[i, 1], ranges[i, 2]):
-                    while nzpos < num_nz and nzindices0[nzpos] == i and nzindices1[nzpos] < j:
-                        nzpos += 1
-                    if nzpos == num_nz or nzindices1[nzpos] != j or nzindices0[nzpos] != i:
-                        zindices0[zpos] = i
-                        zindices1[zpos] = j
-                        zpos += 1
+            for j in range(ranges[i, 1], ranges[i, 2]):
+                while nzpos < num_nz and nzindices0[nzpos] == i and nzindices1[nzpos] < j:
+                    nzpos += 1
+                m1 = mapping[i]
+                m2 = mapping[j]
+                if m2 - m1 < 4 and (m2 - m1 == 1 or ((m1 + startfend) % 2 == 0 and m2 - m1 == 3)):
+                    continue
+                elif nzpos == num_nz or nzindices1[nzpos] != j or nzindices0[nzpos] != i:
+                    zindices0[zpos] = i
+                    zindices1[zpos] = j
+                    zpos += 1
     return None
 
 
@@ -251,7 +239,6 @@ def find_distancebound_possible_interactions(
         np.ndarray[DTYPE_int_t, ndim=1] filter not None,
         np.ndarray[DTYPE_int_t, ndim=1] chrints not None,
         int useread_int,
-        int binned,
         int mindistance,
         int maxdistance):
     cdef long long int h, i, j, k, chr_total, all_total, total, stop
@@ -282,44 +269,43 @@ def find_distancebound_possible_interactions(
                     if filter[j] == 0:
                         continue
                     total = chr_total - 1
-                    if binned == 0:
-                        # remove upstream interactions outside of maxdistance
-                        k = chr_indices[i]
-                        stop = (j / 2) * 2 - 2
-                        while k < stop and mids[j] - mids[k] >= maxdistance:
-                            total -= filter[k]
-                            k += 1
-                        stop = k - 1
-                        # remove upstream interactions inside of mindistance
-                        k = (j / 2) * 2 - 3
-                        while k > stop and mids[j] - mids[k] < mindistance:
-                            total -= filter[k]
-                            k -= 1
-                        # remove downstream interactions outside of maxdistance
-                        k = chr_indices[i + 1] - 1
-                        stop = (j / 2) * 2 + 3
-                        while k > stop and mids[k] - mids[j] >= maxdistance:
-                            total -= filter[k]
-                            k -= 1
-                        stop = k + 1
-                        # remove downstream interactions inside of mindistance
-                        k = (j / 2) * 2 + 4
-                        while k < stop and mids[k] - mids[j] < mindistance:
-                            total -= filter[k]
-                            k += 1
-                        if j % 2 == 0:
-                            # remove same fragment fend
-                            total -= filter[j + 1]
-                            # remove previous fragment fends if necessary
-                            if j > 1:
-                                total -= filter[j - 1]
-                                if mids[j] - mids[j - 2] < mindistance:
-                                    total -= filter[j - 2]
-                            # remove next fragment fends if necessary
-                            if j < chr_indices[i + 1] - 2:
-                                total -= filter[j + 3]
-                                if mids[j + 2] - mids[j] < mindistance:
-                                    total -= filter[j + 2]
+                    # remove upstream interactions outside of maxdistance
+                    k = chr_indices[i]
+                    stop = (j / 2) * 2 - 2
+                    while k < stop and mids[j] - mids[k] >= maxdistance:
+                        total -= filter[k]
+                        k += 1
+                    stop = k - 1
+                    # remove upstream interactions inside of mindistance
+                    k = (j / 2) * 2 - 3
+                    while k > stop and mids[j] - mids[k] < mindistance:
+                        total -= filter[k]
+                        k -= 1
+                    # remove downstream interactions outside of maxdistance
+                    k = chr_indices[i + 1] - 1
+                    stop = (j / 2) * 2 + 3
+                    while k > stop and mids[k] - mids[j] >= maxdistance:
+                        total -= filter[k]
+                        k -= 1
+                    stop = k + 1
+                    # remove downstream interactions inside of mindistance
+                    k = (j / 2) * 2 + 4
+                    while k < stop and mids[k] - mids[j] < mindistance:
+                        total -= filter[k]
+                        k += 1
+                    if j % 2 == 0:
+                        # remove same fragment fend
+                        total -= filter[j + 1]
+                        # remove previous fragment fends if necessary
+                        if j > 1:
+                            total -= filter[j - 1]
+                            if mids[j] - mids[j - 2] < mindistance:
+                                total -= filter[j - 2]
+                        # remove next fragment fends if necessary
+                        if j < chr_indices[i + 1] - 2:
+                            total -= filter[j + 3]
+                            if mids[j + 2] - mids[j] < mindistance:
+                                total -= filter[j + 2]
                         else:
                             # remove same fragment fend
                             total -= filter[j - 1]
@@ -333,29 +319,4 @@ def find_distancebound_possible_interactions(
                                 total -= filter[j + 1]
                                 if mids[j + 2] - mids[j] < mindistance:
                                     total -= filter[j + 2]
-                    else:
-                        # remove upstream interactions outside of maxdistance
-                        k = chr_indices[i]
-                        while k < j and mids[j] - mids[k] >= maxdistance:
-                            total -= filter[k]
-                            k += 1
-                        stop = k - 1
-                        # remove upstream interactions inside of mindistance
-                        k = j - 1
-                        while k > stop and mids[j] - mids[k] < mindistance:
-                            total -= filter[k]
-                            k -= 1
-                        # remove downstream interactions outside of maxdistance
-                        k = chr_indices[i + 1] - 1
-                        while k > j and mids[k] - mids[j] >= maxdistance:
-                            total -= filter[k]
-                            k -= 1
-                        stop = k + 1
-                        # remove downstream interactions inside of mindistance
-                        k = j + 1
-                        while k < stop and mids[k] - mids[j] < mindistance:
-                            total -= filter[k]
-                            k += 1
-                    interactions[j] += total
     return None
-

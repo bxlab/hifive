@@ -43,8 +43,7 @@ def find_distance_bin_sums(
         np.ndarray[DTYPE_64_t, ndim=1] count_sum not None,
         np.ndarray[DTYPE_64_t, ndim=1] logdistance_sum not None,
         int start,
-        int stop,
-        int binned):
+        int stop):
     cdef long long int i, j, temp, fend1, fend2, previous_fend
     cdef double log_dist
     cdef long long int num_data = indices.shape[0]
@@ -66,28 +65,14 @@ def find_distance_bin_sums(
             count_sum[j] += counts[i]
         for fend1 in range(start, stop):
             j = 0
-            if binned == 0:
-                for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
-                    if rev_mapping[fend1] % 2 == 0:
-                        temp = rev_mapping[fend2] - rev_mapping[fend1]
-                        if temp == 1 or temp == 3:
-                            continue
-                    else:
-                        if rev_mapping[fend2] - rev_mapping[fend1] == 1:
-                            continue
-                    log_dist = log(mids[fend2] - mids[fend1])
-                    while log_dist > cutoffs[j]:
-                        j += 1
-                    bin_size[j] += 1
-                    logdistance_sum[j] += log_dist
-            else:
-                for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
-                    log_dist = log(mids[fend2] - mids[fend1])
-                    while log_dist > cutoffs[j]:
-                        j += 1
-                    bin_size[j] += 1
-                    logdistance_sum[j] += log_dist
-            for fend2 in range(fend1 + 4, num_fends):
+            for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
+                if rev_mapping[fend1] % 2 == 0:
+                    temp = rev_mapping[fend2] - rev_mapping[fend1]
+                    if temp == 1 or temp == 3:
+                        continue
+                else:
+                    if rev_mapping[fend2] - rev_mapping[fend1] == 1:
+                        continue
                 log_dist = log(mids[fend2] - mids[fend1])
                 while log_dist > cutoffs[j]:
                     j += 1

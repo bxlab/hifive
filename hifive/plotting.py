@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
 """
-This is a module contains scripts for generating plots from compact and full
-matrices of interaction data.
+This is a module contains scripts for generating plots from compact and full matrices of interaction data.
 
 Concepts
 ----------
@@ -15,9 +14,8 @@ API Documentation
 ------------------
 """
 
-import os
 import sys
-from math import log, exp
+from math import exp
 
 import h5py
 import numpy
@@ -26,7 +24,7 @@ try:
 except:
     pass
 try:
-    from pyx import *
+    from pyx import canvas, path, style, bitmap, text, trafo
 except:
     pass
 

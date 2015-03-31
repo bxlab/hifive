@@ -15,7 +15,6 @@ API documentation
 import os
 import sys
 import subprocess
-from math import floor, ceil
 
 import numpy
 import h5py
@@ -243,8 +242,8 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
                 bin_mapping1[:, 2] = for_valid + startfrag
                 bin_mapping2[:, 2] = rev_valid + startfrag
             else:
-                bin_mapping1[:, 2] = numpy.where(strand == 0)[0] + startfrag
-                bin_mapping2[:, 2] = numpy.where(strand == 1)[0] + startfrag
+                bin_mapping1[:, 2] = numpy.where(strands == 0)[0] + startfrag
+                bin_mapping2[:, 2] = numpy.where(strands == 1)[0] + startfrag
             bin_mapping1[:, 3] = bin_mapping1[:, 2] + 1
             bin_mapping1[:, 0] = fivec.frags['fragments']['start'][bin_mapping1[:, 2]]
             bin_mapping1[:, 1] = fivec.frags['fragments']['stop'][bin_mapping1[:, 2]]
@@ -362,9 +361,9 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
     # Fill in binned data values
     if input_type == 'upper':
         indices = numpy.triu_indices(data_array.shape[0], 1)
-        _hic_binning.bin_upper_to_upper(binned_array, data_array[indices[0], indices[1], :], mapping, num_bins)
+        _fivec_binning.bin_upper_to_upper(binned_array, data_array[indices[0], indices[1], :], mapping, num_bins)
     else:
-        _hic_binning.bin_upper_to_upper(binned_array, data_array, mapping, num_bins)
+        _fivec_binning.bin_upper_to_upper(binned_array, data_array, mapping, num_bins)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -391,8 +390,7 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
 def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, minobservations=50,
                               searchdistance=0, removefailed=True, **kwargs):
     """
-    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
-    or 'searchdistance' criteria.
+    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations', or 'searchdistance' criteria.
 
     :param unbinned: A full or upper array containing data to be binned. Array format will be determined from the number of dimensions.
     :type unbinned: numpy array
@@ -417,10 +415,8 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     # Determine unbinned array type
     if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) / 2 ==
                                      unbinned.shape[0]):
-        unbinned_type = 'upper'
         ub_signal = unbinned
     elif len(unbinned.shape) == 3 and unbinned.shape[0] == unbinnedpositions.shape[0]:
-        unbinned_type = 'full'
         ub_signal = numpy.zeros((unbinned.shape[0] * (unbinned.shape[0] - 1) / 2, 2), dtype=numpy.float32)
         indices = numpy.triu_indices(unbinned.shape[0], 1)
         ub_signal[:, 0] = unbinned[indices[0], indices[1], 0]
@@ -752,8 +748,8 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
                 bin_mapping1[:, 2] = valid1 + startfrag1
                 bin_mapping2[:, 2] = valid2 + startfrag2
             else:
-                bin_mapping1[:, 2] = numpy.where(strand1 == 0)[0] + startfrag1
-                bin_mapping2[:, 2] = numpy.where(strand2 == 1)[0] + startfrag2
+                bin_mapping1[:, 2] = numpy.where(strands1 == 0)[0] + startfrag1
+                bin_mapping2[:, 2] = numpy.where(strands2 == 1)[0] + startfrag2
             bin_mapping1[:, 3] = bin_mapping1[:, 2] + 1
             bin_mapping1[:, 0] = fivec.frags['fragments']['start'][bin_mapping1[:, 2]]
             bin_mapping1[:, 1] = fivec.frags['fragments']['stop'][bin_mapping1[:, 2]]
@@ -810,8 +806,7 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
 def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binbounds1, binbounds2,
                                 minobservations=50, searchdistance=0, removefailed=True, **kwargs):
     """
-    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
-    or 'searchdistance' criteria.
+    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations', or 'searchdistance' criteria.
 
     :param unbinned: A full array containing data to be binned.
     :type unbinned: numpy array

@@ -1155,7 +1155,6 @@ def binning_bin_cis_observed(
             if fend1 != prev_fend:
                 prev_fend = fend1
                 k = 0
-                n = 0
             fend2 = data[i, 1]
             if filt[fend2] == 0:
                 continue
@@ -1200,7 +1199,6 @@ def binning_bin_cis_expected(
             if filt[fend1] == 0:
                 continue
             k = 0
-            n = 0
             fend2 = fend1 + 2
             distance = mids[fend2] - mids[fend1]
             if filt[fend2] == 1 and distance >= mindistance and distance <= maxdistance:

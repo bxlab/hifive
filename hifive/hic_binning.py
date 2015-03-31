@@ -17,7 +17,6 @@ API Documentation
 import os
 import sys
 import subprocess
-from math import floor, ceil
 
 import numpy
 import h5py
@@ -168,7 +167,6 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             print >> sys.stderr, ("Insufficient data\n"),
         return None
     max_fend = numpy.zeros(mapping.shape[0], dtype=numpy.int32)
-    chroms = hic.fends['fends']['chr'][startfend:stopfend]
     find_max_fend(max_fend, mids, hic.fends['fends']['chr'][startfend:stopfend],
                   hic.fends['chr_indices'][...], startfend, maxdistance)
     max_fend = numpy.minimum(max_fend, mapping.shape[0])
@@ -383,8 +381,7 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
 def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, minobservations=10,
                               searchdistance=0, removefailed=True, **kwargs):
     """
-    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
-    or 'searchdistance' criteria.
+    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations', or 'searchdistance' criteria.
 
     :param unbinned: A 2d or 3d array containing data in either compact or upper format to be used for filling expanding bins. Array format will be determined from the number of dimensions.
     :type unbinned: numpy array
@@ -619,7 +616,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     mids2 = hic.fends['fends']['mid'][startfend2:stopfend2]
     if binsize == 0 and binbounds1 is None:
         if skipfiltered:
-            mapping1[valid1] = nump.arange(valid1.shape[0])
+            mapping1[valid1] = numpy.arange(valid1.shape[0])
             num_bins1 = valid1.shape[0]
         else:
             mapping1[valid1] = valid1
@@ -635,7 +632,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         num_bins1 = (stop1 - start1) / binsize
     if binsize == 0 and binbounds2 is None:
         if skipfiltered:
-            mapping2[valid2] = nump.arange(valid2.shape[0])
+            mapping2[valid2] = numpy.arange(valid2.shape[0])
             num_bins2 = valid2.shape[0]
         else:
             mapping2[valid2] = valid2
@@ -822,7 +819,7 @@ def bin_trans_array(data_array, data_mapping1, data_mapping2, binsize=10000, bin
     mids1 = (data_mapping1[:, 0] + data_mapping1[:, 1]) / 2
     mids2 = (data_mapping2[:, 0] + data_mapping2[:, 1]) / 2
     if not silent:
-        print >> sys.stderr, ("Finding binned trans array...") % (arraytype),
+        print >> sys.stderr, ("Finding binned trans array..."),
     # Find bin mapping for each fend
     mapping1 = numpy.zeros(mids1.shape[0], dtype=numpy.int32) - 1
     fend_ranges1 = numpy.zeros((binbounds1.shape[0], 2), dtype=numpy.int32)
@@ -846,17 +843,17 @@ def bin_trans_array(data_array, data_mapping1, data_mapping2, binsize=10000, bin
     binned_array = numpy.zeros((num_bins1, num_bins2, 2), dtype=numpy.float32)
     # Fill in binned data values
     for i in range(valid1.shape[0]):
-        binned_array[i, :, 0] = numpy.bincount(mapping2[valid], weights=data_array[valid1[i], valid2, 0],
+        binned_array[i, :, 0] = numpy.bincount(mapping2[valid2], weights=data_array[valid1[i], valid2, 0],
                                             minlength=num_bins2)
-        binned_array[i, :, 1] = numpy.bincount(mapping2[valid], weights=data_array[valid1[i], valid2, 1],
+        binned_array[i, :, 1] = numpy.bincount(mapping2[valid2], weights=data_array[valid1[i], valid2, 1],
                                             minlength=num_bins2)
     # If mapping requested, calculate bin bounds
     if returnmapping:
-        mapping1 = numpy.zeros((num_bins, 4), dtype=numpy.int32)
+        mapping1 = numpy.zeros((num_bins1, 4), dtype=numpy.int32)
         mapping1[:, 0] = binbounds1[:, 0]
         mapping1[:, 1] = binbounds1[:, 1]
         mapping1[:, 2:4] = fend_ranges1
-        mapping2 = numpy.zeros((num_bins, 4), dtype=numpy.int32)
+        mapping2 = numpy.zeros((num_bins2, 4), dtype=numpy.int32)
         mapping2[:, 0] = binbounds2[:, 0]
         mapping2[:, 1] = binbounds2[:, 1]
         mapping2[:, 2:4] = fend_ranges2
@@ -871,8 +868,7 @@ def bin_trans_array(data_array, data_mapping1, data_mapping2, binsize=10000, bin
 def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2, binned, binbounds1, binbounds2,
                                 minobservations=10, searchdistance=0, removefailed=False, **kwargs):
     """
-    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations',
-    or 'searchdistance' criteria.
+    Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations', or 'searchdistance' criteria.
 
     :param unbinned: A 3d array containing data to be used for filling expanding bins. This array should be  N x M x 2, where N is the number of bins or fends from the first chromosome and M is the number of bins or fends from the second chromosome.
     :type unbinned: numpy array

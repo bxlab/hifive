@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
+"""A class for handling HiC read data."""
+
 import os
 import sys
-from glob import glob
-import subprocess
 
 import numpy
 import h5py
@@ -12,10 +12,9 @@ try:
 except:
     pass
 
-from fend import Fend
-
 
 class HiCData(object):
+
     """This class handles interaction count data for HiC experiments.
 
     This class stores mapped paired-end reads, indexing them by fragment-end (fend) number, in an h5dict.
@@ -35,9 +34,7 @@ class HiCData(object):
     """
 
     def __init__(self, filename, mode='r', silent=False):
-        """
-        Create a :class:`HiCData` object.
-        """
+        """Create a :class:`HiCData` object."""
         self.file = os.path.abspath(filename)
         self.silent = silent
         self.history = ''
@@ -46,12 +43,14 @@ class HiCData(object):
         return None
 
     def __getitem__(self, key):
+        """Dictionary-like lookup."""
         if key in self.__dict__:
             return self.__dict__[key]
         else:
             return None
 
     def __setitem__(self, key, value):
+        """Dictionary-like value setting."""
         self.__dict__[key] = value
         return None
 
@@ -229,12 +228,12 @@ class HiCData(object):
             if not os.path.exists(filepair[0]):
                 if not self.silent:
                     print >> sys.stderr, ("%s could not be located.") % (filepair[0]),
-                self.history += "'%s' not found, " % fname
+                self.history += "'%s' not found, " % filepair[0]
                 present = False
             if not os.path.exists(filepair[1]):
                 if not self.silent:
                     print >> sys.stderr, ("%s could not be located.") % (filepair[1]),
-                self.history += "'%s' not found, " % fname
+                self.history += "'%s' not found, " % filepair[1]
                 present = False
             if not present:
                 if not self.silent:
@@ -523,106 +522,4 @@ class HiCData(object):
         output.close()
         if not self.silent:
             print >> sys.stderr, ("Done\n"),
-        return None
-
-    def convert_to_binned(self, binnedfilename, outfilename):
-        """
-        Create new dataset file by reassigning reads to bins specified by a binned :class:`Fend` file.
-
-        :param binnedfilename: Speficies the :class:`Fend` file to use to determine bin boundaries.
-        :type binnedfilename: str.
-        :param outfilename: Filename to write the new :class:`HiCData` object to.
-        :type outfilename: str.
-        :returns: None
-        """
-        history = self.history + "HiCData.convert_to_binned(binnedfilename='%s', outfilename='%s') - Success\n" % (binnedfilename, outfilename)
-        # determine if binned fend file exists and if so, load it
-        if not os.path.exists(binnedfilename):
-            if not self.silent:
-                print >> sys.stderr, \
-                ("The fend file %s was not found. No data was loaded.\n") % (binnedfilename),
-            return None
-        bins = h5py.File(binnedfilename, 'r')
-        history = bins['/'].attrs['history'] + history
-        outfile = h5py.File(outfilename, 'w')
-        outfile.attrs['fendfilename'] = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(binnedfilename)),
-                                                   os.path.dirname(os.path.abspath(outfilename))),
-                                                   os.path.basename(binnedfilename))
-        original = self.fendfilename
-        if original[:2] == './':
-            original = original[2:]
-        parent_count = original.count('../')
-        original = '/'.join(self.file.split('/')[:-(1 + parent_count)] +
-                            original.lstrip('/').split('/')[parent_count:])
-        outfile.attrs['original_fendfilename'] = "%s/%s" % (os.path.relpath(os.path.dirname(original),
-                                                            os.path.dirname(os.path.abspath(outfilename))),
-                                                            os.path.basename(original))
-        outfile.attrs['maxinsert'] = self.maxinsert
-        outfile.attrs['binned'] = True
-        chr2int = {}
-        bin_chroms = bins['chromosomes'][...]
-        for i, j in enumerate(bin_chroms):
-            if j in fend_chroms:
-                chr2int[j] = i
-        mapping = numpy.zeros(fends['fends'].shape[0], dtype=numpy.int32) - 1
-        bin_indices = bins['chr_indices'][...]
-        fend_indices = self.fends['chr_indices'][...]
-        for j in chr2int.keys():
-            fstart = fend_indices[fend_chr2int[j]]
-            fstop = fend_indices[fend_chr2int[j] + 1]
-            bstart = bin_indices[chr2int[j]]
-            bstop = bin_indices[chr2int[j] + 1]
-            mapping[fstart:fstop] = numpy.searchsorted(bins['fends']['stop'][bstart:bstop],
-                                                       self.fends['fends']['mid'][fstart:fstop],
-                                                       side='right') + bstart
-        valid = numpy.where((mapping[self.cis_data[:, 0]] != -1) * (mapping[self.cis_data[:, 1]] != -1))[0]
-        cis_data = self.cis_data[valid, :]
-        cis_data[:, 0] = mapping[cis_data[:, 0]]
-        cis_data[:, 1] = mapping[cis_data[:, 1]]
-        valid = numpy.where(cis_data[:, 0] != cis_data[:, 1])[0]
-        cis_data = cis_data[valid, :]
-        indices = cis_data[:, 0].astype(numpy.int64) * bin_indices[-1] + cis_data[:, 1]
-        unique_indices = numpy.unique(indices)
-        index_mapping = numpy.searchsorted(unique_indices, indices)
-        counts = numpy.bincount(index_mapping, weights=cis_data[:, 2], minlength=unique_indices.shape[0])
-        del index_mapping
-        cis_data = numpy.zeros((counts.shape[0], 3), dtype=numpy.int32)
-        cis_data[:, 2] = counts
-        cis_data[:, 0] = unique_indices / bin_indices[-1]
-        cis_data[:, 1] = unique_indices % bin_indices[-1]
-        del indices
-        del unique_indices
-        cis_indices = numpy.r_[0, numpy.bincount(cis_data[:, 0],
-                               minlength=bin_indices[-1])].astype(numpy.int64)
-        for i in range(cis_indices.shape[0] - 1):
-            cis_indices[i + 1] += cis_indices[i]
-        outfile.create_dataset(name='cis_data', data=cis_data)
-        outfile.create_dataset(name='cis_indices', data=cis_indices)
-        del cis_data
-        del cis_indices
-        valid = numpy.where((mapping[self.trans_data[:, 0]] != -1) * (mapping[self.trans_data[:, 1]] != -1))[0]
-        trans_data = self.trans_data[valid, :]
-        trans_data[:, 0] = mapping[trans_data[:, 0]]
-        trans_data[:, 1] = mapping[trans_data[:, 1]]
-        indices = trans_data[:, 0].astype(numpy.int64) * bin_indices[-1] + trans_data[:, 1]
-        unique_indices = numpy.unique(indices)
-        index_mapping = numpy.searchsorted(unique_indices, indices)
-        counts = numpy.bincount(index_mapping, weights=trans_data[:, 2])
-        del index_mapping
-        trans_data = numpy.zeros((counts.shape[0], 3), dtype=numpy.int32)
-        trans_data[:, 2] = counts
-        trans_data[:, 0] = unique_indices / bin_indices[-1]
-        trans_data[:, 1] = unique_indices % bin_indices[-1]
-        del indices
-        del unique_indices
-        trans_indices = numpy.bincount(trans_data[:, 0], minlength=(bins['fends'].shape[0] + 1)).astype(numpy.int64)
-        for i in range(trans_indices.shape[0] - 1):
-            trans_indices[i + 1] += trans_indices[i]
-        outfile.create_dataset(name='trans_data', data=trans_data)
-        outfile.create_dataset(name='trans_indices', data=trans_indices)
-        outfile['history'] = history
-        del trans_data
-        del trans_indices
-        outfile.close()
-        bins.close()
         return None

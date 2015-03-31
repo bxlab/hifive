@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
+"""A class for handling HiC analysis."""
+
 import os
 import sys
-from math import ceil, floor, log, exp
 
 import numpy
 import h5py
@@ -16,8 +17,6 @@ try:
 except:
     pass
 
-from fend import Fend
-from hic_data import HiCData
 import hic_binning
 import libraries._hic_binning as _binning
 import libraries._hic_distance as _distance
@@ -27,6 +26,7 @@ import plotting
 
 
 class HiC(object):
+
     """
     This is the class for handling HiC analysis.
 
@@ -47,10 +47,7 @@ class HiC(object):
     """
 
     def __init__(self, filename, mode='r', silent=False):
-        """
-        Create a HiC object.
-        """
-
+        """Create a HiC object."""
         self.file = os.path.abspath(filename)
         if 'mpi4py' in sys.modules.keys():
             self.comm = MPI.COMM_WORLD
@@ -79,12 +76,14 @@ class HiC(object):
         return None
 
     def __getitem__(self, key):
+        """Dictionary-like lookup."""
         if key in self.__dict__:
             return self.__dict__[key]
         else:
             return None
 
     def __setitem__(self, key, value):
+        """Dictionary-like value setting."""
         self.__dict__[key] = value
         return None
 
@@ -342,7 +341,6 @@ class HiC(object):
                 max_dist = max(max_dist,
                                self.fends['fends']['mid'][stop_fend - 1] - self.fends['fends']['mid'][start_fend])
         valid_chroms = numpy.asarray(valid_chroms, dtype=numpy.int32)
-        num_chroms = valid_chroms.shape[0]
         # create cutoff values evenly spaced in log space
         cutoffs = numpy.linspace(numpy.log(max(minsize, 1.0)), numpy.log(max(maxsize, max_dist)),
                                  numbins).astype(numpy.float32)
@@ -350,10 +348,6 @@ class HiC(object):
         bin_size = numpy.zeros(numbins, dtype=numpy.int64)
         count_sum = numpy.zeros(numbins, dtype=numpy.float64)
         logdistance_sum = numpy.zeros(numbins, dtype=numpy.float64)
-        if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
-            binned = 1
-        else:
-            binned = 0
         # for each chromosome, find counts, possible interactions, and distance sums for each bin
         for h, i in enumerate(valid_chroms):
             start_fend = chr_indices[i]
@@ -402,8 +396,7 @@ class HiC(object):
                                              count_sum,
                                              logdistance_sum,
                                              node_start,
-                                             node_stop,
-                                             binned)
+                                             node_stop)
         if self.rank == 0:
             # exchange arrays
             if not self.silent:
@@ -491,10 +484,6 @@ class HiC(object):
         for i in range(len(chroms)):
             chrints[i] = self.chr2int[chroms[i]]
         chroms = list(numpy.array(chroms)[numpy.argsort(chrints)])
-        if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
-            binned = 1
-        else:
-            binned = 0
         if self.chromosome_means is None:
             self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
         for chrom in chroms:
@@ -540,7 +529,6 @@ class HiC(object):
                                            maxdistance,
                                            node_ranges[self.rank],
                                            node_ranges[self.rank + 1],
-                                           binned,
                                            start_fend)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
@@ -595,7 +583,6 @@ class HiC(object):
                                                  zero_indices1,
                                                  start,
                                                  stop,
-                                                 binned,
                                                  start_fend)
             # count total interactions per fend and sent to root node
             interactions = numpy.bincount(nonzero_indices0, minlength=rev_mapping.shape[0])
@@ -837,13 +824,8 @@ class HiC(object):
             print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
         if self.corrections is None:
             self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
-        if 'binned' in self.data.attrs.keys() and self.data.attrs['binned'] == True:
-            binned = 1
-        else:
-            binned = 0
         # create needed arrays
         mids = self.fends['fends']['mid'][...]
-        chrs = self.fends['fends']['chr'][...]
         filt = numpy.copy(self.filter)
         chr_indices = self.fends['chr_indices'][...]
         if (chroms is None or
@@ -861,7 +843,6 @@ class HiC(object):
         for chrm, i in self.chr2int.iteritems():
             if chrm not in chroms:
                 filt[chr_indices[i]:chr_indices[i + 1]] = 0
-        all_valid = numpy.sum(filt)
         # copy needed arrays from h5dict
         if usereads in ['cis', 'all']:
             cis_ranges = numpy.round(numpy.linspace(0, self.data['cis_data'].shape[0],
@@ -935,7 +916,6 @@ class HiC(object):
                                                                filt,
                                                                chrints,
                                                                useread_int,
-                                                               binned,
                                                                mindistance,
                                                                maxdistance)
         if self.rank == 0:
@@ -1062,8 +1042,6 @@ class HiC(object):
             else:
                 self.comm.Send(fend_means, dest=0, tag=13)
                 self.comm.Recv(corrections, source=0, tag=13)
-        count_sums = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.int64)
-        corrected_sums = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float64)
         # calculate chromosome mean
         if self.chromosome_means is None:
             self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
@@ -1116,7 +1094,6 @@ class HiC(object):
         :type usereads: str.
         :returns: None
         """
-        present = True
         for parameter in model:
             if not parameter in ['len', 'distance'] and parameter not in self.fends['fends'].dtype.names:
                 if not self.silent:
@@ -1192,10 +1169,8 @@ class HiC(object):
             if model[i] == 'len':
                 values = (self.fends['fends']['stop'][...] -
                           self.fends['fends']['start'][...]).astype(numpy.float32)
-            elif model[i] != 'distance':
-                values = self.fends['fends'][model[i]][...]
             else:
-                continue
+                values = self.fends['fends'][model[i]][...]
             if parameters[i].count('even') > 0:
                 temp = numpy.copy(values)
                 temp.sort()
@@ -1253,7 +1228,7 @@ class HiC(object):
                 stop_index = self.data['cis_indices'][chr_indices[chrint + 1]]
                 if start_index <= stop_index:
                     node_ranges = numpy.round(numpy.linspace(start_index, stop_index,
-                                              self.num_procs + 1)).astype(numpy.int32)
+                                              self.num_procs + 1)).astype(numpy.int64)
                     data = self.data['cis_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
                     _binning.binning_bin_cis_observed(data,
                                                       filt,
@@ -1279,7 +1254,7 @@ class HiC(object):
                         fend_sizes[i] += fend_sizes[i - 1]
                     node_targets = numpy.round(numpy.linspace(0, numfends * (numfends - 1) / 2,
                                                self.num_procs + 1)).astype(numpy.int64)
-                    node_ranges = numpy.searchsorted(fend_sizes[1:], node_targets).astype(numpy.int32)
+                    node_ranges = numpy.searchsorted(fend_sizes[1:], node_targets).astype(numpy.int64)
                     if (node_ranges[self.rank] < fend_sizes.shape[0] - 1 and
                         node_targets[self.rank] - fend_sizes[node_ranges[self.rank]] > 
                         fend_sizes[node_ranges[self.rank] + 1] - node_targets[self.rank]):
@@ -1310,7 +1285,7 @@ class HiC(object):
                 stop_index = self.data['trans_indices'][chr_indices[chrint + 1]]
                 if start_index < stop_index:
                     node_ranges = numpy.round(numpy.linspace(start_index, stop_index,
-                                              self.num_procs + 1)).astype(numpy.int32)
+                                              self.num_procs + 1)).astype(numpy.int64)
                     data = self.data['trans_data'][node_ranges[self.rank]:node_ranges[self.rank + 1], :]
                     _binning.binning_bin_trans_observed(data,
                                                         filt,
@@ -1324,7 +1299,7 @@ class HiC(object):
                 valid = numpy.where(filt[chr_indices[chrint]:chr_indices[chrint + 1]] == 1)[0] + chr_indices[chrint]
                 if valid.shape[0] > 0:
                     node_ranges = numpy.round(numpy.linspace(0, valid.shape[0],
-                                              self.num_procs + 1)).astype(numpy.int32)
+                                              self.num_procs + 1)).astype(numpy.int64)
                     startfend = valid[node_ranges[self.rank]]
                     stopfend = valid[node_ranges[self.rank + 1] - 1] + 1
                     for chrom2 in chroms[(h + 1):]:
@@ -1384,9 +1359,9 @@ class HiC(object):
             if not distance_c is None:
                 prod *= distance_c[distance_i]
             prod *= prior
-            prod = numpy.minimum(1.0 - min_p, numpy.maximum(1.0 - prod, min_p))
+            prod = numpy.minimum(1.0 - min_p, numpy.maximum(prod, min_p))
             sum_log = numpy.log2(prod)
-            return (-numpy.sum(counts[:, 0] * sum_log + counts[:, 1] * numpy.log2(prod)))
+            return (-numpy.sum(counts[:, 0] * sum_log + counts[:, 1] * numpy.log2(1.0 - prod)))
 
         def find_sum_log_prod(index, indices, corrections, correction_indices, distance_c, distance_i, sum_log, prod):
             prod.fill(1.0)
@@ -1428,16 +1403,20 @@ class HiC(object):
                     continue
                 # divide bins among nodes
                 num_cor = correction_indices[h + 1] - correction_indices[h]
-                node_ranges = numpy.round(numpy.linspace(0, num_cor, self.num_procs + 1)).astype(numpy.int32)
+                node_ranges = numpy.round(numpy.linspace(0, num_cor, self.num_procs + 1)).astype(numpy.int64)
                 bins = bin_counts.shape[0] / num_cor
                 temp_sum_log = numpy.zeros(bins, dtype=numpy.float64)
                 temp_prod = numpy.ones(bins, dtype=numpy.float64)
                 for i in range(node_ranges[self.rank], node_ranges[self.rank + 1]):
                     where = numpy.where(all_indices[:, h] == i)[0]
                     temp_bin_counts = bin_counts[where, :]
+                    if not distance_corrections is None:
+                        temp_dist_indices = distance_indices[where]
+                    else:
+                        temp_dist_indices = None
                     x0 = all_corrections[(correction_indices[h] + i):(correction_indices[h] + i + 1)]
                     find_sum_log_prod(h, all_indices[where, :], all_corrections, correction_indices,
-                                      distance_corrections, distance_indices[where], temp_sum_log,
+                                      distance_corrections, temp_dist_indices, temp_sum_log,
                                       temp_prod)
                     x, f, d = bfgs(func=temp_ll, x0=x0, fprime=temp_ll_grad, pgtol=pgtol,
                                    args=(temp_bin_counts, temp_sum_log, temp_prod, prior, log_prior, log_2, min_p))
@@ -1537,7 +1516,7 @@ class HiC(object):
         if not self.silent:
             print >> sys.stderr, ("Dynamically binning data..."),
         dynamic = numpy.copy(unbinned)
-        dynamically_bin_unbinned_upper(unbinned, mids, dynamic, minobservations)
+        hic_binning.dynamically_bin_unbinned_upper(unbinned, mids, dynamic, minobservations)
         dynamic = numpy.log(dynamic[:, 0], dynamic[:, 1])
         data_mat = numpy.zeros((mids.shape[0], mids.shape[0]), dtype=numpy.float32)
         indices = numpy.triu_indices(mids.shape[0], 1)
