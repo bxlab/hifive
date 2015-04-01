@@ -23,7 +23,7 @@ import libraries._fivec_binning as _fivec_binning
 
 
 def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=None, startfrag=None, stopfrag=None,
-                    datatype='enrichment', arraytype='compact', skipfiltered=False, returnmapping=False, **kwargs):
+                    datatype='enrichment', arraytype='full', skipfiltered=False, returnmapping=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.
 
@@ -902,8 +902,8 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     # Find cis heatmaps
     remove = []
     for region in regions:
-        results = find_cis_signal(fivec, region, datatype=datatype, arraytype=arraytype, returnmapping=True,
-                                  silent=silent, skipfiltered=True)
+        results = find_cis_signal(fivec, region, binsize=binsize, datatype=datatype, arraytype=arraytype,
+                                  returnmapping=True, silent=silent, skipfiltered=True)
         # Check if array contains data
         if results is None or results[0].shape[0] == 0:
             remove.append(region)

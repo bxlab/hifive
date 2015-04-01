@@ -17,7 +17,7 @@ def run(args):
         except:
             print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
             return 1
-    if not args.model is None:
+    if args.algorithm.count('binning') > 0:
         model = args.model.split(',')
         for par in model:
             if par not in ['gc', 'len', 'distance']:

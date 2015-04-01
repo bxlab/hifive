@@ -923,11 +923,11 @@ class FiveC(object):
             return None
         # determine if data is to be dynamically binned
         if not dynamically_binned:
-            data = fivec_binning.bin_cis_signal(self, region, binsize=binsize, binbounds=binbounds,
-                                                start=start, stop=stop, startfrag=startfrag,
-                                                stopfrag=stopfrag, datatype=datatype, arraytype=arraytype,
-                                                skipfiltered=skipfiltered, returnmapping=returnmapping,
-                                                silent=self.silent)
+            data = fivec_binning.find_cis_signal(self, region, binsize=binsize, binbounds=binbounds,
+                                                 start=start, stop=stop, startfrag=startfrag,
+                                                 stopfrag=stopfrag, datatype=datatype, arraytype=arraytype,
+                                                 skipfiltered=skipfiltered, returnmapping=returnmapping,
+                                                 silent=self.silent)
         else:
             expansion, exp_mapping = fivec_binning.find_cis_signal(self, region, binsize=expansion_binsize,
                                                                    start=start, stop=stop, startfrag=startfrag,

@@ -33,6 +33,7 @@ Required Packages
 -----------------
   * `Scipy <http://www.scipy.ord>`_
   * `Numpy <http://www.numpy.org>`_
+  * `Cython <http://www.cython.org>`_
   * `h5py <http://www.h5py.org>`_
 
 Recommended Packages

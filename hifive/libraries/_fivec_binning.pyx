@@ -1,8 +1,6 @@
 # distutils: language = c++
 
-"""These functions provide increased speed in handling the signal-binning
-functions necessary for supporting fivec analysis using HiFive.
-"""
+"""These functions provide increased speed in handling the signal-binning functions necessary for supporting fivec analysis using HiFive."""
 
 import cython
 cimport numpy as np
@@ -105,11 +103,14 @@ def find_cis_compact_expected(
         double gamma,
         double region_mean,
         int startfrag):
-    cdef long long int frag1, frag2, map1, map2, strand1, bin1, bin2, index
+    cdef long long int frag1, frag2, map1, map2, strand1, bin1, bin2, index, num_parameters
     cdef double distance, value
     cdef long long int num_frags = mapping.shape[0]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
-    cdef long long int num_parameters = frag_indices.shape[1]
+    if not frag_indices is None:
+        num_parameters = frag_indices.shape[1]
+    else:
+        num_parameters = 0
     with nogil:
         for frag1 in range(num_frags - 1):
             map1 = mapping[frag1]
@@ -157,17 +158,20 @@ def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
         np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
         np.ndarray[DTYPE_int_t, ndim=2] frag_indices,
-        np.ndarray[DTYPE_int_t, ndim=1] mids,
-        np.ndarray[DTYPE_int_t, ndim=1] strands,
+        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
+        np.ndarray[DTYPE_int_t, ndim=1] strands not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         double gamma,
         double region_mean,
         int startfrag):
-    cdef long long int frag1, frag2, index, map1, map2, strand1, bin1, bin2, index2
+    cdef long long int frag1, frag2, index, map1, map2, strand1, bin1, bin2, index2, num_parameters
     cdef double distance, value
     cdef long long int num_frags = mapping.shape[0]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
-    cdef long long int num_parameters = frag_indices.shape[1]
+    if not frag_indices is None:
+        num_parameters = frag_indices.shape[1]
+    else:
+        num_parameters = 0
     with nogil:
         for frag1 in range(num_frags - 1):
             map1 = mapping[frag1]
@@ -380,11 +384,14 @@ def find_trans_expected(
         double trans_mean,
         int startfrag1,
         int startfrag2):
-    cdef long long int frag1, frag2, map1, map2, strand1, bin1, bin2, index
+    cdef long long int frag1, frag2, map1, map2, strand1, bin1, bin2, index, num_parameters
     cdef double distance, value
     cdef long long int num_frags1 = mapping1.shape[0]
     cdef long long int num_frags2 = mapping2.shape[0]
-    cdef long long int num_parameters = frag_indices.shape[1]
+    if not frag_indices is None:
+        num_parameters = frag_indices.shape[1]
+    else:
+        num_parameters = 0
     with nogil:
         for frag1 in range(num_frags1):
             map1 = mapping1[frag1]

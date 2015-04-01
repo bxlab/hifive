@@ -23,17 +23,7 @@ class Frags(unittest.TestCase):
         frags.load_fragments(self.bed_fname, genome_name="mm9", re_name='HindIII')
         frags.save()
         frags = h5py.File('%s/test/data/test_temp.frags' % self.basedir, 'r')
-        for name in self.frags['/'].attrs.keys():
-            if name == 'history':
-                continue
-            self.assertTrue(name in frags['/'].attrs,
-                "%s missing from fragment attributes" % name)
-            self.assertTrue(self.frags['/'].attrs[name] == frags['/'].attrs[name],
-                "%s doesn't match target value" % name)
-        for name in self.frags.keys():
-            self.assertTrue(name in frags,
-                "%s missing from fragment arrays" % name)
-            self.compare_arrays(self.frags[name][...], frags[name][...], name)
+        self.compare_hdf5_dicts(self.frags, frags, 'frags')
 
     def tearDown(self):
         subprocess.call('rm -f %s/test/data/test_temp.frags' % self.basedir, shell=True)
@@ -49,6 +39,30 @@ class Frags(unittest.TestCase):
         else:
             self.assertTrue(numpy.allclose(array1, array2),
                 "%s don't match target values" % name)
+        return None
+
+    def compare_hdf5_dicts(self, dict1, dict2, name):
+        for key in dict1['/'].attrs.keys():
+            if key == 'history':
+                continue
+            self.assertTrue(key in dict2['/'].attrs,
+                "%s missing from %s attributes" % (key, name))
+            value1 = dict1['/'].attrs[key]
+            value2 = dict2['/'].attrs[key]
+            if isinstance(value1, float):
+                self.assertTrue(
+                    numpy.allclose(numpy.array([value1], dtype=numpy.float32), numpy.array([value2], dtype=numpy.float32)),
+                    "%s in %s doesn't match target value" % (key, name))
+            elif isinstance(value1, int):
+                self.assertTrue(
+                    numpy.allclose(numpy.array([value1], dtype=numpy.int32), numpy.array([value2], dtype=numpy.int32)),
+                    "%s in %s doesn't match target value" % (key, name))
+            else:
+                self.assertTrue(value1 == value2, "%s in %s doesn't match target value" % (key, name))
+        for key in dict1.keys():
+            self.assertTrue(key in dict2,
+                "%s missing from heatmap arrays" % name)
+            self.compare_arrays(dict1[key][...], dict2[key][...], name)
         return None
 
 

@@ -24,7 +24,7 @@ def run(args):
     chroms = args.chroms.split(',')
     if len(chroms) == 1 and chroms[0] == '':
         chroms = []
-    if not args.model is None:
+    if args.algorithm.count('binning') > 0:
         model = args.model.split(',')
         modelbins = args.modelbins.split(',')
         parameters.split(',')

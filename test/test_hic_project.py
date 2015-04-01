@@ -32,17 +32,7 @@ class HiCProject(unittest.TestCase):
         project.find_distance_parameters(numbins=5, minsize=30000, maxsize=1000000)
         project.save()
         project = h5py.File('%s/test/data/test_temp.hcp' % self.basedir, 'r')
-        for name in self.data['/'].attrs.keys():
-            if name == 'history':
-                continue
-            self.assertTrue(name in project['/'].attrs,
-                "%s missing from project attributes" % name)
-            self.assertTrue(self.data['/'].attrs[name] == project['/'].attrs[name],
-                "%s doesn't match target value" % name)
-        for name in self.data.keys():
-            self.assertTrue(name in project,
-                "%s missing from project arrays" % name)
-            self.compare_arrays(self.data[name][...], project[name][...], name)
+        self.compare_hdf5_dicts(self.data, project, 'project')
 
     def test_hic_project_probability(self):
         project = hic.HiC(self.project_fname, 'r', silent=True)
@@ -86,6 +76,30 @@ class HiCProject(unittest.TestCase):
         else:
             self.assertTrue(numpy.allclose(array1, array2),
                 "%s don't match target values" % name)
+        return None
+
+    def compare_hdf5_dicts(self, dict1, dict2, name):
+        for key in dict1['/'].attrs.keys():
+            if key == 'history':
+                continue
+            self.assertTrue(key in dict2['/'].attrs,
+                "%s missing from %s attributes" % (key, name))
+            value1 = dict1['/'].attrs[key]
+            value2 = dict2['/'].attrs[key]
+            if isinstance(value1, float):
+                self.assertTrue(
+                    numpy.allclose(numpy.array([value1], dtype=numpy.float32), numpy.array([value2], dtype=numpy.float32)),
+                    "%s in %s doesn't match target value" % (key, name))
+            elif isinstance(value1, int):
+                self.assertTrue(
+                    numpy.allclose(numpy.array([value1], dtype=numpy.int32), numpy.array([value2], dtype=numpy.int32)),
+                    "%s in %s doesn't match target value" % (key, name))
+            else:
+                self.assertTrue(value1 == value2, "%s in %s doesn't match target value" % (key, name))
+        for key in dict1.keys():
+            self.assertTrue(key in dict2,
+                "%s missing from heatmap arrays" % name)
+            self.compare_arrays(dict1[key][...], dict2[key][...], name)
         return None
 
 

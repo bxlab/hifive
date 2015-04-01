@@ -101,10 +101,13 @@ def find_cis_compact_expected(
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         double chrom_mean,
         int startfend):
-    cdef long long int fend1, fend2, j, k, map1, map2, bin1, bin2, index
+    cdef long long int fend1, fend2, j, k, map1, map2, bin1, bin2, index, num_parameters
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_parameters = fend_indices.shape[1]
+    if not fend_indices is None:
+        num_parameters = fend_indices.shape[1]
+    else:
+        num_parameters = 0
     with nogil:
         for fend1 in range(num_fends - 1):
             map1 = mapping[fend1]
@@ -176,11 +179,14 @@ def find_cis_upper_expected(
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         double chrom_mean,
         int startfend):
-    cdef long long int fend1, fend2, j, k, index, map1, map2, bin1, bin2, index2
+    cdef long long int fend1, fend2, j, k, index, map1, map2, bin1, bin2, index2, num_parameters
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_parameters = fend_indices.shape[1]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    if not fend_indices is None:
+        num_parameters = fend_indices.shape[1]
+    else:
+        num_parameters = 0
     with nogil:
         for fend1 in range(num_fends - 1):
             map1 = mapping[fend1]
@@ -1000,11 +1006,14 @@ def find_trans_expected(
         double trans_mean,
         int startfend1,
         int startfend2):
-    cdef long long int j, fend1, fend2, map1, map2, bin1, bin2, index
+    cdef long long int j, fend1, fend2, map1, map2, bin1, bin2, index, num_parameters
     cdef double value
     cdef long long int num_fends1 = mapping1.shape[0]
     cdef long long int num_fends2 = mapping2.shape[0]
-    cdef long long int num_parameters = fend_indices.shape[1]
+    if not fend_indices is None:
+        num_parameters = fend_indices.shape[1]
+    else:
+        num_parameters = 0
     with nogil:
         for fend1 in range(num_fends1 - 1):
             map1 = mapping1[fend1]
@@ -1274,13 +1283,7 @@ def binning_bin_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=2] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] num_bins,
         np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
-        int gc_div,
-        int map_div,
-        int len_div,
         int distance_div,
-        int gc_bins,
-        int map_bins,
-        int len_bins,
         int distance_bins,
         int startfend1,
         int stopfend1,
