@@ -1,0 +1,9 @@
+include test/data/test*
+include ez_setup.py
+include *.txt
+include *.rst
+recursive-include doc *.rst
+recursive-include doc *.py
+recursive-include doc *.png
+include doc/Makefile
+include hifive/libraries/*.hpp
