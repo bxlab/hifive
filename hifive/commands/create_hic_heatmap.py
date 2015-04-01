@@ -30,9 +30,12 @@ def run(args):
         if rank == 0:
             print >> sys.stderr, ("-p/--pdf requires the package 'pyx'"),
         sys.exit(1)
-    chroms = args.chroms.split(',')
-    if len(chroms) == 1 and chroms[0] == '':
+    if args.chroms is None:
         chroms = []
+    else:
+        chroms = args.chroms.split(',')
+        if len(chroms) == 1 and chroms[0] == '':
+            chroms = []
     hic = HiC(args.project, 'r', silent=args.silent)
     hic.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans,
                       datatype=args.datatype, chroms=chroms)

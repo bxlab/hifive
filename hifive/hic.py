@@ -262,11 +262,13 @@ class HiC(object):
         :type maxdistance: int.
         :returns: None
         """
-        self.history += "HiC.filter_fends(mininteractions=%i, mindistance=%i, maxdistance=%i) - " % (mininteractions, mindistance, maxdistance)
+        self.history += "HiC.filter_fends(mininteractions=%i, mindistance=%s, maxdistance=%s) - " % (mininteractions, str(mindistance), str(maxdistance))
         if not self.silent:
             print >> sys.stderr, ("Filtering fends..."),
         self.mininteractions = mininteractions
         self.mindistance = mindistance
+        if maxdistance is None:
+            maxdistance = 0
         self.maxdistance = maxdistance
         original_count = numpy.sum(self.filter)
         previous_valid = original_count + 1
@@ -322,11 +324,13 @@ class HiC(object):
         :type corrected: bool.
         :returns: None
         """
-        self.history += "HiC.find_distance_parameters(numbins=%i, minsize=%i, maxsize=%i, corrected=%s) - " % (numbins, minsize, maxsize, corrected)
+        self.history += "HiC.find_distance_parameters(numbins=%i, minsize=%i, maxsize=%s, corrected=%s) - " % (numbins, minsize, str(maxsize), corrected)
         if not self.silent:
             print >> sys.stderr, ('Finding distance arrays...'),
         # determine max distance range of data
         chr_indices = self.fends['chr_indices'][...]
+        if maxsize is None:
+            maxsize = 0
         max_dist = 0
         valid_chroms = []
         for i in range(chr_indices.shape[0] - 1):
@@ -460,7 +464,7 @@ class HiC(object):
         :type precorrect: bool.
         :returns: None
         """
-        self.history += "HiC.find_probability_fend_corrections(mindistance=%i, maxdistance=%i, minchange=%f, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, display=%i, chroms=%s, precalculate=%s, precorrect=%s) - " % (mindistance, maxdistance, minchange, burnin_iterations, annealing_iterations, learningrate, display, str(chroms), precalculate, precorrect)
+        self.history += "HiC.find_probability_fend_corrections(mindistance=%i, maxdistance=%s, minchange=%f, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, display=%i, chroms=%s, precalculate=%s, precorrect=%s) - " % (mindistance, str(maxdistance), minchange, burnin_iterations, annealing_iterations, learningrate, display, str(chroms), precalculate, precorrect)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fend_corrections'.\n"),
@@ -519,7 +523,7 @@ class HiC(object):
             mapping[rev_mapping] = numpy.arange(num_valid).astype(numpy.int32)
             fend_ranges = numpy.zeros((num_valid, 3), dtype=numpy.int64)
             mids = self.fends['fends']['mid'][rev_mapping + start_fend]
-            if maxdistance == 0:
+            if maxdistance == 0 or maxdistance is None:
                 maxdistance = mids[-1] - mids[0]
             # find number of downstream interactions for each fend using distance limits
             _interactions.find_fend_ranges(rev_mapping,
@@ -791,7 +795,7 @@ class HiC(object):
         :type precorrect: bool.
         :returns: None
         """
-        self.history += "HiC.find_express_fend_corrections(iterations=%i, mindistance=%i, maxdistance=%i, remove_distance=%s, usereads='%s', mininteractions=%i, chroms=%s, precorrect=%s) - " % (iterations, mindistance, maxdistance, remove_distance, usereads, mininteractions, str(chroms), precorrect)
+        self.history += "HiC.find_express_fend_corrections(iterations=%i, mindistance=%i, maxdistance=%s, remove_distance=%s, usereads='%s', mininteractions=%i, chroms=%s, precorrect=%s) - " % (iterations, mindistance, str(maxdistance), remove_distance, usereads, mininteractions, str(chroms), precorrect)
         if mininteractions is None:
             if 'mininteractions' in self.__dict__.keys():
                 mininteractions = self.mininteractions
@@ -1099,6 +1103,7 @@ class HiC(object):
         :type usereads: str.
         :returns: None
         """
+        self.history += "HiC.find_binning_fend_corrections(max_iterations=%i, mindistance=%i, maxdistance=%s, usereads='%s', chroms=%s num_bins=%s, parameters=%s, model=%s, learning_threshold=%f) - " % (max_iterations, mindistance, str(maxdistance), usereads, str(chroms), num_bins, parameters, model, learning_threshold)
         for parameter in model:
             if not parameter in ['len', 'distance'] and parameter not in self.fends['fends'].dtype.names:
                 if not self.silent:
@@ -1145,7 +1150,7 @@ class HiC(object):
         for chrom, i in self.chr2int.iteritems():
             if chrom not in chroms:
                 filt[chr_indices[i]:chr_indices[i + 1]] = 0
-        if maxdistance == 0:
+        if maxdistance == 0 or maxdistance is None:
             for chrom in chroms:
                 chrint = self.chr2int[chrom]
                 maxdistance = max(maxdistance, self.fends['fends']['mid'][chr_indices[chrint + 1] - 1] -

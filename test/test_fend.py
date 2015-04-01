@@ -19,9 +19,8 @@ class Fends(unittest.TestCase):
         self.bed_fname = '%s/test/data/test_fend.bed' % self.basedir
 
     def test_fend_creation(self):
-        fends = fend.Fend('%s/test/data/test_temp.fends' % self.basedir, 'w', silent=True)
-        fends.load_fends(self.bed_fname, genome_name="hg19", re_name='HindIII')
-        fends.save()
+        subprocess.call("hifive fends -q -g mm9 -r HindIII -B %s %s/test/data/test_temp.fends" %
+                        (self.bed_fname, self.basedir), shell=True)
         fends = h5py.File('%s/test/data/test_temp.fends' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.fends, fends, 'fends')
 

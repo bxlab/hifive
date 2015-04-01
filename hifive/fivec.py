@@ -231,7 +231,7 @@ class FiveC(object):
         :type maxdistance: int.
         :returns: None
         """
-        self.history += "FiveC.filter_fragments(mininteractions=%i, mindistance=%i, maxdistance=%i) - " % (mininteractions, mindistance, maxdistance)
+        self.history += "FiveC.filter_fragments(mininteractions=%i, mindistance=%s, maxdistance=%s) - " % (mininteractions, str(mindistance), str(maxdistance))
         if not self.silent:
             print >> sys.stderr, ("Filtering fragments..."),
         original_count = numpy.sum(self.filter)
@@ -241,7 +241,7 @@ class FiveC(object):
          # copy needed arrays
         data = self.data['cis_data'][...]
         distances = self.frags['fragments']['mid'][data[:, 1]] - self.frags['fragments']['mid'][data[:, 0]]
-        if maxdistance == 0:
+        if maxdistance == 0 or maxdistance is None:
             maxdistance = numpy.amax(distances) + 1
         valid = numpy.where((self.filter[data[:, 0]] * self.filter[data[:, 1]]) *
                             (distances >= mindistance) * (distances < maxdistance))[0]
@@ -315,7 +315,7 @@ class FiveC(object):
         :type precorrect: bool.
         :returns: None
         """
-        self.history += "FiveC.find_probability_fragment_corrections(mindistance=%i, maxdistance=%i, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, precalculate=%s, regions=%s, precorrect=%s) - " % (mindistance, maxdistance, burnin_iterations, annealing_iterations, learningrate, precalculate, str(regions), precorrect)
+        self.history += "FiveC.find_probability_fragment_corrections(mindistance=%s, maxdistance=%s, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, precalculate=%s, regions=%s, precorrect=%s) - " % (str(mindistance), str(maxdistance), burnin_iterations, annealing_iterations, learningrate, precalculate, str(regions), precorrect)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
@@ -456,7 +456,7 @@ class FiveC(object):
         :type precorrect: bool.
         :returns: None
         """
-        self.history += "FiveC.find_express_fragment_corrections(mindistance=%i, maxdistance=%i, iterations=%i, remove_distance=%s, usereads='%s', regions=%s, precorrect=%s) - " % (mindistance, maxdistance, iterations, remove_distance, usereads, str(regions), precorrect)
+        self.history += "FiveC.find_express_fragment_corrections(mindistance=%s, maxdistance=%s, iterations=%i, remove_distance=%s, usereads='%s', regions=%s, precorrect=%s) - " % (str(mindistance), str(maxdistance), iterations, remove_distance, usereads, str(regions), precorrect)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
@@ -620,7 +620,7 @@ class FiveC(object):
         :type precorrect: bool.
         :returns: None
         """
-        self.history += "FiveC.find_binning_fragment_corrections(mindistance=%i, maxdistance=%i, num_bins=%s, model=%s, learning_threshold=%f, max_iterations=%i, usereads='%s', regions=%s) - " % (mindistance, maxdistance, str(num_bins), str(model), learning_threshold, max_iterations, usereads, str(regions))
+        self.history += "FiveC.find_binning_fragment_corrections(mindistance=%s, maxdistance=%s, num_bins=%s, model=%s, learning_threshold=%f, max_iterations=%i, usereads='%s', regions=%s) - " % (str(mindistance), str(maxdistance), str(num_bins), str(model), learning_threshold, max_iterations, usereads, str(regions))
         for parameter in model:
             if not parameter in ['len'] and parameter not in self.frags['fragments'].dtype.names:
                 if not self.silent:
@@ -657,7 +657,7 @@ class FiveC(object):
         for i in range(self.frags['regions'].shape[0]):
             if i not in regions:
                 filt[self.frags['regions']['start_frag'][i]:self.frags['regions']['stop_frag'][i]] = 0
-        if maxdistance == 0:
+        if maxdistance == 0 or maxdistance is None:
             for i in range(self.frags['regions'].shape[0]):
                 maxdistance = max(maxdistance, self.frags['regions']['stop'][i] -
                                                self.frags['regions']['start'][i]) + 1
@@ -708,6 +708,7 @@ class FiveC(object):
         trans_data = None
         trans_mean = 0.0
         gamma = 0.0
+        trans_mean = 0.0
         frag_corrections = None
         if precorrect:
             frag_corrections = self.corrections

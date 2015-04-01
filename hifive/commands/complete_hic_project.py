@@ -21,9 +21,12 @@ def run(args):
         comm = None
         rank = 0
         num_procs = 1
-    chroms = args.chroms.split(',')
-    if len(chroms) == 1 and chroms[0] == '':
+    if args.chroms is None:
         chroms = []
+    else:
+        chroms = args.chroms.split(',')
+        if len(chroms) == 1 and chroms[0] == '':
+            chroms = []
     if args.algorithm.count('binning') > 0:
         model = args.model.split(',')
         modelbins = args.modelbins.split(',')

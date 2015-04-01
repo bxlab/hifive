@@ -2,7 +2,6 @@ syntax: regexp
 syntax: glob
 
 .eggs
-.hg_ignore
 build
 dist
 doc/_build

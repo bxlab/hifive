@@ -26,9 +26,8 @@ class FiveCData(unittest.TestCase):
         self.bam_fname2 = '%s/test/data/test_fivec_2.bam' % self.basedir
 
     def test_fivec_counts_data_creation(self):
-        data = fivec_data.FiveCData('%s/test/data/test_temp.fcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_counts(self.frag_fname, self.count_fname)
-        data.save()
+        subprocess.call("hifive 5c-data -q -C %s %s %s/test/data/test_temp.fcd" %
+                        (self.count_fname, self.frag_fname, self.basedir), shell=True)
         data = h5py.File('%s/test/data/test_temp.fcd' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
@@ -36,9 +35,8 @@ class FiveCData(unittest.TestCase):
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, "pysam required for bam import"
             return None
-        data = fivec_data.FiveCData('%s/test/data/test_temp.fcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_bam(self.frag_fname, [self.bam_fname1, self.bam_fname2])
-        data.save()
+        subprocess.call("hifive 5c-data -q -B %s %s %s %s/test/data/test_temp.fcd" %
+                        (self.bam_fname1, self.bam_fname2, self.frag_fname, self.basedir), shell=True)
         data = h5py.File('%s/test/data/test_temp.fcd' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 

@@ -59,7 +59,8 @@ def main():
         #extras_require = {'pyx':[], 'PIL':[], 'mlpy':[]},
         author = "Michael Sauria",
         author_email = "mike.sauria@jhu.edu",
-        url='https://bitbucket.org/bxlab/hifive')
+        url='https://github.com/bxlab/hifive',
+        download_url='https://github.com/bxlab/hifive/tarball/2.2')
     setup(**metadata)
 
 # ---- Extension Modules ----------------------------------------------------

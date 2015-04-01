@@ -27,16 +27,14 @@ class HiCData(unittest.TestCase):
         self.bam_fname2 = '%s/test/data/test_hic_2.bam' % self.basedir
 
     def test_hic_raw_data_creation(self):
-        data = hic_data.HiCData('%s/test/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_raw(self.fend_fname, self.raw_fname, 500)
-        data.save()
+        subprocess.call("hifive hic-data -q -R %s -i 500 %s %s/test/data/test_temp.hcd" %
+                        (self.raw_fname, self.fend_fname, self.basedir), shell=True)
         data = h5py.File('%s/test/data/test_temp.hcd' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
     def test_hic_mat_data_creation(self):
-        data = hic_data.HiCData('%s/test/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_mat(self.fend_fname, self.mat_fname, 500)
-        data.save()
+        subprocess.call("hifive hic-data -q -M %s -i 500 %s %s/test/data/test_temp.hcd" %
+                        (self.mat_fname, self.fend_fname, self.basedir), shell=True)
         data = h5py.File('%s/test/data/test_temp.hcd' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
@@ -44,9 +42,8 @@ class HiCData(unittest.TestCase):
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, "pysam required for bam import"
             return None
-        data = hic_data.HiCData('%s/test/data/test_temp.hcd' % self.basedir, 'w', silent=True)
-        data.load_data_from_bam(self.fend_fname, [self.bam_fname1, self.bam_fname2], 500)
-        data.save()
+        subprocess.call("hifive hic-data -q -S %s %s -i 500 %s %s/test/data/test_temp.hcd" %
+                        (self.bam_fname1, self.bam_fname2, self.fend_fname, self.basedir), shell=True)
         data = h5py.File('%s/test/data/test_temp.hcd' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 

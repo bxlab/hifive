@@ -8,15 +8,18 @@ from ..fivec import FiveC
 
 
 def run(args):
-    regions = args.regions.split(',')
-    if len(regions) == 1 and regions[0] == '':
+    if args.regions is None:
         regions = []
-    for i in range(len(regions)):
-        try:
-            regions[i] = int(regions[i])
-        except:
-            print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
-            return 1
+    else:
+        regions = args.regions.split(',')
+        if len(regions) == 1 and regions[0] == '':
+            regions = []
+        for i in range(len(regions)):
+            try:
+                regions[i] = int(regions[i])
+            except:
+                print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
+                return 1
     if args.algorithm.count('binning') > 0:
         model = args.model.split(',')
         for par in model:

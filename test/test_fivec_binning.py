@@ -40,8 +40,8 @@ class FiveCBinning(unittest.TestCase):
         self.compare_arrays(self.data['fivec_mapping2'][...], mapping2, 'trans mappings')
 
     def test_generate_heatmap(self):
-        self.project.write_heatmap("%s/test/data/test_temp.fch" % self.basedir, 50000, includetrans=True,
-                                   datatype='fragment')
+        subprocess.call("hifive 5c-heatmap -q -b 50000 -t -d fragment -a full %s %s/test/data/test_temp.fch" %
+                        (self.project_fname, self.basedir), shell=True)
         heatmap = h5py.File("%s/test/data/test_temp.fch" % self.basedir)
         self.compare_hdf5_dicts(self.heatmap, heatmap, 'heatmap')
 

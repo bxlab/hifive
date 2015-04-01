@@ -19,9 +19,8 @@ class Frags(unittest.TestCase):
         self.bed_fname = '%s/test/data/test_frag.bed' % self.basedir
 
     def test_fragment_creation(self):
-        frags = fragment.Fragment('%s/test/data/test_temp.frags' % self.basedir, 'w', silent=True)
-        frags.load_fragments(self.bed_fname, genome_name="mm9", re_name='HindIII')
-        frags.save()
+        subprocess.call("hifive fragments -q -g mm9 -r HindIII %s %s/test/data/test_temp.frags" %
+                        (self.bed_fname, self.basedir), shell=True)
         frags = h5py.File('%s/test/data/test_temp.frags' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.frags, frags, 'frags')
 

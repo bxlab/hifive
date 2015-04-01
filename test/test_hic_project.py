@@ -26,39 +26,33 @@ class HiCProject(unittest.TestCase):
         self.binning = hic.HiC(self.binning_fname, 'r')
 
     def test_hic_project_preanalysis(self):
-        project = hic.HiC('%s/test/data/test_temp.hcp' % self.basedir, 'w', silent=True)
-        project.load_data(self.data_fname)
-        project.filter_fends(mininteractions=10, mindistance=20000, maxdistance=1000000)
-        project.find_distance_parameters(numbins=5, minsize=30000, maxsize=1000000)
-        project.save()
+        subprocess.call("hifive hic-project -q -m 20000 -f 10 -j 30000 -n 5 %s %s/test/data/test_temp.hcp" %
+                        (self.data_fname, self.basedir), shell=True)
         project = h5py.File('%s/test/data/test_temp.hcp' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.data, project, 'project')
 
     def test_hic_project_probability(self):
-        project = hic.HiC(self.project_fname, 'r', silent=True)
-        project.find_probability_fend_corrections(mindistance=10000, maxdistance=1000000, minchange=0.0015,
-                                                  burnin_iterations=100, annealing_iterations=10, learningrate=0.4,
-                                                  display=0)
+        subprocess.call("hifive hic-normalize probability -q -m 20000 -o %s/test/data/test_temp.hcp -b 100 -a 10 -l 0.4 -g 0.0015 -p %s" %
+                        (self.basedir, self.project_fname), shell=True)
+        project = hic.HiC("%s/test/data/test_temp.hcp" % self.basedir, 'r', silent=True)
         self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
             "learned correction values don't match target values")
         self.assertTrue(numpy.allclose(self.probability.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
     def test_hic_project_express(self):
-        project = hic.HiC(self.project_fname, 'r', silent=True)
-        project.find_express_fend_corrections(mindistance=10000, iterations=100)
-        for i in range(project.corrections.shape[0]):
-            if project.filter[i] == 1:
-                print self.express.corrections[i], project.corrections[i]
+        subprocess.call("hifive hic-normalize express -q -m 20000 -o %s/test/data/test_temp.hcp -e 100 -w cis -f 10 %s" %
+                        (self.basedir, self.project_fname), shell=True)
+        project = hic.HiC("%s/test/data/test_temp.hcp" % self.basedir, 'r', silent=True)
         self.assertTrue(numpy.allclose(self.express.corrections, project.corrections),
             "learned express correction values don't match target values")
         self.assertTrue(numpy.allclose(self.express.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
     def test_hic_project_binning(self):
-        project = hic.HiC(self.project_fname, 'r', silent=True)
-        project.find_binning_fend_corrections(model=['len','distance'], num_bins=[3, 3], usereads='cis',
-                                                 max_iterations=5)
+        subprocess.call("hifive hic-normalize binning -q -m 20000 -o %s/test/data/test_temp.hcp -r 5 -y cis -t 1.0 -v len,distance -z 3,3 -u even,fixed-const %s" %
+                        (self.basedir, self.project_fname), shell=True)
+        project = hic.HiC("%s/test/data/test_temp.hcp" % self.basedir, 'r', silent=True)
         self.assertTrue(numpy.allclose(self.binning.binning_corrections, project.binning_corrections),
             "learned binning correction values don't match target values")
 

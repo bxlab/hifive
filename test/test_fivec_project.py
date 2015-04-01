@@ -26,37 +26,33 @@ class FiveCProject(unittest.TestCase):
         self.binning = fivec.FiveC(self.binning_fname, 'r')
 
     def test_fivec_project_preanalysis(self):
-        project = fivec.FiveC('%s/test/data/test_temp.fcp' % self.basedir, 'w', silent=True)
-        project.load_data(self.data_fname)
-        project.filter_fragments(mininteractions=20)
-        project.find_distance_parameters()
-        project.save()
+        subprocess.call("hifive 5c-project -q -f 20 %s %s/test/data/test_temp.fcp" %
+                        (self.data_fname, self.basedir), shell=True)
         project = h5py.File('%s/test/data/test_temp.fcp' % self.basedir, 'r')
         self.compare_hdf5_dicts(self.raw, project, 'project')
 
     def test_fivec_project_probability(self):
-        project = fivec.FiveC(self.project_fname, 'r', silent=True)
-        project.find_probability_fragment_corrections(maxdistance=0, burnin_iterations=100, annealing_iterations=10,
-                                                      learningrate=0.01)
+        subprocess.call("hifive 5c-normalize probability -q -o %s/test/data/test_temp.fcp -b 100 -a 10 -l 0.01 -p %s" %
+                        (self.basedir, self.project_fname), shell=True)
+        project = fivec.FiveC("%s/test/data/test_temp.fcp" % self.basedir, 'r', silent=True)
         self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
             "learned correction values don't match target values")
         self.assertTrue(numpy.allclose(self.probability.region_means, project.region_means),
                                        "region means don't match target values")
 
     def test_fivec_project_express(self):
-        project = fivec.FiveC(self.project_fname, 'r', silent=True)
-        project.find_express_fragment_corrections(iterations=100, remove_distance=True)
+        subprocess.call("hifive 5c-normalize express -q -o %s/test/data/test_temp.fcp -e 100 -d -w cis %s" %
+                        (self.basedir, self.project_fname), shell=True)
+        project = fivec.FiveC("%s/test/data/test_temp.fcp" % self.basedir, 'r', silent=True)
         self.assertTrue(numpy.allclose(self.express.corrections, project.corrections),
             "learned express correction values don't match target values")
         self.assertTrue(numpy.allclose(self.express.region_means, project.region_means),
                                        "region means don't match target values")
 
     def test_fivec_project_binning(self):
-        project = fivec.FiveC(self.project_fname, 'r', silent=True)
-        project.find_binning_fragment_corrections(model=['len'], num_bins=[5], parameters=['even'], usereads='cis',
-                                                     max_iterations=0)
-        print list(self.binning.binning_corrections)
-        print list(project.binning_corrections)
+        subprocess.call("hifive 5c-normalize binning -q -o %s/test/data/test_temp.fcp -i 10 -t 1.0 -y cis -v len -n 5 -u even %s" %
+                        (self.basedir, self.project_fname), shell=True)
+        project = fivec.FiveC("%s/test/data/test_temp.fcp" % self.basedir, 'r', silent=True)
         self.assertTrue(numpy.allclose(self.binning.binning_corrections, project.binning_corrections),
             "learned binning correction values don't match target values")
 
