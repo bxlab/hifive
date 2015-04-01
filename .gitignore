@@ -1,0 +1,11 @@
+.eggs/
+build/
+dist/
+doc/_build/
+hifive.egg-info/
+*.pyc
+*_fivec*.cpp
+*_hic*.cpp
+*.so
+test/generate_test_data.py
+doc/_static/hic_distance.py
