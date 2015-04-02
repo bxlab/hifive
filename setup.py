@@ -9,8 +9,8 @@ from setuptools import setup, find_packages
 from distutils.extension import Extension
 import numpy
 
-MAJOR = 2
-MINOR = 2
+MAJOR = 0
+MINOR = 1
 MICRO = 0
 ISRELEASED = False
 VERSION = '%d.%d' % (MAJOR, MINOR)
