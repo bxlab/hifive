@@ -43,7 +43,7 @@ def run(args):
         data_fname = "%s.fcd" % args.prefix
         project_fname = "%s.fcp" % args.prefix
     frags = Fragment(frag_fname, mode='w', silent=args.silent)
-    frags.load_fragments(args.bed, fastafile=args.fasta)
+    frags.load_fragments(args.bed)
     frags.save()
     del frags
     data = FiveCData(data_fname, 'w', silent=args.silent)
