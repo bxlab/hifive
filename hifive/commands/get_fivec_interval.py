@@ -43,6 +43,7 @@ def run(args):
             try:
                 temp[1] = int(temp[1])
             except:
+                # strip off extra characters introduced by galaxy into color format
                 temp[1] = temp[1].replace('__pd__','')
     chrom = fivec.frags['regions']['chromosome'][args.region]
     temp = fivec.cis_heatmap(region=args.region, binsize=args.binsize, start=args.start,

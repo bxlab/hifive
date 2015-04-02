@@ -333,7 +333,7 @@ def add_fivec_heatmap_subparser(subparsers):
         help="Add color scale to the plot (pdf format only). [default: %(default)s]")
     parser.add_argument("-n", "--names", dest="names", default=False, action="store_true",
         help="Add region labels to the plot (pdf format only). [default: %(default)s]")
-    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=str, action='append',
         help="Additional keyword arguments to pass to plotting function.")
     add_silent_argument(parser)
     parser.add_argument(dest="project", type=str,
@@ -367,7 +367,7 @@ def add_fivec_interval_subparser(subparsers):
         help="Add tick marks and labels to the plot (pdf format and binned only). [default: %(default)s]")
     parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
         help="Add color scale to the plot (pdf format only). [default: %(default)s]")
-    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=str, action='append',
         help="Additional keyword arguments to pass to plotting function.")
     add_silent_argument(parser)
     parser.add_argument(dest="project", type=str,
@@ -611,7 +611,7 @@ def add_hic_heatmap_subparser(subparsers):
         help="Add color scale to the plot (pdf format only). [default: %(default)s]")
     parser.add_argument("-n", "--names", dest="names", default=False, action="store_true",
         help="Add chromosome labels to the plot (pdf format only). [default: %(default)s]")
-    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=str, action='append',
         help="Additional keyword arguments to pass to plotting function.")
     add_silent_argument(parser)
     parser.add_argument(dest="project", type=str,
@@ -647,7 +647,7 @@ def add_hic_interval_subparser(subparsers):
         help="Add tick marks and labels to the plot (pdf format and binned only). [default: %(default)s]")
     parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
         help="Add color scale to the plot (pdf format only). [default: %(default)s]")
-    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=int, action='append',
+    parser.add_argument("-k", "--keyword", dest="keywords", default=[], type=str, action='append',
         help="Additional keyword arguments to pass to plotting function.")
     add_silent_argument(parser)
     parser.add_argument(dest="project", type=str,

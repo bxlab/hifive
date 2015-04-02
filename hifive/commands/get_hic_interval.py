@@ -49,6 +49,7 @@ def run(args):
             try:
                 temp[1] = int(temp[1])
             except:
+                # strip off extra characters introduced by galaxy into color format
                 temp[1] = temp[1].replace('__pd__','')
         kwargs[temp[0]] = temp[1]
     data, mapping = hic.cis_heatmap(chrom=args.chrom, binsize=args.binsize, start=args.start,
