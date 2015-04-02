@@ -53,7 +53,10 @@ def run(args):
         data.load_data_from_counts(frag_fname, args.count)
     data.save()
     del data
-    fivec = FiveC(project_fname, 'r', silent=args.silent)
+    fivec = FiveC(project_fname, 'w', silent=args.silent)
+    fivec.load_data(data_fname)
+    fivec.filter_fragments(mininteractions=args.minint, mindistance=args.mindist, maxdistance=args.maxdist)
+    fivec.find_distance_parameters()
     precorrect = False
     if args.algorithm in ['binning', 'binning-express', 'binning-probability']:
         fivec.find_binning_fragment_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
