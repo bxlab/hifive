@@ -244,6 +244,8 @@ def add_fivec_complete_group(subparser):
         help="A pair of bam read end files from a single sequencing run. For multiple runs, this option can be passed multiple times.")
     infile_group.add_argument("-C", "--count", dest="count", action='append',
         help="A tab-separated text file containing a pair of fragment names and the number of observed reads for that pair (fragment1 fragment2 count), one per line. For multiple files, this option can be passed multiple times.")
+    subparser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
+        action='store', help="The minimum number of interactions needed for valid fragment. [default: %(default)s]")
     subparser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,
         action='store', help="The minimum interaction distance to include in normalization. [default: %(default)s]")
     subparser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
