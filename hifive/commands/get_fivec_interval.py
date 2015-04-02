@@ -172,4 +172,7 @@ def run(args):
                 subprocess.call('mv %s.pdf %s' % (args.image, args.image), shell=True)
 
         else:
-            img.save(args.image)
+            img_format = args.image.split('.')[-1].upper()
+            if img_format not in ['PNG', 'TIF', 'JPG', 'JPEG']:
+                img_format = 'PNG'
+            img.save(args.image, img_format)

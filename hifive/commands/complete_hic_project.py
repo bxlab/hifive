@@ -30,7 +30,7 @@ def run(args):
     if args.algorithm.count('binning') > 0:
         model = args.model.split(',')
         modelbins = args.modelbins.split(',')
-        parameters.split(',')
+        parameters = args.parameters.split(',')
         for i in range(len(modelbins)):
             try:
                 modelbins[i] = int(modelbins[i])
@@ -58,11 +58,11 @@ def run(args):
         del fends
         data = HiCData(data_fname, 'w', silent=args.silent)
         if not args.bam is None: 
-            data.load_data_from_bam(args.fend, args.bam, args.insert)
+            data.load_data_from_bam(fend_fname, args.bam, args.insert)
         elif not args.raw is None: 
-            data.load_data_from_raw(args.fend, args.raw, args.insert)
+            data.load_data_from_raw(fend_fname, args.raw, args.insert)
         elif not args.mat is None: 
-            data.load_data_from_mat(args.fend, args.mat, args.insert)
+            data.load_data_from_mat(fend_fname, args.mat, args.insert)
         data.save()
         del data
         for i in range(1, num_procs):

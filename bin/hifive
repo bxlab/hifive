@@ -498,7 +498,7 @@ def add_complete_hic_group(subparser):
         help="A pair of BAM read end files from a single sequencing run. For multiple runs, this option can be passed multiple times.")
     infile_group.add_argument("-R", "--raw", dest="raw", action='append',
         help="A tab-separated text file containing pairs of read ends (chr1 pos1 strand1 chr2 pos2 strand2), one per line. For multiple files, this option can be passed multiple times.")
-    infile_group.add_argument("-M", "--mat", dest="mat", action='append',
+    infile_group.add_argument("-M", "--mat", dest="mat", type=str, action='store',
         help="A HiCPipe-style tabular MAT file containing fend pair counts.")
     subparser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
         help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
@@ -508,6 +508,8 @@ def add_complete_hic_group(subparser):
         action='store', help="The minimum interaction distance to include in fragment filtering. [default: %(default)s]")
     subparser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
         action='store', help="The maximum interaction distance to include in fragment filtering (None or zero indicate no maximum). [default: %(default)s]")
+    subparser.add_argument("-c", "--chromosomes", dest="chroms", required=False, type=str, default=None,
+        action='store', help="A comma-separated list of chromosomes to learn correction values for (None indicates all chromosomes). [default: %(default)s]")
     subparser.add_argument("-j", "--min-binsize", dest="minbin", required=False, type=int, default=1000,
         action='store', help="The smallest interaction distance bin size for the distance-dependence function. [default: %(default)s]")
     subparser.add_argument("-n", "--num-bins", dest="numbins", required=False, type=int, default=100,
@@ -527,7 +529,7 @@ def add_hic_normalize_group(subparser):
     subparser.add_argument("-x", "--max-distance", dest="maxdist", required=False, type=int, default=None,
         action='store', help="The maximum interaction distance to include in normalization (None or zero indicate no maximum). [default: %(default)s]")
     subparser.add_argument("-c", "--chromosomes", dest="chroms", required=False, type=str, default=None,
-        action='store', help="A comma-separated list of chromosomes to learn correction values for (None indicates all regions). [default: %(default)s]")
+        action='store', help="A comma-separated list of chromosomes to learn correction values for (None indicates all chromosomes). [default: %(default)s]")
     subparser.add_argument("-o", "--output-file", dest="output", required=False, type=str, default=None,
         action='store', help="An alternate filename to save the normalized project to. If not given, the original project file will be overwritten. [default: %(default)s]")
     subparser.add_argument(dest="project", type=str,
