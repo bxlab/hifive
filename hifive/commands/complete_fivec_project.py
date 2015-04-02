@@ -50,7 +50,7 @@ def run(args):
     if not args.bam is None:
         data.load_data_from_bam(frag_fname, args.bam)
     else:
-        data.load_data_from_counts(frag_fname, args.counts)
+        data.load_data_from_counts(frag_fname, args.count)
     data.save()
     del data
     fivec = FiveC(project_fname, 'r', silent=args.silent)

@@ -5,7 +5,7 @@
 Getting started
 ***************
 
-:mod:`HiFive` requires Python 2.7. To check your version, run::
+The :mod:`HiFive` binary requires Python 2.7. However, the library can be used by Python 2.6 and 2.7. To check your version, run::
 
   > python -V
 
@@ -14,14 +14,17 @@ Getting started
 Installing HiFive
 =============================
 
-:mod:`HiFive` can be obtained from `HiFive <https://bitbucket.org/bxlab/hifive/>`_ using the following command::
+The easiest way to get :mod:`HiFive` is using pip::
 
-  > hg clone https://bitbucket.org/bxlab/hifive/
+  > pip install hifive
 
+:mod:`HiFive` can also be obtained from `HiFive <https://github.com/bxlab/hifive/>`_ using the following command::
+
+  > git clone https://github.com/bxlab/hifive.git
 or alternatively, download a snapshot of the repository using the following commands::
 
-  > wget https://bitbucket.org/bxlab/hifive/downloads/hifive_v2.2.tar.bz2
-  > tar -xjf hifive_v2.2.tar.bz2
+  > wget https://github.com/bxlab/hifive/tarball/1.0
+  > tar -xf hifive_v1.0.tar
 
 :mod:`HiFive` depends on a few packages and has several others that extend its functionality.
 

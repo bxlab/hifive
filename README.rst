@@ -12,22 +12,26 @@ This package makes extensive use of the h5py and numpy packages. In addition, if
 mpi4py is installed, several methods are compatible with parallelization,
 including HiC normalization and heatmap generation.
 
-Documentation can be found at `here <http://hifive.docs.taylorlab.org/en/latest/>`_.
+Documentation can be found `here <http://hifive.docs.taylorlab.org/en/latest/>`_.
 
+The :mod:`HiFive` binary requires Python 2.7. However, the library can be used by Python 2.6 and 2.7.
 
 Installing HiFive
 =============================
 
-HiFive can bo obtained from `HiFive <https://bitbucket.org/bxlab/hifive/>`_ using the following command::
+The easiest way to get :mod:`HiFive` is using pip::
 
-  > hg clone https://bitbucket.org/bxlab/hifive/
+  > pip install hifive
 
+:mod:`HiFive` can also be obtained from `HiFive <https://github.com/bxlab/hifive/>`_ using the following command::
+
+  > git clone https://github.com/bxlab/hifive.git
 or alternatively, download a snapshot of the repository using the following commands::
 
-  > wget https://bitbucket.org/bxlab/hifive/downloads/hifive_v2.0.tar.bz2
-  > tar -xjf hifive_v2.0.tar.bz2
+  > wget https://github.com/bxlab/hifive/tarball/1.0
+  > tar -xf hifive_v1.0.tar
 
-HiFive depends on a few packages and has several others that extend its functionality.
+:mod:`HiFive` depends on a few packages and has several others that extend its functionality.
 
 Required Packages
 -----------------

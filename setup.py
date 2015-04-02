@@ -10,7 +10,7 @@ from distutils.extension import Extension
 import numpy
 
 MAJOR = 0
-MINOR = 1
+MINOR = 2
 MICRO = 0
 ISRELEASED = False
 VERSION = '%d.%d' % (MAJOR, MINOR)
@@ -60,7 +60,7 @@ def main():
         author = "Michael Sauria",
         author_email = "mike.sauria@jhu.edu",
         url='https://github.com/bxlab/hifive',
-        download_url='https://github.com/bxlab/hifive/tarball/2.2')
+        download_url='https://github.com/bxlab/hifive/tarball/%s' % VERSION)
     setup(**metadata)
 
 # ---- Extension Modules ----------------------------------------------------
