@@ -16,4 +16,6 @@ install:
     - conda create --yes -n testenv python=$TRAVIS_PYTHON_VERSION Cython numpy scipy h5py nose
     - source activate testenv
 script: 
-    - python setup.py test 
+    - python setup.py build
+    - python setup.py build_ext --inplace
+    - nosetests 
