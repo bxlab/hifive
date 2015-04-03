@@ -14,18 +14,17 @@ import h5py
 
 class Fends(unittest.TestCase):
     def setUp(self):
-        self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.fends = h5py.File('%s/test/data/test.fends' % self.basedir, 'r')
-        self.bed_fname = '%s/test/data/test_fend.bed' % self.basedir
+        self.fends = h5py.File('test/data/test.fends', 'r')
+        self.bed_fname = 'test/data/test_fend.bed'
 
     def test_fend_creation(self):
-        subprocess.call("hifive fends -q -g mm9 -r HindIII -B %s %s/test/data/test_temp.fends" %
-                        (self.bed_fname, self.basedir), shell=True)
-        fends = h5py.File('%s/test/data/test_temp.fends' % self.basedir, 'r')
+        subprocess.call("./bin/hifive fends -q -g mm9 -r HindIII -B %s test/data/test_temp.fends" %
+                        self.bed_fname, shell=True)
+        fends = h5py.File('test/data/test_temp.fends', 'r')
         self.compare_hdf5_dicts(self.fends, fends, 'fends')
 
     def tearDown(self):
-        subprocess.call('rm -f %s/test/data/test_temp.fends' % self.basedir, shell=True)
+        subprocess.call('rm -f test/data/test_temp.fends', shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

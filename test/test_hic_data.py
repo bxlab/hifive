@@ -18,51 +18,50 @@ import h5py
 
 class HiCData(unittest.TestCase):
     def setUp(self):
-        self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.data = h5py.File('%s/test/data/test_import.hcd' % self.basedir, 'r')
-        self.fend_fname = '%s/test/data/test.fends' % self.basedir
-        self.mat_fname = '%s/test/data/test.mat' % self.basedir
-        self.raw_fname = '%s/test/data/test.raw' % self.basedir
-        self.bam_fname1 = '%s/test/data/test_hic_1.bam' % self.basedir
-        self.bam_fname2 = '%s/test/data/test_hic_2.bam' % self.basedir
+        self.data = h5py.File('test/data/test_import.hcd', 'r')
+        self.fend_fname = 'test/data/test.fends'
+        self.mat_fname = 'test/data/test.mat'
+        self.raw_fname = 'test/data/test.raw'
+        self.bam_fname1 = 'test/data/test_hic_1.bam'
+        self.bam_fname2 = 'test/data/test_hic_2.bam'
 
     def test_hic_raw_data_creation(self):
-        subprocess.call("hifive hic-data -q -R %s -i 500 %s %s/test/data/test_temp.hcd" %
-                        (self.raw_fname, self.fend_fname, self.basedir), shell=True)
-        data = h5py.File('%s/test/data/test_temp.hcd' % self.basedir, 'r')
+        subprocess.call("./bin/hifive hic-data -q -R %s -i 500 %s test/data/test_temp.hcd" %
+                        (self.raw_fname, self.fend_fname), shell=True)
+        data = h5py.File('test/data/test_temp.hcd', 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
     def test_hic_mat_data_creation(self):
-        subprocess.call("hifive hic-data -q -M %s -i 500 %s %s/test/data/test_temp.hcd" %
-                        (self.mat_fname, self.fend_fname, self.basedir), shell=True)
-        data = h5py.File('%s/test/data/test_temp.hcd' % self.basedir, 'r')
+        subprocess.call("./bin/hifive hic-data -q -M %s -i 500 %s test/data/test_temp.hcd" %
+                        (self.mat_fname, self.fend_fname), shell=True)
+        data = h5py.File('test/data/test_temp.hcd', 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
     def test_hic_bam_data_creation(self):
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, "pysam required for bam import"
             return None
-        subprocess.call("hifive hic-data -q -S %s %s -i 500 %s %s/test/data/test_temp.hcd" %
-                        (self.bam_fname1, self.bam_fname2, self.fend_fname, self.basedir), shell=True)
-        data = h5py.File('%s/test/data/test_temp.hcd' % self.basedir, 'r')
+        subprocess.call("./bin/hifive hic-data -q -S %s %s -i 500 %s test/data/test_temp.hcd" %
+                        (self.bam_fname1, self.bam_fname2, self.fend_fname), shell=True)
+        data = h5py.File('test/data/test_temp.hcd', 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
     def test_hic_mat_export(self):
-        data = hic_data.HiCData('%s/test/data/test_temp.hcd' % self.basedir, 'w', silent=True)
+        data = hic_data.HiCData('test/data/test_temp.hcd', 'w', silent=True)
         data.load_data_from_raw(self.fend_fname, self.raw_fname, 500)
-        data.export_to_mat('%s/test/data/test_temp.mat' % self.basedir)
+        data.export_to_mat('test/data/test_temp.mat')
         data1 = []
-        for line in open('%s/test/data/test.mat' % self.basedir, 'r'):
+        for line in open('test/data/test.mat', 'r'):
             data1.append(line)
         data2 = []
-        for line in open('%s/test/data/test_temp.mat' % self.basedir, 'r'):
+        for line in open('test/data/test_temp.mat', 'r'):
             data2.append(line)
         self.assertEqual(data1, data2,
                 "generated mat file doesn't match original")
 
     def tearDown(self):
-        subprocess.call('rm -f %s/test/data/test_temp.hcd' % self.basedir, shell=True)
-        subprocess.call('rm -f %s/test/data/test_temp.mat' % self.basedir, shell=True)
+        subprocess.call('rm -f test/data/test_temp.hcd', shell=True)
+        subprocess.call('rm -f test/data/test_temp.mat', shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

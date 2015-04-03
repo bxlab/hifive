@@ -18,30 +18,29 @@ import h5py
 
 class FiveCData(unittest.TestCase):
     def setUp(self):
-        self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.data = h5py.File('%s/test/data/test_import.fcd' % self.basedir, 'r')
-        self.frag_fname = '%s/test/data/test.frags' % self.basedir
-        self.count_fname = '%s/test/data/test.counts' % self.basedir
-        self.bam_fname1 = '%s/test/data/test_fivec_1.bam' % self.basedir
-        self.bam_fname2 = '%s/test/data/test_fivec_2.bam' % self.basedir
+        self.data = h5py.File('test/data/test_import.fcd', 'r')
+        self.frag_fname = 'test/data/test.frags'
+        self.count_fname = 'test/data/test.counts'
+        self.bam_fname1 = 'test/data/test_fivec_1.bam'
+        self.bam_fname2 = 'test/data/test_fivec_2.bam'
 
     def test_fivec_counts_data_creation(self):
-        subprocess.call("hifive 5c-data -q -C %s %s %s/test/data/test_temp.fcd" %
-                        (self.count_fname, self.frag_fname, self.basedir), shell=True)
-        data = h5py.File('%s/test/data/test_temp.fcd' % self.basedir, 'r')
+        subprocess.call("./bin/hifive 5c-data -q -C %s %s test/data/test_temp.fcd" %
+                        (self.count_fname, self.frag_fname), shell=True)
+        data = h5py.File('test/data/test_temp.fcd', 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
     def test_fivec_bam_data_creation(self):
         if 'pysam' not in sys.modules.keys():
             print >> sys.stderr, "pysam required for bam import"
             return None
-        subprocess.call("hifive 5c-data -q -B %s %s %s %s/test/data/test_temp.fcd" %
-                        (self.bam_fname1, self.bam_fname2, self.frag_fname, self.basedir), shell=True)
-        data = h5py.File('%s/test/data/test_temp.fcd' % self.basedir, 'r')
+        subprocess.call("./bin/hifive 5c-data -q -B %s %s %s test/data/test_temp.fcd" %
+                        (self.bam_fname1, self.bam_fname2, self.frag_fname), shell=True)
+        data = h5py.File('test/data/test_temp.fcd', 'r')
         self.compare_hdf5_dicts(self.data, data, 'data')
 
     def tearDown(self):
-        subprocess.call('rm -f %s/test/data/test_temp.fcd' % self.basedir, shell=True)
+        subprocess.call('rm -f test/data/test_temp.fcd', shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

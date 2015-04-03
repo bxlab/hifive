@@ -14,10 +14,9 @@ import h5py
 
 class FiveCBinning(unittest.TestCase):
     def setUp(self):
-        self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.project_fname = '%s/test/data/test_probability.fcp' % self.basedir
-        self.binned_fname = '%s/test/data/test_binned.hdf5' % self.basedir
-        self.heatmap_fname = '%s/test/data/test.fch' % self.basedir
+        self.project_fname = 'test/data/test_probability.fcp'
+        self.binned_fname = 'test/data/test_binned.hdf5'
+        self.heatmap_fname = 'test/data/test.fch'
         self.data = h5py.File(self.binned_fname, 'r')
         self.heatmap = h5py.File(self.heatmap_fname, 'r')
         self.project = fivec.FiveC(self.project_fname, 'r', silent=True)
@@ -40,13 +39,13 @@ class FiveCBinning(unittest.TestCase):
         self.compare_arrays(self.data['fivec_mapping2'][...], mapping2, 'trans mappings')
 
     def test_generate_heatmap(self):
-        subprocess.call("hifive 5c-heatmap -q -b 50000 -t -d fragment -a full %s %s/test/data/test_temp.fch" %
-                        (self.project_fname, self.basedir), shell=True)
-        heatmap = h5py.File("%s/test/data/test_temp.fch" % self.basedir)
+        subprocess.call("./bin/hifive 5c-heatmap -q -b 50000 -t -d fragment -a full %s test/data/test_temp.fch" %
+                        self.project_fname, shell=True)
+        heatmap = h5py.File("test/data/test_temp.fch")
         self.compare_hdf5_dicts(self.heatmap, heatmap, 'heatmap')
 
     def tearDown(self):
-        subprocess.call('rm -f %s/test/data/test_temp.fch' % self.basedir, shell=True)
+        subprocess.call('rm -f test/data/test_temp.fch', shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

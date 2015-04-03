@@ -14,18 +14,17 @@ import h5py
 
 class Frags(unittest.TestCase):
     def setUp(self):
-        self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.frags = h5py.File('%s/test/data/test.frags' % self.basedir, 'r')
-        self.bed_fname = '%s/test/data/test_frag.bed' % self.basedir
+        self.frags = h5py.File('test/data/test.frags', 'r')
+        self.bed_fname = 'test/data/test_frag.bed'
 
     def test_fragment_creation(self):
-        subprocess.call("hifive fragments -q -g mm9 -r HindIII %s %s/test/data/test_temp.frags" %
-                        (self.bed_fname, self.basedir), shell=True)
-        frags = h5py.File('%s/test/data/test_temp.frags' % self.basedir, 'r')
+        subprocess.call("./bin/hifive fragments -q -g mm9 -r HindIII %s test/data/test_temp.frags" %
+                        self.bed_fname, shell=True)
+        frags = h5py.File('test/data/test_temp.frags', 'r')
         self.compare_hdf5_dicts(self.frags, frags, 'frags')
 
     def tearDown(self):
-        subprocess.call('rm -f %s/test/data/test_temp.frags' % self.basedir, shell=True)
+        subprocess.call('rm -f test/data/test_temp.frags', shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,
