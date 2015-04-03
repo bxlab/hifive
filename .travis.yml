@@ -12,6 +12,6 @@ before_install:
     - sudo rm -rf /dev/shm
     - sudo ln -s /run/shm /dev/shm
 install: 
-    - conda install --yes python=$TRAVIS_PYTHON_VERSION Cython numpy scipy h5py
+    - conda install --yes python=$TRAVIS_PYTHON_VERSION Cython numpy scipy h5py nose
     - python setup.py build_ext --inplace
 script: nosetests -v
