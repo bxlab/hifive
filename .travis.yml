@@ -1,10 +1,16 @@
 language: python
 python:
-    - "2.6"
-    - "2.7"
+    - 2.6
+    - 2.7
 before_install:
     - sudo apt-get update -qq
     - sudo apt-get install -qq libhdf5-serial-dev
     - pip install --upgrade pip
-install: "pip install -r requirements.txt"
-script: "python setup.py test"
+install: 
+    # Can't use requirements.txt due to https://github.com/pypa/pip/issues/2478
+    # - pip install -r requirements.txt
+    - pip install Cython
+    - pip install numpy
+    - pip install scipy
+    - pip install h5py
+script: python setup.py test
