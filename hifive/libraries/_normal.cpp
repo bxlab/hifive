@@ -70,7 +70,7 @@ double stdnorm_cdf(double z)
 	static double cutoff = 7.071;
 	static double root2pi = 2.506628274631001;
 
-	zabs = abs(z);
+	zabs = std::abs(z);
 
 	//  |z| > 37
 

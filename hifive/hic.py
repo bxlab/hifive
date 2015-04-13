@@ -544,6 +544,8 @@ class HiC(object):
             stop_fend = chr_indices[chrint + 1]
             rev_mapping = numpy.where(self.filter[start_fend:stop_fend] == 1)[0].astype(numpy.int32)
             num_valid = rev_mapping.shape[0]
+            if num_valid == 0:
+                continue
             # partition total possible interactions into roughly even-sized groups to spread across nodes
             total_pairs = num_valid * (num_valid - 1) / 2
             node_cutoffs = numpy.linspace(0, total_pairs, self.num_procs + 1).astype(numpy.float64)

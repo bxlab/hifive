@@ -31,7 +31,7 @@ class FiveCProject(unittest.TestCase):
         self.compare_hdf5_dicts(self.raw, project, 'project')
 
     def test_fivec_project_probability(self):
-        subprocess.call("./bin/hifive 5c-normalize probability -q -o test/data/test_temp.fcp -b 100 -a 10 -l 0.01 -p %s" %
+        subprocess.call("./bin/hifive 5c-normalize probability -q -o test/data/test_temp.fcp -b 100 -l 0.5 -p %s" %
                         self.project_fname, shell=True)
         project = fivec.FiveC("test/data/test_temp.fcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
