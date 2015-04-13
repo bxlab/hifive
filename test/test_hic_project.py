@@ -14,50 +14,49 @@ import h5py
 
 class HiCProject(unittest.TestCase):
     def setUp(self):
-        self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.data_fname = '%s/test/data/test.hcd' % self.basedir
-        self.project_fname = '%s/test/data/test.hcp' % self.basedir
-        self.probability_fname = '%s/test/data/test_probability.hcp' % self.basedir
-        self.express_fname = '%s/test/data/test_express.hcp' % self.basedir
-        self.binning_fname = '%s/test/data/test_binning.hcp' % self.basedir
+        self.data_fname = 'test/data/test.hcd'
+        self.project_fname = 'test/data/test.hcp'
+        self.probability_fname = 'test/data/test_probability.hcp'
+        self.express_fname = 'test/data/test_express.hcp'
+        self.binning_fname = 'test/data/test_binning.hcp'
         self.data = h5py.File(self.project_fname, 'r')
         self.probability = hic.HiC(self.probability_fname, 'r')
         self.express = hic.HiC(self.express_fname, 'r')
         self.binning = hic.HiC(self.binning_fname, 'r')
 
     def test_hic_project_preanalysis(self):
-        subprocess.call("hifive hic-project -q -m 20000 -f 10 -j 30000 -n 5 %s %s/test/data/test_temp.hcp" %
-                        (self.data_fname, self.basedir), shell=True)
-        project = h5py.File('%s/test/data/test_temp.hcp' % self.basedir, 'r')
+        subprocess.call("./bin/hifive hic-project -q -m 20000 -f 10 -j 30000 -n 5 %s test/data/test_temp.hcp" %
+                        (self.data_fname), shell=True)
+        project = h5py.File('test/data/test_temp.hcp', 'r')
         self.compare_hdf5_dicts(self.data, project, 'project')
 
     def test_hic_project_probability(self):
-        subprocess.call("hifive hic-normalize probability -q -m 20000 -o %s/test/data/test_temp.hcp -b 100 -a 10 -l 0.4 -g 0.0015 -p %s" %
-                        (self.basedir, self.project_fname), shell=True)
-        project = hic.HiC("%s/test/data/test_temp.hcp" % self.basedir, 'r', silent=True)
+        subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 100 -a 10 -l 0.4 -g 0.0015 -p %s" %
+                        (self.project_fname), shell=True)
+        project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
             "learned correction values don't match target values")
         self.assertTrue(numpy.allclose(self.probability.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
     def test_hic_project_express(self):
-        subprocess.call("hifive hic-normalize express -q -m 20000 -o %s/test/data/test_temp.hcp -e 100 -w cis -f 10 %s" %
-                        (self.basedir, self.project_fname), shell=True)
-        project = hic.HiC("%s/test/data/test_temp.hcp" % self.basedir, 'r', silent=True)
+        subprocess.call("./bin/hifive hic-normalize express -q -m 20000 -o test/data/test_temp.hcp -e 100 -w cis -f 10 %s" %
+                        (self.project_fname), shell=True)
+        project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.express.corrections, project.corrections),
             "learned express correction values don't match target values")
         self.assertTrue(numpy.allclose(self.express.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
     def test_hic_project_binning(self):
-        subprocess.call("hifive hic-normalize binning -q -m 20000 -o %s/test/data/test_temp.hcp -r 5 -y cis -t 1.0 -v len,distance -z 3,3 -u even,fixed-const %s" %
-                        (self.basedir, self.project_fname), shell=True)
-        project = hic.HiC("%s/test/data/test_temp.hcp" % self.basedir, 'r', silent=True)
+        subprocess.call("./bin/hifive hic-normalize binning -q -m 20000 -o test/data/test_temp.hcp -r 5 -y cis -t 1.0 -v len,distance -z 3,3 -u even,fixed-const %s" %
+                        (self.project_fname), shell=True)
+        project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.binning.binning_corrections, project.binning_corrections),
             "learned binning correction values don't match target values")
 
     def tearDown(self):
-        subprocess.call('rm -f %s/test/data/test_temp.hcp' % self.basedir, shell=True)
+        subprocess.call('rm -f test/data/test_temp.hcp', shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

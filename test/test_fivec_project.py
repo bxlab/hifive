@@ -14,50 +14,49 @@ import h5py
 
 class FiveCProject(unittest.TestCase):
     def setUp(self):
-        self.basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
-        self.data_fname = '%s/test/data/test.fcd' % self.basedir
-        self.project_fname = '%s/test/data/test.fcp' % self.basedir
-        self.probability_fname = '%s/test/data/test_probability.fcp' % self.basedir
-        self.express_fname = '%s/test/data/test_express.fcp' % self.basedir
-        self.binning_fname = '%s/test/data/test_binning.fcp' % self.basedir
+        self.data_fname = 'test/data/test.fcd'
+        self.project_fname = 'test/data/test.fcp'
+        self.probability_fname = 'test/data/test_probability.fcp'
+        self.express_fname = 'test/data/test_express.fcp'
+        self.binning_fname = 'test/data/test_binning.fcp'
         self.raw = h5py.File(self.project_fname, 'r')
         self.probability = fivec.FiveC(self.probability_fname, 'r')
         self.express = fivec.FiveC(self.express_fname, 'r')
         self.binning = fivec.FiveC(self.binning_fname, 'r')
 
     def test_fivec_project_preanalysis(self):
-        subprocess.call("hifive 5c-project -q -f 20 %s %s/test/data/test_temp.fcp" %
-                        (self.data_fname, self.basedir), shell=True)
-        project = h5py.File('%s/test/data/test_temp.fcp' % self.basedir, 'r')
+        subprocess.call("./bin/hifive 5c-project -q -f 20 %s test/data/test_temp.fcp" %
+                        self.data_fname, shell=True)
+        project = h5py.File('test/data/test_temp.fcp', 'r')
         self.compare_hdf5_dicts(self.raw, project, 'project')
 
     def test_fivec_project_probability(self):
-        subprocess.call("hifive 5c-normalize probability -q -o %s/test/data/test_temp.fcp -b 100 -a 10 -l 0.01 -p %s" %
-                        (self.basedir, self.project_fname), shell=True)
-        project = fivec.FiveC("%s/test/data/test_temp.fcp" % self.basedir, 'r', silent=True)
+        subprocess.call("./bin/hifive 5c-normalize probability -q -o test/data/test_temp.fcp -b 100 -a 10 -l 0.01 -p %s" %
+                        self.project_fname, shell=True)
+        project = fivec.FiveC("test/data/test_temp.fcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
             "learned correction values don't match target values")
         self.assertTrue(numpy.allclose(self.probability.region_means, project.region_means),
                                        "region means don't match target values")
 
     def test_fivec_project_express(self):
-        subprocess.call("hifive 5c-normalize express -q -o %s/test/data/test_temp.fcp -e 100 -d -w cis %s" %
-                        (self.basedir, self.project_fname), shell=True)
-        project = fivec.FiveC("%s/test/data/test_temp.fcp" % self.basedir, 'r', silent=True)
+        subprocess.call("./bin/hifive 5c-normalize express -q -o test/data/test_temp.fcp -e 100 -d -w cis %s" %
+                        self.project_fname, shell=True)
+        project = fivec.FiveC("test/data/test_temp.fcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.express.corrections, project.corrections),
             "learned express correction values don't match target values")
         self.assertTrue(numpy.allclose(self.express.region_means, project.region_means),
                                        "region means don't match target values")
 
     def test_fivec_project_binning(self):
-        subprocess.call("hifive 5c-normalize binning -q -o %s/test/data/test_temp.fcp -i 10 -t 1.0 -y cis -v len -n 5 -u even %s" %
-                        (self.basedir, self.project_fname), shell=True)
-        project = fivec.FiveC("%s/test/data/test_temp.fcp" % self.basedir, 'r', silent=True)
+        subprocess.call("./bin/hifive 5c-normalize binning -q -o test/data/test_temp.fcp -i 10 -t 1.0 -y cis -v len -n 5 -u even %s" %
+                        self.project_fname, shell=True)
+        project = fivec.FiveC("test/data/test_temp.fcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.binning.binning_corrections, project.binning_corrections),
             "learned binning correction values don't match target values")
 
     def tearDown(self):
-        subprocess.call('rm -f %s/test/data/test_temp.fcp' % self.basedir, shell=True)
+        subprocess.call('rm -f test/data/test_temp.fcp', shell=True)
 
     def compare_arrays(self, array1, array2, name):
         self.assertTrue(array1.shape == array2.shape,

@@ -21,6 +21,7 @@ if 'setuptools.extension' in sys.modules:
     m.Extension.__dict__ = m._Extension.__dict__
 
 def write_version_py(filename='hifive/version.py'):
+    print "Writing hifive/version.py"
     cnt = """
 # THIS FILE IS GENERATED FROM HIFIVE SETUP.PY
 version = '%(version)s'
