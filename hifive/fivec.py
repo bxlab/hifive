@@ -36,6 +36,13 @@ class FiveC(object):
     :param silent: Indicates whether to print information about function execution for this object.
     :type silent: bool.
     :returns: :class:`FiveC <hifive.fivec.FiveC>` class object.
+
+    :attributes: * **file** (*str.*) - A string containing the name of the file passed during object creation for saving the object to.
+                 * **silent** (*bool.*) - A boolean indicating whether to suppress all of the output messages.
+                 * **history** (*str.*) - A string containing all of the commands executed on this object and their outcome.
+                 * **normalization** (*str.*) - A string stating which type of normalization has been performed on this object. This starts with the value 'none'.
+
+    In addition, many other attributes are initialized to the 'None' state.
     """
 
     def __init__(self, filename, mode='r', silent=False):
@@ -77,6 +84,15 @@ class FiveC(object):
         :param filename: Specifies the file name of the :class:`FiveCData <hifive.fivec_data.FiveCData>` object to associate with this analysis.
         :type filename: str.
         :returns: None
+
+        :Attributes: * **datafilename** (*str.*) - A string containing the relative path of the FiveCData file.
+                     * **fragfilename** (*str.*) - A string containing the relative path of the Fragment file associated with the FiveCData file.
+                     * **frags** (*filestream*) - A filestream to the hdf5 Fragment file such that all saved Fragment attributes can be accessed through this class attribute.
+                     * **data** (*filestream*) - A filestream to the hdf5 FiveCData file such that all saved FiveCData attributes can be accessed through this class attribute.
+                     * **chr2int** (*dict.*) - A dictionary that converts chromosome names to chromosome indices.
+                     * **filter** (*ndarray*) - A numpy array of type int32 and size N where N is the number of fragments. This contains the inclusion status of each fragment with a one indicating included and zero indicating excluded and is initialized with all fragments included.
+
+        When a FiveCData object is associated with the project file, the 'history' attribute is updated with the history of the FiveCData object.
         """
         self.history += "FiveC.load_data(filename='%s') - " % filename
         # ensure data h5dict exists
@@ -266,6 +282,10 @@ class FiveC(object):
         Regress log counts versus inter-fragment distances to find slope and intercept values and then find the standard deviation of corrected counts.
 
         :returns: None
+
+        :Attributes: * **gamma** (*float*) - A float denoting the negative slope of the distance-dependence regression line.
+                     * **sigma** (*float*) - A float denoting the standard deviation of nonzero data about the distance-dependence regression line.
+                     * **region_means** (*ndarray*) - A numpy array of type float32 and length equal to the number of regions. This is initialized to zeros until fragment correction values are found.
         """
         self.history += "FiveC.find_distance_parameters() - "
         if not self.silent:
@@ -291,9 +311,9 @@ class FiveC(object):
         self.history += "Success\n"
         return None
 
-    def find_probability_fragment_corrections(self, mindistance=0, maxdistance=0, burnin_iterations=5000,
-                                              annealing_iterations=10000, learningrate=0.1, precalculate=True,
-                                              regions=[], precorrect=False):
+    def find_probability_fragment_corrections(self, mindistance=0, maxdistance=0, max_iterations=1000,
+                                              minchange=0.0005, learningstep=0.1, precalculate=True, regions=[],
+                                              precorrect=False):
         """
          Using gradient descent, learn correction values for each valid fragment based on a Log-Normal distribution of observations.
 
@@ -301,12 +321,13 @@ class FiveC(object):
         :type mindistance: int.
         :param maxdistance: The maximum inter-fragment distance to be included in modeling.
         :type maxdistance: int.
-        :param burnin_iterations: The number of iterations to use with constant learning rate in gradient descent for learning fragment corrections.
-        :type burnin_iterations: int.
-        :param annealing_iterations: The number of iterations to use with a linearly-decreasing learning rate in gradient descent for learning fragment corrections.
+        :param max_iterations: The maximum number of iterations to carry on gradient descent for.
+        :type max_iterations: int.
         :type annealing_iterations: int.
-        :param learningrate: The gradient scaling factor for parameter updates.
-        :type learningrate: float
+        :param minchange: The cutoff threshold for early learning termination for the maximum absolute gradient value.
+        :type minchange: float
+        :param learningstep: The scaling factor for decreasing learning rate by if step doesn't meet armijo criterion.
+        :type learningstep: float
         :param precalculate: Specifies whether the correction values should be initialized at the fragment means.
         :type precalculate: bool.
         :param regions: A list of regions to calculate corrections for. If set as None, all region corrections are found.
@@ -314,8 +335,12 @@ class FiveC(object):
         :param precorrect: Use binning-based corrections in expected value calculations, resulting in a chained normalization approach.
         :type precorrect: bool.
         :returns: None
+
+        :Attributes: * **corrections** (*ndarray*) - A numpy array of type float32 and length equal to the number of fragments. All invalid fragments have an associated correction value of zero.
+
+        The 'normalization' attribute is updated to 'probability' or 'binning-probability', depending on if the 'precorrect' option is selected. In addition, the 'region_means' attribute is updated such that the mean correction (sum of all valid regional correction value pairs) is adjusted to zero and the corresponding region mean is adjusted the same amount but the opposite sign. 
         """
-        self.history += "FiveC.find_probability_fragment_corrections(mindistance=%s, maxdistance=%s, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, precalculate=%s, regions=%s, precorrect=%s) - " % (str(mindistance), str(maxdistance), burnin_iterations, annealing_iterations, learningrate, precalculate, str(regions), precorrect)
+        self.history += "FiveC.find_probability_fragment_corrections(mindistance=%s, maxdistance=%s, max_iterations=%i, minchange=%f, learningstep=%f, precalculate=%s, regions=%s, precorrect=%s) - " % (str(mindistance), str(maxdistance), max_iterations, minchange, learningstep, precalculate, str(regions), precorrect)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
@@ -339,7 +364,7 @@ class FiveC(object):
             print >> sys.stderr, ("\r%s\rCopying needed data...") % (' ' * 80),
         data = self.data['cis_data'][...]
         distances = self.frags['fragments']['mid'][data[:, 1]] - self.frags['fragments']['mid'][data[:, 0]]
-        if maxdistance == 0:
+        if maxdistance == 0 or maxdistance is None:
             maxdistance = numpy.amax(distances) + 1
         valid = numpy.where((filt[data[:, 0]] * filt[data[:, 1]]) *
                             (distances >= mindistance) * (distances < maxdistance))[0]
@@ -352,9 +377,11 @@ class FiveC(object):
         distance_signal += self.region_means[self.frags['fragments']['region'][data[:, 0]]]
         # create empty arrays
         gradients = numpy.zeros(self.filter.shape[0], dtype=numpy.float32)
+        valid = numpy.where(filt)[0]
         # find number of interactions for each fragment
         interactions = numpy.bincount(data[:, 0], minlength=self.filter.shape[0]).astype(numpy.int32)
         interactions += numpy.bincount(data[:, 1], minlength=self.filter.shape[0]).astype(numpy.int32)
+        interactions = numpy.maximum(1, interactions)
         # if precalculation requested, find fragment means
         if precalculate:
             enrichments = log_counts - distance_signal
@@ -373,43 +400,93 @@ class FiveC(object):
         # cycle through learning phases
         if not self.silent:
             print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
-        for phase in ['burnin', 'annealing']:
-            learningstep = learningrate / max(1, annealing_iterations)
-            if (phase == 'burnin' and burnin_iterations == 0) or (phase == 'annealing' and annealing_iterations == 0):
-                cont = False
-            else:
-                cont = True
-            iteration = 0
-            while cont:
-                iteration += 1
-                # find gradients
-                gradients.fill(0.0)
-                cost = _optimize.calculate_gradients(data,
+        iteration = 0
+        cont = True
+        change = numpy.inf
+        new_corrections = numpy.copy(self.corrections)
+        start_cost = _optimize.calculate_prob_cost(data,
+                                                   log_counts_n,
+                                                   log_counts,
+                                                   log_counts_p,
+                                                   distance_signal,
+                                                   self.corrections,
+                                                   self.sigma)
+        previous_cost = start_cost
+        while cont:
+            iteration += 1
+            # find gradients
+            gradients.fill(0.0)
+            _optimize.calculate_gradients(data,
+                                          log_counts_n,
+                                          log_counts,
+                                          log_counts_p,
+                                          distance_signal,
+                                          self.corrections,
+                                          gradients,
+                                          self.sigma)
+            # find best step size
+            armijo = numpy.inf
+            t = 0.1
+            gradients /= interactions
+            gradient_norm = numpy.sum(gradients[valid] ** 2.0)
+            j = 0
+            best_score = numpy.inf
+            best_t = 0.1
+            while armijo > 0.0:
+                # update gradients
+                _optimize.update_corrections(filt,
+                                             self.corrections,
+                                             new_corrections,
+                                             gradients,
+                                             t)
+                cost = _optimize.calculate_prob_cost(data,
                                                      log_counts_n,
                                                      log_counts,
                                                      log_counts_p,
                                                      distance_signal,
-                                                     self.corrections,
-                                                     gradients,
+                                                     new_corrections,
                                                      self.sigma)
-                # update gradients
-                _optimize.update_corrections(filt,
-                                             self.corrections,
-                                             gradients,
-                                             interactions,
-                                             learningrate)
-                # if appropriate iteration and requested, update display
+                if numpy.isnan(cost):
+                    cost = numpy.inf
+                    armijo = numpy.inf
+                else:
+                    armijo = cost - previous_cost + t * gradient_norm
+                    if cost < best_score:
+                        best_score = cost
+                        best_t = t
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rLearning corrections... phase:%s iteration:%i cost:%06f") %\
-                                         (' ' * 80, phase, iteration, cost),
-                if phase == 'annealing':
-                    learningrate -= learningstep
-                    if iteration >= annealing_iterations:
-                        cont = False
-                elif iteration >= burnin_iterations:
-                    cont = False
+                    print >> sys.stderr, ("\r%s iteration:%i cost:%f change:%f armijo: %f %s") %\
+                                         ('Learning corrections...', iteration, previous_cost,
+                                          change, armijo, ' ' * 20),
+                t *= learningstep
+                j += 1
+                if j == 20:
+                    armijo = -numpy.inf
+                    t = best_t
+                    _optimize.update_corrections(filt,
+                                                 self.corrections,
+                                                 new_corrections,
+                                                 gradients,
+                                                 t)
+                    cost = _optimize.calculate_prob_cost(data,
+                                                         log_counts_n,
+                                                         log_counts,
+                                                         log_counts_p,
+                                                         distance_signal,
+                                                         new_corrections,
+                                                         self.sigma)
+            previous_cost = cost
+            self.corrections = new_corrections
+            change = numpy.amax(numpy.abs(gradients[valid] / new_corrections[valid]))
+            if not self.silent:
+                print >> sys.stderr, ("\r%s iteration:%i cost:%f change:%f %s") %\
+                                     ('Learning corrections...', iteration, cost, change, ' ' * 40),
+            iteration += 1
+            if iteration >= max_iterations or change <= minchange:
+                cont = False
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning corrections... Final Cost: %f  Done\n") % (' ' * 80, cost),
+            print >> sys.stderr, ("\r%s\rLearning corrections... Initial Cost: %f  Final Cost: %f  Done\n") %\
+                                 (' ' * 80, start_cost, cost),
         # Calculate region means
         if self.region_means is None:
             self.region_means = numpy.zeros(self.frags['regions'].shape[0], dtype=numpy.float32)
@@ -455,6 +532,12 @@ class FiveC(object):
         :param precorrect: Use binning-based corrections in expected value calculations, resulting in a chained normalization approach.
         :type precorrect: bool.
         :returns: None
+
+        Calling this function creates the following attributes:
+
+        :Attributes: * **corrections** (*ndarray*) - A numpy array of type float32 and length equal to the number of fragments. All invalid fragments have an associated correction value of zero.
+
+        The 'normalization' attribute is updated to 'express' or 'binning-express', depending on if the 'precorrect' option is selected. In addition, if the 'remove_distance' option is selected, the 'region_means' attribute is updated such that the mean correction (sum of all valid regional correction value pairs) is adjusted to zero and the corresponding region mean is adjusted the same amount but the opposite sign. 
         """
         self.history += "FiveC.find_express_fragment_corrections(mindistance=%s, maxdistance=%s, iterations=%i, remove_distance=%s, usereads='%s', regions=%s, precorrect=%s) - " % (str(mindistance), str(maxdistance), iterations, remove_distance, usereads, str(regions), precorrect)
         if precorrect and self.binning_corrections is None:
@@ -604,7 +687,7 @@ class FiveC(object):
         :type model: list
         :param num_bins: The number of approximately equal-sized bins two divide model components into.
         :type num_bins: int.
-        :para parameters: A list of types, one for each model parameter. Types can be either 'even' or 'fixed', indicating whether each parameter bin should contain approximately even numbers of interactions or be of fixed width spanning 1 / Nth of the range of the parameter's values, respectively. Parameter types can also have the suffix '-const' to indicate that the parameter should not be optimized.
+        :param parameters: A list of types, one for each model parameter. Types can be either 'even' or 'fixed', indicating whether each parameter bin should contain approximately even numbers of interactions or be of fixed width spanning 1 / Nth of the range of the parameter's values, respectively. Parameter types can also have the suffix '-const' to indicate that the parameter should not be optimized.
         :type parameters: list
         :param remove_distance: Use distance dependence curve in prior probability calculation for each observation.
         :type remove_distance: bool.
@@ -619,6 +702,14 @@ class FiveC(object):
         :param precorrect: Use fragment-based corrections in expected value calculations, resulting in a chained normalization approach.
         :type precorrect: bool.
         :returns: None
+
+        :Attributes: * **model_parameters** (*ndarray*) - A numpy array of strings containing model parameter names.
+                     * **binning_num_bins** (*ndarray*) - A numpy array of type int32 containing the number of bins for each model parameter.
+                     * **binning corrections** (*ndarray*) - A numpy array of type float32 and length equal to the sum of binning_num_bins * (binning_num_bins - 1) / 2. This array contains a 1D stack of correction values, ordered according to the parameter order in the 'model_parameters' attribute.
+                     * **binning_correction_indices** (*ndarray*) - A numpy array of type int32 and length equal to the number of model parameters plus one. This array contains the first position in 'binning_corrections' for the first bin of the model parameter in the corresponding position in the 'model_parameters' array. The last position in the array contains the total number of binning correction values.
+                     * **binning_frag_indices** (*ndarray*) - A numpy array of type int32 and size N x M where M is the number of model parameters and N is the number of fragments. This array contains the binning index for each parameter for each fragment.
+        
+        The 'normalization' attribute is updated to 'binning', 'probability-binning', or 'express-binning', depending on if the 'precorrect' option is selected and which normalization has been previously run.
         """
         self.history += "FiveC.find_binning_fragment_corrections(mindistance=%s, maxdistance=%s, num_bins=%s, model=%s, learning_threshold=%f, max_iterations=%i, usereads='%s', regions=%s) - " % (str(mindistance), str(maxdistance), str(num_bins), str(model), learning_threshold, max_iterations, usereads, str(regions))
         for parameter in model:
@@ -847,6 +938,8 @@ class FiveC(object):
         Calculate the mean signal across all valid fragment-pair trans (inter-region) interactions.
         
         :returns: None
+
+        :Attributes: * **trans_mean** (*float*) - A float corresponding to the mean signal of inter-region interactions.
         """
         self.history += "FiveC.find_trans_mean() - "
         if not self.silent:

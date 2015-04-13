@@ -19,8 +19,8 @@ class FiveCData(object):
     """
     This class handles interaction count data for 5C experiments.
 
-    This class stores mapped paired-end reads, indexing them by fragment number, in an h5dict.
-
+    The FiveCData class contains all of the interaction information for a 5C experiment, including pairs of fragment indices and their associated counts.
+   
     .. note::
       This class is also available as hifive.FiveCData
 
@@ -33,6 +33,10 @@ class FiveCData(object):
     :param silent: Indicates whether to print information about function execution for this object.
     :type silent: bool.
     :returns: :class:`FiveCData` class object.
+
+    :Attributes: * **file** (*str.*) A string containing the name of the file passed during object creation for saving the object to.
+                 * **silent** (*bool.*) - A boolean indicating whether to suppress all of the output messages.
+                 * **history** (*str.*) - A string containing all of the commands executed on this object and their outcomes.
     """
 
     def __init__(self, filename, mode='r', silent=False):
@@ -116,6 +120,15 @@ class FiveCData(object):
         :param filelist: A list containing all of the file names of counts text files to be included in the dataset. If only one file is needed, this may be passed as a string.
         :type filelist: list
         :returns: None
+
+        :Attributes: * **fragfilename** (*str.*) - A string containing the relative path of the fragment file.
+                     * **cis_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero intra-regional fragment pairings observed in the data. The first column contains the fragment index (from the 'fragments' array in the Fragment object) of the upstream fragment, the second column contains the idnex of the downstream fragment, and the third column contains the number of reads observed for that fragment pair.
+                     * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fragments + 1. Each position contains the first entry for the correspondingly-indexed fragment in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fragment at index 5 in the Fragment object 'fragments' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
+                     * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-regional fragment pairings observed in the data. The first column contains the fragment index (from the 'fragments' array in the Fragment object) of the upstream fragment (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream fragment, and the third column contains the number of reads observed for that fragment pair.
+                     * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fragments + 1. Each position contains the first entry for the correspondingly-indexed fragment in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fragment at index 5 in the Fragment object 'fragments' array are in cis_data[cis_indices[5]:cis_indices[6], :].
+                     * **frags** (*ndarray*) - A filestream to the hdf5 Fragment file such that all saved Fragment attributes can be accessed through this class attribute.
+
+        When data is loaded the 'history' attribute is updated to include the history of the Fragment file that becomes associated with it.
         """
         self.history += "FiveCData.load_data_from_counts(fragfilename='%s', filelist=%s) - " % (fragfilename, str(filelist))
         # determine if fragment file exists and if so, load it
@@ -192,6 +205,15 @@ class FiveCData(object):
         :param filelist: A list containing lists of paired read end files.
         :type filelist: list
         :returns: None
+
+        :Attributes: * **fragfilename** (*str.*) - A string containing the relative path of the fragment file.
+                     * **cis_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero intra-regional fragment pairings observed in the data. The first column contains the fragment index (from the 'fragments' array in the Fragment object) of the upstream fragment, the second column contains the idnex of the downstream fragment, and the third column contains the number of reads observed for that fragment pair.
+                     * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fragments + 1. Each position contains the first entry for the correspondingly-indexed fragment in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fragment at index 5 in the Fragment object 'fragments' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
+                     * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-regional fragment pairings observed in the data. The first column contains the fragment index (from the 'fragments' array in the Fragment object) of the upstream fragment (upstream also refers to the lower indexed chromosome in this context), the second column contains the idnex of the downstream fragment, and the third column contains the number of reads observed for that fragment pair.
+                     * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fragments + 1. Each position contains the first entry for the correspondingly-indexed fragment in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fragment at index 5 in the Fragment object 'fragments' array are in cis_data[cis_indices[5]:cis_indices[6], :].
+                     * **frags** (*filestream*) - A filestream to the hdf5 Fragment file such that all saved Fragment attributes can be accessed through this class attribute.
+
+        When data is loaded the 'history' attribute is updated to include the history of the Fragment file that becomes associated with it.
         """
         self.history += "FiveCData.load_data_from_counts(fragfilename='%s', filelist=%s) - " % (fragfilename, str(filelist))
         if 'pysam' not in sys.modules.keys():

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Description: HiFive v2.2 main executable.
+"""Description: HiFive main executable.
 
 Copyright (c) 2015 Michael Sauria <mike.sauria@jhu.edu>
 
@@ -86,7 +86,7 @@ def main():
 def generate_parser():
     """Generate an argument parser."""
     description = "%(prog)s -- Data handling, normalization, manipulation, and plotting for HiC and 5C experimental data"
-    epilog = "For command line options of each command, type: %(prog)s COMMAND -h"
+    epilog = "For command line options of each command, type: %(prog)s <COMMAND> -h"
     parser = ap.ArgumentParser(description=description, epilog=epilog)
     parser.add_argument("--version", action="version", version="%(prog)s %(version_num)s" % {'prog':parser.prog, 'version_num':VERSION})
     subparsers = parser.add_subparsers(dest='subcommand')
@@ -156,7 +156,7 @@ def add_fivecproject_subparser(subparsers):
 
 def add_fivecnormalize_subparser(subparsers):
     """Add command '5c-normalize' arguments to parser."""
-    parser = subparsers.add_parser("5c-normalize", help="HiFive 5C Project Normalization Function: Learn correction parameters for a HiFive 5C project.", epilog="For command line options of each command, type: %(prog)s 5c-normalize COMMAND -h")
+    parser = subparsers.add_parser("5c-normalize", help="HiFive 5C Project Normalization Function: Learn correction parameters for a HiFive 5C project.", epilog="For command line options of each normalization approach, type: %(prog)s <ALGORITHM> -h")
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fragment. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fragment. Learning is accomplished using a variation of matrix balancing.")
@@ -187,7 +187,7 @@ def add_fivecnormalize_subparser(subparsers):
 
 def add_complete_fivec_subparser(subparsers):
     """Add command '5c-complete' arguments to parser."""
-    parser = subparsers.add_parser("5c-complete", help="HiFive 5C Project Complete Analysis Function: Create all necessary files (Fragment, Data, and Project) and learn correction parameters for a HiFive 5C project.", epilog="For command line options of each command, type: %(prog)s 5c-complete COMMAND -h")
+    parser = subparsers.add_parser("5c-complete", help="HiFive 5C Project Complete Analysis Function: Create all necessary files (Fragment, Data, and Project) and learn correction parameters for a HiFive 5C project.", epilog="For command line options of each normalization approach, type: %(prog)s <ALGORITHM> -h")
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fragment. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fragment. Learning is accomplished using a variation of matrix balancing.")
@@ -235,7 +235,7 @@ def add_fivec_complete_group(subparser):
     """Add common 5C complete analysis options to subparser."""
     subparser.add_argument("--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
-    subparser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
+    subparser.add_argument("--genome", dest="genome", required=False, default=None, type=str,
         help="The name of the genome RE fragments correspond to.")
     subparser.add_argument(dest="bed", type=str,
         help="The name of the BED file containing 5C fragment positions.")
@@ -262,14 +262,14 @@ def add_fivec_complete_group(subparser):
 
 def add_fivec_probability_group(subparser):
     """Add 5C probability normalization options to subparser."""
-    subparser.add_argument("-b", "--burnin-iterations", dest="burnin", required=False, type=int, default=1000,
-        action='store', help="The number of iterations to run the burn-in learning phase for with a constant learning rate. [default: %(default)s]")
-    subparser.add_argument("-a", "--annealing-iterations", dest="anneal", required=False, type=int, default=1000,
-        action='store', help="The number of iterations to run the annealing learning phase for with a linearly-decreasing learning rate. [default: %(default)s]")
+    subparser.add_argument("-b", "--max-iterations", dest="probiter", required=False, type=int, default=1000,
+        action='store', help="The maximum number of iterations to carry on gradient descent for. [default: %(default)s]")
+    subparser.add_argument("-g", "--min-change", dest="change", required=False, type=float, default=0.0005,
+        action='store', help="The minimum allowable absolute gradient size to coninute learning process. [default: %(default)s]")
     subparser.add_argument("-p", "--precalculate", dest="precalc", required=False, default=False,
         action='store_true', help="Precalculate correction values from fragment means for the probability algorithm. [default: %(default)s]")
-    subparser.add_argument("-l", "--learning-rate", dest="rate", required=False, type=float, default=0.01,
-        action='store', help="The learning rate (percentage of parameter gradient to apply) to use for gradient descent. [default: %(default)s]")
+    subparser.add_argument("-l", "--learning-step", dest="step", required=False, type=float, default=0.5,
+        action='store', help="The scaling factor for decreasing learning rate by if step doesn't meet armijo criterion. [default: %(default)s]")
     return
 
 def add_fivec_express_group(subparser):
@@ -434,7 +434,7 @@ def add_hicproject_subparser(subparsers):
 
 def add_hicnormalize_subparser(subparsers):
     """Add command 'hic-normalize' arguments to parser."""
-    parser = subparsers.add_parser("hic-normalize", help="HiFive HiC Project Normalization Function: Learn correction parameters for a HiFive HiC project.", epilog="For command line options of each command, type: %(prog)s hic-normalize COMMAND -h")
+    parser = subparsers.add_parser("hic-normalize", help="HiFive HiC Project Normalization Function: Learn correction parameters for a HiFive HiC project.", epilog="For command line options of each normalization approach, type: %(prog)s <ALGORITHM> -h")
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fend. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fend. Learning is accomplished using a variation of matrix balancing.")
@@ -461,7 +461,7 @@ def add_hicnormalize_subparser(subparsers):
 
 def add_complete_hic_subparser(subparsers):
     """Add command 'hic-complete' arguments to parser."""
-    parser = subparsers.add_parser("hic-complete", help="HiFive HiC Project Complete Analysis Function: Create all necessary files (Fend, Data, and Project) and learn correction parameters for a HiFive HiC project.", epilog="For command line options of each command, type: %(prog)s hic-complete COMMAND -h")
+    parser = subparsers.add_parser("hic-complete", help="HiFive HiC Project Complete Analysis Function: Create all necessary files (Fend, Data, and Project) and learn correction parameters for a HiFive HiC project.", epilog="For command line options of each normalization approach, type: %(prog)s <ALGORITHM> -h")
     subparser2 = parser.add_subparsers(dest='algorithm')
     prob_parser = subparser2.add_parser("probability", help="A probability model based approach for learning correction values associated with each fend. Learning is accomplished using gradient descent.")
     exp_parser = subparser2.add_parser("express", help="An appoximation based approach for learning correction values associated with each fend. Learning is accomplished using a variation of matrix balancing.")
@@ -539,24 +539,22 @@ def add_hic_normalize_group(subparser):
 
 def add_hic_probability_group(subparser):
     """Add HiC probability normalization options to subparser."""
-    subparser.add_argument("-b", "--burnin-iterations", dest="burnin", required=False, type=int, default=1000,
-        action='store', help="The number of iterations to run the burn-in learning phase for with a constant learning rate. [default: %(default)s]")
-    subparser.add_argument("-a", "--annealing-iterations", dest="anneal", required=False, type=int, default=1000,
-        action='store', help="The number of iterations to run the annealing learning phase for with a linearly-decreasing learning rate. [default: %(default)s]")
-    subparser.add_argument("-g", "--min-change", dest="change", required=False, type=float, default=0.0001,
-        action='store', help="The maximum allowable change per iteration in fend correction parameter values allowable to terminate the burn-in phase of learning. [default: %(default)s]")
+    subparser.add_argument("-b", "--max-iterations", dest="probiter", required=False, type=int, default=1000,
+        action='store', help="The maximum number of iterations to carry on gradient descent for. [default: %(default)s]")
+    subparser.add_argument("-g", "--min-change", dest="change", required=False, type=float, default=0.0005,
+        action='store', help="The minimum allowable absolute gradient size to coninute learning process. [default: %(default)s]")
     subparser.add_argument("-p", "--precalculate", dest="precalc", required=False, default=False,
         action='store_true', help="Precalculate correction values from fend means for the probability algorithm. [default: %(default)s]")
-    subparser.add_argument("-l", "--learning-rate", dest="rate", required=False, type=float, default=0.4,
-        action='store', help="The learning rate (percentage of parameter gradient to apply) to use for gradient descent. [default: %(default)s]")
-    subparser.add_argument("-k", "--display", dest="display", required=False, type=int, default=100,
-        action='store', help="The number of iterations to wait before explicitly calculating cost and updating display (zero indicates off). [default: %(default)s]")
+    subparser.add_argument("-l", "--learning-step", dest="step", required=False, type=float, default=0.4,
+        action='store', help="The scaling factor for decreasing learning rate by if step doesn't meet armijo criterion. [default: %(default)s]")
     return
 
 def add_hic_express_group(subparser):
     """Add HiC express normalization options to subparser."""
     subparser.add_argument("-e", "--express-iterations", dest="expiter", required=False, type=int, default=1000,
-        action='store', help="The number of iterations to run the express learning phase for. [default: %(default)s]")
+        action='store', help="The minimum number of iterations to run the express learning phase for. [default: %(default)s]")
+    subparser.add_argument("-g", "--min-change", dest="change", required=False, type=float, default=0.0001,
+        action='store', help="The maximum allowable change per iteration in fend correction parameter values allowable to terminate learning. [default: %(default)s]")
     subparser.add_argument("-d", "--remove-distance", dest="nodist", required=False, default=False,
         action='store_true', help="Remove the distant-dependent portion of the signal prior to learning corrections with the express algorithm. [default: %(default)s]")
     subparser.add_argument("-w", "--express-reads", dest="expreads", required=False, type=str, default='cis',

@@ -86,6 +86,61 @@ def find_distance_bin_sums(
                 logdistance_sum[j] += log_dist
     return None
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_binary_distance_bin_sums(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_int_t, ndim=1] rev_mapping not None,
+        np.ndarray[DTYPE_t, ndim=1] cutoffs not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
+        np.ndarray[DTYPE_int_t, ndim=2] indices not None,
+        np.ndarray[DTYPE_int64_t, ndim=2] counts not None,
+        np.ndarray[DTYPE_64_t, ndim=1] logdistance_sum not None,
+        int start,
+        int stop):
+    cdef long long int i, j, temp, fend1, fend2, previous_fend
+    cdef double log_dist
+    cdef long long int num_data = indices.shape[0]
+    cdef long long int num_fends = rev_mapping.shape[0]
+    with nogil:
+        previous_fend = -1
+        j = 0
+        for i in range(num_data):
+            fend1 = mapping[indices[i, 0]]
+            fend2 = mapping[indices[i, 1]]
+            if fend1 == -1 or fend2 == -1:
+                continue
+            if fend1 != previous_fend:
+                j = 0
+                previous_fend = fend1
+            log_dist = log(mids[fend2] - mids[fend1])
+            while log_dist > cutoffs[j]:
+                j += 1
+            counts[j, 0] += 1
+        for fend1 in range(start, stop):
+            j = 0
+            for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
+                if rev_mapping[fend1] % 2 == 0:
+                    temp = rev_mapping[fend2] - rev_mapping[fend1]
+                    if temp == 1 or temp == 3:
+                        continue
+                else:
+                    if rev_mapping[fend2] - rev_mapping[fend1] == 1:
+                        continue
+                log_dist = log(mids[fend2] - mids[fend1])
+                while log_dist > cutoffs[j]:
+                    j += 1
+                counts[j, 1] += 1
+                logdistance_sum[j] += log_dist
+            for fend2 in range(min(fend1 + 4, num_fends), num_fends):
+                log_dist = log(mids[fend2] - mids[fend1])
+                while log_dist > cutoffs[j]:
+                    j += 1
+                counts[j, 1] += 1
+                logdistance_sum[j] += log_dist
+    return None
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)

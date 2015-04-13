@@ -14,7 +14,7 @@ class Fragment(object):
     """
     This class handles restriction enzyme digest-generated fragment data for 5C experiments.
 
-    This class stores a list of chromosomes, a dictionary for converting from chromosome label to integer and back, fragment starts, stops, and chromosome number in an h5dict.
+    The Fragment class contains all of the genomic information for a 5C experiment, including fragment locations and orientations, chromosome name mapping, and region locations and indices.
 
     .. note::
       This class is also available as hifive.Fragment
@@ -28,6 +28,10 @@ class Fragment(object):
     :param silent: Indicates whether to print information about function execution for this object.
     :type silent: bool.
     :returns: :class:`Fragment <hifive.fragment.Fragment>` class object.
+
+    :Attributes: * **file** (*str.*) - A string containing the name of the file passed during object creation for saving the object to.
+                 * **silent** (*bool.*) - A boolean indicating whether to suppress all of the output messages.
+                 * **history** (*str.*) - A string containing all of the commands executed on this object and their outcome.
     """
 
     def __init__(self, filename, mode='r', silent=False):
@@ -101,6 +105,11 @@ class Fragment(object):
         :param minregionspacing: If 'regions' is not defined, this is used to parse regions by inserting breaks where fragments are spaced apart greater than this value.
         :type minregionspacing: int.
         :returns: None
+
+        :Attributes: * **chromosomes** (*ndarray*) - A numpy array containing chromosome names as strings. The position of the chromosome name in this array is referred to as the chromosome index.
+                     * **fragments** (*ndarray*) - A numpy array of length N where N is the number of fragments and containing the fields 'chr', 'start', 'stop', 'mid', 'strand', 'region', and 'name'. With the exception of the 'name' field which is of type string, all of these are of type int32. The 'chr' and 'region' fields contain the indices of the chromosome and region, respectively. If the bed file used to create the Fragment object contains additional columns, these features are also included as fields with names corresponding to the bed header names. These additional fields are of type float32. Fragments are sorted by chromosome (the order in the 'chromosomes' array) and then by coordinates.
+                     * **chr_indices** (*ndarray*) - A numpy array with a length of the number of chromosomes in 'chromosomes' + 1. This array contains the first position in 'fragments' for the chromosome in the corresponding position in the 'chromosomes' array. The last position in the array contains the total number of fragments.
+                     * **regions** (*ndarray*) - A numpy array of length equal to the number of regions a containing the fields 'index', 'chromosome', 'start_frag', 'stop_frag', 'start' and 'stop'. Except for 'chromosome' which is a string, all fields are of type int32.
         """
         self.history += "Fragment.load_fragments(filename='%s', genome_name='%s', re_name='%s', regions=%s, minregionspacing=%i) - " % (filename, genome_name, re_name, str(regions), minregionspacing)
         if not os.path.exists(filename):

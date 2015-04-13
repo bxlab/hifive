@@ -28,6 +28,10 @@ class Fend(object):
     :param silent: Indicates whether to print information about function execution for this object.
     :type silent: bool.
     :returns: :class:`Fend <hifive.fend.Fend>` class object
+
+    :attributes: * **file** (*str.*) - A string containing the name of the file passed during object creation for saving the object to.
+                 * **silent** (*bool.*) - A boolean indicating whether to suppress all of the output messages.
+                 * **history** (*str.*) - A string containing all of the commands executed on this object and their outcome.
     """
 
     def __init__(self, filename, mode='r', silent=False):
@@ -98,6 +102,12 @@ class Fend(object):
         :param format: Format of the input file. If not specified, it will be inferred from the file extension. Optional.
         :type format: str.
         :returns: None
+
+        :Attributes: * **chromosomes** (*ndarray*) - A numpy array containing chromosome names as strings. The position of the chromosome name in this array is referred to as the chromosome index.
+             * **fends** (*ndarray*) - A numpy array of length N where N is the number of fends and containing the fields 'chr', 'start', 'stop', and 'mid'. All of these are of type int32. The 'chr' field contains the index of the chromosome. If the bed file or fend file used to create the Fend object contains additional columns, these features are also included as fields with names corresponding to the header names. These additional fields are of type float32. If produced from a bed file, fends are sorted by chromosome (the order in the 'chromosomes' array) and then by coordinates.
+             * **chr_indices** (*ndarray*) - A numpy array with a length of the number of chromosomes in 'chromosomes' + 1. This array contains the first position in 'fragments' for the chromosome in the corresponding position in the 'chromosomes' array. The last position in the array contains the total number of fragments.
+             * **genome_name** (*str.*) - A string (or None if not passed as argument) of the genome from which the fends originated.
+             * **re_name** (*str.*) - A string (or None if not passed as argument) of the restriction enzyme used to produce the fends.
         """
         self.history += "Fend.load_fends(filename='%s', genome_name='%s', re_name='%s', format='%s') - " % (filename, genome_name, re_name, format)
         if not os.path.exists(filename):

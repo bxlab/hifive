@@ -57,65 +57,59 @@ def find_binning_correction_adjustment(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def calculate_prob_gradients(
+def calculate_binom_gradients(
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices1 not None,
-        np.ndarray[DTYPE_t, ndim=1] nonzero_means not None,
         np.ndarray[DTYPE_t, ndim=1] zero_means not None,
-        np.ndarray[DTYPE_int_t, ndim=1] counts not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
+        np.ndarray[DTYPE_t, ndim=1] inv_corrections not None,
         np.ndarray[DTYPE_64_t, ndim=1] gradients not None):
-    cdef long long int i, index0, index1, count
+    cdef long long int i, index0, index1
     cdef double value, distance_mean, correction0, correction1
     cdef long long int num_zero_pairs = zero_indices0.shape[0]
     cdef long long int num_nonzero_pairs = nonzero_indices0.shape[0]
     with nogil:
-        cost = 0.0
         for i in range(num_nonzero_pairs):
             index0 = nonzero_indices0[i]
             index1 = nonzero_indices1[i]
-            count = counts[i]
-            distance_mean = nonzero_means[i]
-            correction0 = corrections[index0]
-            correction1 = corrections[index1]
-            gradients[index0] += distance_mean * correction1 - count / correction0
-            gradients[index1] += distance_mean * correction0 - count / correction1
+            gradients[index0] -= inv_corrections[index0]
+            gradients[index1] -= inv_corrections[index1]
         for i in range(num_zero_pairs):
             index0 = zero_indices0[i]
             index1 = zero_indices1[i]
             distance_mean = zero_means[i]
             correction0 = corrections[index0]
             correction1 = corrections[index1]
-            gradients[index0] += distance_mean * correction1
-            gradients[index1] += distance_mean * correction0
+            value = 1.0 / (1.0 - distance_mean * corrections[index0] * corrections[index1])
+            gradients[index0] += (distance_mean * corrections[index1]) * value
+            gradients[index1] += (distance_mean * corrections[index0]) * value
     return None
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def calculate_prob_cost(
+def calculate_binom_cost(
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices1 not None,
-        np.ndarray[DTYPE_t, ndim=1] nonzero_means not None,
+        np.ndarray[DTYPE_t, ndim=1] log_nonzero_means not None,
         np.ndarray[DTYPE_t, ndim=1] zero_means not None,
-        np.ndarray[DTYPE_int_t, ndim=1] counts not None,
-        np.ndarray[DTYPE_t, ndim=1] corrections not None):
+        np.ndarray[DTYPE_t, ndim=1] corrections not None,
+        np.ndarray[DTYPE_t, ndim=1] log_corrections not None):
     cdef long long int i
-    cdef double value, cost
+    cdef double cost
     cdef long long int num_zero_pairs = zero_indices0.shape[0]
     cdef long long int num_nonzero_pairs = nonzero_indices0.shape[0]
     with nogil:
         cost = 0.0
         for i in range(num_nonzero_pairs):
-            value = nonzero_means[i] * corrections[nonzero_indices0[i]] * corrections[nonzero_indices1[i]]
-            cost += value - counts[i] * log(value)
+            cost -= log_nonzero_means[i] + log_corrections[nonzero_indices0[i]] + log_corrections[nonzero_indices1[i]]
         for i in range(num_zero_pairs):
-            cost += zero_means[i] * corrections[zero_indices0[i]] * corrections[zero_indices1[i]]
+            cost -= log(max(0.0000001, 1.0 - zero_means[i] * corrections[zero_indices0[i]] * corrections[zero_indices1[i]]))
     return cost
 
 
@@ -177,17 +171,24 @@ def update_express_corrections(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int64_t, ndim=1] interactions,
         np.ndarray[DTYPE_64_t, ndim=1] fend_means,
-        np.ndarray[DTYPE_t, ndim=1] corrections):
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_64_t, ndim=1] change):
     cdef long long int i
     cdef double cost, temp
     cdef long long int num_fends = filt.shape[0]
     with nogil:
         cost = 0.0
+        change[0] = 0
         for i in range(num_fends):
             if filt[i] == 0:
                 continue
             temp = fend_means[i] / interactions[i]
-            corrections[i] *= pow(temp, 0.5)
             cost += pow(temp - 1.0, 2.0)
+            temp = pow(temp, 0.5)
+            if temp > 1.0:
+                change[0] = max(change[0], temp - 1.0)
+            else:
+                change[0] = max(change[0], 1.0 - temp)
+            corrections[i] *= temp
         cost = pow(cost, 0.5)
     return cost

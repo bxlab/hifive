@@ -125,9 +125,7 @@ Because this function involves scanning large amounts of data, it has been made 
   hic = hifive.HiC(hic_filename)
   hic.find_distance_means(numbins=90,
                           minsize=200, 
-                          maxsize=0,
-                          smoothed=2,
-                          corrected=False)
+                          maxsize=0)
   if rank == 0:
     hic.save()
 
@@ -139,17 +137,16 @@ Learn HiC normalization parameters
 Using the probability algorithm
 +++++++++++++++++++++++++++++++
 
-In order to learn the correction model for HiC data using the probability algorithm, :mod:`HiFive` uses two rounds of gradient descent, one with constant learning rate (the 'burn-in' phase) and the second with a linearly decreasing learning rate (the 'annealing' phase). In addition, :mod:`HiFive` limits which interactions it uses to learn the model parameters to those that fall within a user-specified maximum interaction distance.
+In order to learn the correction model for HiC data using the probability algorithm, :mod:`HiFive` uses a bactracking line gradient descent. In addition, :mod:`HiFive` limits which interactions it uses to learn the model parameters to those that fall within a user-specified maximum interaction distance.
 
 To learn HiC corrections using the modeling approach, you can use the following command::
 
-  hic.find_probability_fend_corrections(display=100,
-                                        mindistance=5000000,
-                                        learningrate=0.4,
-                                        burnin_iterations=5000,
-                                        annealing_iterations=10000)
+  hic.find_probability_fend_corrections(mindistance=5000000,
+                                        learningstep=0.5,
+                                        max_iterations=1000,
+                                        minchange=0.0005)
 
-In the above call, 'mindistance' indicates that interactions spanning less than 5 Mb are excluded from calculations. Setting this to zero would include all unfiltered cis interactions. The 'learningrate' specifies what percentage of the gradient to apply towards value updates. One last value passed to the function in 'display', which specifies how many iterations should pass before updating the display (via STDERR). This can also be set to zero to not display the progress.
+In the above call, 'mindistance' indicates that interactions spanning less than 5 Mb are excluded from calculations. Setting this to zero would include all unfiltered cis interactions. The 'learningstep' specifies how quickly to scale down the step value if the current try doesn't meet the arjimo learning criterion. The 'max_iterations' specifies a limit for how long to run the learning process for. Finally, 'minchange' is the stopping threshold such that if all absolute gradient values are below this the learning terminates early.
 
 Because of the large numbers of calculations involved in this function, it has been made to utilize MPI. To do so, you can use a scripts such as the following::
 
@@ -158,11 +155,10 @@ Because of the large numbers of calculations involved in this function, it has b
 
   rank = MPI.COMM_WORLD.Get_rank()
   hic = hifive.HiC(hic_filename)
-  hic.find_fend_corrections(display=100,
-                            mindistance=5000000,
-                            learningrate=0.01,
-                            burnin_iterations=5000,
-                            annealing_iterations=10000)
+  hic.find_fend_corrections(mindistance=5000000,
+                            learningstep=0.5,
+                            max_iterations=1000,
+                            minchange=0.0005)
   if rank == 0:
     hic.save()
 

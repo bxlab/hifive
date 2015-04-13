@@ -40,8 +40,8 @@ def run(args):
                                                 max_iterations=args.biniter, precorrect=False)
     if args.algorithm.split('-')[0] == 'probability':
         fivec.find_probability_fragment_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
-                                                    regions=regions, burnin_iterations=args.burnin,
-                                                    annealing_iterations=args.anneal, learningrate=args.rate,
+                                                    regions=regions, max_iterations=args.probiter,
+                                                    minchange=args.change, learningstep=args.step,
                                                     precalculate=args.precalc, precorrect=False)
     if args.algorithm.split('-')[0] == 'express':
         fivec.find_express_fragment_corrections(iterations=args.expiter, mindistance=args.mindist,
@@ -57,8 +57,8 @@ def run(args):
                                                     max_iterations=args.biniter, precorrect=True)
         if args.algorithm.split('-')[1] == 'probability':
             fivec.find_probability_fragment_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
-                                                        regions=regions, burnin_iterations=args.burnin,
-                                                        annealing_iterations=args.anneal, learningrate=args.rate,
+                                                        regions=regions, max_iterations=args.probiter,
+                                                        minchange=args.change, learningstep=args.step,
                                                         precalculate=args.precalc, precorrect=True)
         if args.algorithm.split('-')[1] == 'express':
             fivec.find_express_fragment_corrections(iterations=args.expiter, mindistance=args.mindist,

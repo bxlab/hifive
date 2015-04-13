@@ -243,10 +243,10 @@ Universal Options:
 
 5C Probability Options:
 
--b, --burnin-iterations int     The number of iterations to run the first learning phase for with a constant learning rate. [1000]
--a, --annealing-iterations int  The number of iterations to run the second learning phase for with a linearly-decreasing learning rate. [1000]
--p, --precalculate              Prior to beginning learning, set initial guesses for each correction value to be learned to the fragment's mean difference between its log-counts and predicted distance-dependence signal.
--l, --learning-rate dec         The percentage of the parameter gradient to apply as an update to the parameter each iteration. [0.01]
+-b, --max-iterations int     The maximum number of iterations to run the learning process for. [1000]
+-g, --min-change dec         The minimum allowable absolute gradient size to coninute learning process. [0.0005]
+-p, --precalculate           Prior to beginning learning, set initial guesses for each correction value to be learned to the fragment's mean difference between its log-counts and predicted distance-dependence signal.
+-l, --learning-step dec      The scaling factor for decreasing learning rate by if step doesn't meet Armijo criterion. [0.5]
 
 5C Express Options:
 
@@ -521,12 +521,10 @@ HiC Normalization Algorithms
 
 HiC Probability Options:
 
--b, --burnin-iterations int     The minimum number of iterations to run the first learning phase for with a constant learning rate. [1000]
--a, --annealing-iterations int  The number of iterations to run the second learning phase for with a linearly-decreasing learning rate. [1000]
--g, --min-change dec            The maximum allowable change per iteration in fend correction parameter values allowable to terminate the burn-in phase of learning. [0.0001]
+-b, --max-iterations int        The maximum number of iterations to run the learning process for. [1000]
+-g, --min-change dec            The minimum allowable absolute gradient size to coninute learning process. [0.0005]
 -p, --precalculate              Prior to beginning learning, set initial guesses for each correction value to be learned to the fragment's mean difference between its log-counts and predicted distance-dependence signal.
--l, --learning-rate dec         The percentage of the parameter gradient to apply as an update to the parameter each iteration. [0.04]
--k, --display int               The number of iterations to wait before calculating the cos and updating the display (zero indicates no display updates). [100]
+-l, --learning-step dec         The scaling factor for decreasing learning rate by if step doesn't meet Armijo criterion. [0.5]
 
 HiC Express Options:
 

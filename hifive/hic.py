@@ -4,6 +4,7 @@
 
 import os
 import sys
+from math import log
 
 import numpy
 import h5py
@@ -44,6 +45,16 @@ class HiC(object):
     :param silent: Indicates whether to print information about function execution for this object.
     :type silent: bool.
     :returns: :class:`HiC <hifive.hic.HiC>` class object.
+
+    :attributes: * **file** (*str.*) - A string containing the name of the file passed during object creation for saving the object to.
+                 * **silent** (*bool.*) - A boolean indicating whether to suppress all of the output messages.
+                 * **history** (*str.*) - A string containing all of the commands executed on this object and their outcome.
+                 * **normalization** (*str.*) - A string stating which type of normalization has been performed on this object. This starts with the value 'none'.
+                 * **comm** (*class*) - A link to the MPI.COMM_WORLD class from the mpi4py package. If this package isn't present, this is set to 'None'.
+                 * **rank** (*int.*) - The rank integer of this process, if running with mpi, otherwise set to zero.
+                 * **num_procs** (*int.*) - The number of processes being executed in parallel. If mpi4py package is not present, this is set to one.
+
+    In addition, many other attributes are initialized to the 'None' state.
     """
 
     def __init__(self, filename, mode='r', silent=False):
@@ -94,6 +105,15 @@ class HiC(object):
         :param filename: Specifies the file name of the :class:`HiCData <hifive.hic_data.HiCData>` object to associate with this analysis.
         :type filename: str.
         :returns: None
+
+        :Attributes: * **datafilename** (*str.*) - A string containing the relative path of the HiCData file.
+                     * **fendfilename** (*str.*) - A string containing the relative path of the Fend file associated with the HiCData file.
+                     * **fends** (*filestream*) - A filestream to the hdf5 Fragment file such that all saved Fend attributes can be accessed through this class attribute.
+                     * **data** (*filestream*) - A filestream to the hdf5 FiveCData file such that all saved HiCData attributes can be accessed through this class attribute.
+                     * **chr2int** (*dict.*) - A dictionary that converts chromosome names to chromosome indices.
+                     * **filter** (*ndarray*) - A numpy array of type int32 and size N where N is the number of fends. This contains the inclusion status of each fend with a one indicating included and zero indicating excluded and is initialized with all fends included.
+
+        When a HiCData object is associated with the project file, the 'history' attribute is updated with the history of the HiCData object.
         """
         self.history += "HiC.load_data(filename='%s') - " % (filename)
         if self.rank > 0:
@@ -146,6 +166,7 @@ class HiC(object):
             return None
         if not out_fname is None:
             original_file = os.path.abspath(self.file)
+            out_fname = os.path.abspath(out_fname)
             if 'datafilename' in self.__dict__:
                 datafilename = self.datafilename
                 if datafilename[:2] == './':
@@ -153,8 +174,8 @@ class HiC(object):
                 parent_count = datafilename.count('../')
                 datafilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
                                         datafilename.lstrip('/').split('/')[parent_count:])
-                self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(datafilename)),
-                                               os.path.dirname(self.file)), os.path.basename(datafilename))
+                datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(datafilename)),
+                                               os.path.dirname(out_fname)), os.path.basename(datafilename))
             if 'fendfilename' in self.__dict__:
                 fendfilename = self.fendfilename
                 if fendfilename[:2] == './':
@@ -162,16 +183,24 @@ class HiC(object):
                 parent_count = fendfilename.count('../')
                 fendfilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
                                         fendfilename.lstrip('/').split('/')[parent_count:])
-                self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
-                                               os.path.dirname(self.file)), os.path.basename(fendfilename))
+                fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                                               os.path.dirname(out_fname)), os.path.basename(fendfilename))
         else:
             out_fname = self.file
+            if 'datafilename' in self.__dict__:
+                datafilename = self.datafilename
+            if 'fendfilename' in self.__dict__:
+                fendfilename = self.fendfilename
         datafile = h5py.File(out_fname, 'w')
         for key in self.__dict__.keys():
             if key in ['data', 'fends', 'file', 'chr2int', 'comm', 'rank', 'num_procs', 'silent']:
                 continue
             elif self[key] is None:
                 continue
+            elif key == 'fendfilename':
+                datafile.attrs[key] = fendfilename
+            elif key == 'datafilename':
+                datafile.attrs[key] = datafilename
             elif isinstance(self[key], numpy.ndarray):
                 datafile.create_dataset(key, data=self[key])
             elif not isinstance(self[key], dict):
@@ -323,6 +352,9 @@ class HiC(object):
         :param corrected: If True, correction values are applied to counts prior to summing.
         :type corrected: bool.
         :returns: None
+
+        :Attributes: * **distance_parameters** (*ndarray*) - A numpy array of type float32 and size of N x 3 where N is one less than the number of distance bins containing at least one valid observation out of the 'numbins' number of bins that the distance range was divided into. The First column contains upper distance cutoff for each bin, the second column contains the slope associated with each bin line segment, and the third column contains the lin segment intercepts.
+                     * **chromosome_means** (*ndarray*) - A numpy array of type float32 and length equal to the number of chromosomes. This is initialized to zeros until fend correction values are found.
         """
         self.history += "HiC.find_distance_parameters(numbins=%i, minsize=%i, maxsize=%s, corrected=%s) - " % (numbins, minsize, str(maxsize), corrected)
         if not self.silent:
@@ -436,8 +468,7 @@ class HiC(object):
         return None
 
     def find_probability_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0001,
-                                          burnin_iterations=10000, annealing_iterations=10000,
-                                          learningrate=0.1, display=0, chroms=[], precalculate=True,
+                                          max_iterations=1000, learningstep=0.5, chroms=[], precalculate=True,
                                           precorrect=False):
         """
         Using gradient descent, learn correction values for each valid fend based on a Poisson distribution of observations. This function is MPI compatible.
@@ -446,16 +477,12 @@ class HiC(object):
         :type mindistance: int.
         :param maxdistance: The maximum inter-fend distance to be included in modeling.
         :type maxdistance: int.
-        :param minchange: The minimum mean change in fend correction parameter values needed to keep running past 'burnin_iterations' number of iterations during burn-in phase.
+        :param minchange: The cutoff threshold for early learning termination for the maximum absolute gradient value.
         :type minchange: float
-        :param burnin_iterations: The number of iterations to use with constant learning rate in gradient descent for learning fend corrections.
-        :type burnin_iterations: int.
-        :param annealing_iterations: The number of iterations to use with a linearly-decreasing learning rate in gradient descent for learning fend corrections.
-        :type annealing_iterations: int.
-        :param learningrate: The gradient scaling factor for parameter updates.
-        :type learningrate: float
-        :param display: Specifies how many iterations between when cost is calculated and displayed as model is learned. If 'display' is zero, the cost is not calculated of displayed.
-        :type display: int.
+        :param max_iterations: The maximum number of iterations to carry on gradient descent for.
+        :type max_iterations: int.
+        :param learningstep: The scaling factor for decreasing learning rate by if step doesn't meet armijo criterion.
+        :type learningstep: float
         :param chroms: A list of chromosomes to calculate corrections for. If set as None, all chromosome corrections are found.
         :type chroms: list
         :param precalculate: Specifies whether the correction values should be initialized at the fend means.
@@ -463,8 +490,12 @@ class HiC(object):
         :param precorrect: Use binning-based corrections in expected value calculations, resulting in a chained normalization approach.
         :type precorrect: bool.
         :returns: None
+
+        :Attributes: * **corrections** (*ndarray*) - A numpy array of type float32 and length equal to the number of fends. All invalid fends have an associated correction value of zero.
+
+        The 'normalization' attribute is updated to 'probability' or 'binning-probability', depending on if the 'precorrect' option is selected. In addition, the 'chromosome_means' attribute is updated such that the mean correction (sum of all valid chromosomal correction value pairs) is adjusted to zero and the corresponding chromosome mean is adjusted the same amount but the opposite sign. 
         """
-        self.history += "HiC.find_probability_fend_corrections(mindistance=%i, maxdistance=%s, minchange=%f, burnin_iterations=%i, annealing_iterations=%i, learningrate=%f, display=%i, chroms=%s, precalculate=%s, precorrect=%s) - " % (mindistance, str(maxdistance), minchange, burnin_iterations, annealing_iterations, learningrate, display, str(chroms), precalculate, precorrect)
+        self.history += "HiC.find_probability_fend_corrections(mindistance=%i, maxdistance=%s, minchange=%f, max_iterations=%i, learningstep=%f, chroms=%s, precalculate=%s, precorrect=%s) - " % (mindistance, str(maxdistance), minchange, max_iterations, learningstep, str(chroms), precalculate, precorrect)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fend_corrections'.\n"),
@@ -488,8 +519,90 @@ class HiC(object):
         for i in range(len(chroms)):
             chrints[i] = self.chr2int[chroms[i]]
         chroms = list(numpy.array(chroms)[numpy.argsort(chrints)])
+        chr_indices = self.fends['chr_indices'][...]
         if self.chromosome_means is None:
             self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
+        if maxdistance == 0 or maxdistance is None:
+            maxdistance = 0
+            for chrint in chrints:
+                valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0]
+            maxdistance = max(self.fends['fends']['mid'][valid[-1] + chr_indices[chrint]] -
+                              self.fends['fends']['mid'][valid[0] + chr_indices[chrint]], maxdistance)
+        # find binary distance depedence
+        num_bins = 100
+        cutoffs = numpy.linspace(log(max(1, mindistance)), log(maxdistance), num_bins + 1).astype(numpy.float32)[1:]
+        cutoffs[-1] = numpy.inf
+        bin_counts = numpy.zeros((num_bins, 2), dtype=numpy.int64)
+        logdistance_sum = numpy.zeros(num_bins, dtype=numpy.float64)
+        for chrom in chroms:
+            chrint = self.chr2int[chrom]
+            if self.rank == 0:
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rFinding distance values for chromosome %s...") %\
+                        (' ' * 80, chrom),
+            start_fend = chr_indices[chrint]
+            stop_fend = chr_indices[chrint + 1]
+            rev_mapping = numpy.where(self.filter[start_fend:stop_fend] == 1)[0].astype(numpy.int32)
+            num_valid = rev_mapping.shape[0]
+            # partition total possible interactions into roughly even-sized groups to spread across nodes
+            total_pairs = num_valid * (num_valid - 1) / 2
+            node_cutoffs = numpy.linspace(0, total_pairs, self.num_procs + 1).astype(numpy.float64)
+            pair_sums = numpy.r_[0, num_valid - numpy.arange(1, num_valid + 1)].astype(numpy.int64)
+            for j in range(1, pair_sums.shape[0]):
+                pair_sums[j] += pair_sums[j - 1]
+            node_ranges = numpy.searchsorted(pair_sums, node_cutoffs, side='left')
+            node_start = node_ranges[self.rank]
+            if (node_start > 0 and node_cutoffs[self.rank] - pair_sums[node_start - 1] <
+                                   pair_sums[node_start] - node_cutoffs[self.rank]):
+                node_start -= 1
+            node_stop = node_ranges[self.rank + 1]
+            if (node_stop > 0 and node_cutoffs[self.rank + 1] - pair_sums[node_stop - 1] <
+                                   pair_sums[node_stop] - node_cutoffs[self.rank + 1]):
+                node_stop -= 1
+            mapping = numpy.zeros(stop_fend - start_fend, dtype=numpy.int32) - 1
+            mapping[rev_mapping] = numpy.arange(num_valid, dtype=numpy.int32)
+            mids = self.fends['fends']['mid'][rev_mapping + start_fend]
+            # pull relevant data
+            start_index = self.data['cis_indices'][rev_mapping[node_start] + start_fend]
+            stop_index = self.data['cis_indices'][max(rev_mapping[node_stop - 1] + 1,
+                                                      rev_mapping[node_start]) + start_fend]
+            indices = self.data['cis_data'][start_index:stop_index, :]
+            indices = indices[:, :2]
+            indices -= start_fend
+            # find bin sums
+            _distance.find_binary_distance_bin_sums(mapping,
+                                                    rev_mapping,
+                                                    cutoffs,
+                                                    mids,
+                                                    indices,
+                                                    bin_counts,
+                                                    logdistance_sum,
+                                                    node_start,
+                                                    node_stop)
+        if self.rank == 0:
+            # exchange arrays
+            if not self.silent:
+                print >> sys.stderr, ('\r%s\rCalculating binary distance function...') % (' ' * 80),
+            for i in range(1, self.num_procs):
+                bin_counts += self.comm.recv(source=i, tag=11)
+                logdistance_sum += self.comm.recv(source=i, tag=11)
+            valid = numpy.where(bin_counts[:, 0] > 0)[0]
+            count_means = numpy.log(bin_counts[valid, 0].astype(numpy.float64) / bin_counts[valid, 1])
+            distance_means = logdistance_sum[valid] / bin_counts[valid, 1]
+            # find distance line parameters, cutoffs, slopes and intercepts
+            distance_parameters = numpy.zeros((valid.shape[0] - 1, 3), dtype=numpy.float32)
+            distance_parameters[:-1, 0] = distance_means[1:-1]
+            distance_parameters[-1, 0] = numpy.inf
+            distance_parameters[:, 1] = ((count_means[1:] - count_means[:-1]) /
+                                         (distance_means[1:] - distance_means[:-1]))
+            distance_parameters[:, 2] = (count_means[1:] - distance_parameters[:, 1] * distance_means[1:])
+            # distribute distance parameters to all nodes
+            for i in range(1, self.num_procs):
+                self.comm.send(distance_parameters, dest=i, tag=11)
+        else:
+            self.comm.send(bin_counts, dest=0, tag=11)
+            self.comm.send(logdistance_sum, dest=0, tag=11)
+            distance_parameters = self.comm.recv(source=0, tag=11)
         for chrom in chroms:
             chrint = self.chr2int[chrom]
             if self.rank == 0:
@@ -523,8 +636,6 @@ class HiC(object):
             mapping[rev_mapping] = numpy.arange(num_valid).astype(numpy.int32)
             fend_ranges = numpy.zeros((num_valid, 3), dtype=numpy.int64)
             mids = self.fends['fends']['mid'][rev_mapping + start_fend]
-            if maxdistance == 0 or maxdistance is None:
-                maxdistance = mids[-1] - mids[0]
             # find number of downstream interactions for each fend using distance limits
             _interactions.find_fend_ranges(rev_mapping,
                                            mids,
@@ -588,6 +699,21 @@ class HiC(object):
                                                  start,
                                                  stop,
                                                  start_fend)
+            # find priors based on binary distance depedence function
+            nonzero_means = numpy.zeros(nonzero_indices0.shape[0], dtype=numpy.float32)
+            _distance.find_remapped_distance_means(nonzero_indices0,
+                                                   nonzero_indices1,
+                                                   mids,
+                                                   nonzero_means,
+                                                   distance_parameters,
+                                                   0.0)
+            zero_means = numpy.zeros(zero_indices0.shape[0], dtype=numpy.float32)
+            _distance.find_remapped_distance_means(zero_indices0,
+                                                   zero_indices1,
+                                                   mids,
+                                                   zero_means,
+                                                   distance_parameters,
+                                                   0.0)
             # count total interactions per fend and sent to root node
             interactions = numpy.bincount(nonzero_indices0, minlength=rev_mapping.shape[0])
             interactions += numpy.bincount(nonzero_indices1, minlength=rev_mapping.shape[0])
@@ -600,23 +726,6 @@ class HiC(object):
             else:
                 self.comm.send(interactions, dest=0, tag=11)
                 temp = None
-            # calculate predicted distance means for all interactions
-            if not self.silent:
-                print >> sys.stderr, ("\r%s\rFinding distance means for chromosome %s...") % (' ' * 80, chrom),
-            nonzero_means = numpy.zeros(nonzero_indices0.shape[0], dtype=numpy.float32)
-            _distance.find_remapped_distance_means(nonzero_indices0,
-                                                   nonzero_indices1,
-                                                   mids,
-                                                   nonzero_means,
-                                                   self.distance_parameters,
-                                                   self.chromosome_means[chrint])
-            zero_means = numpy.zeros(zero_indices0.shape[0], dtype=numpy.float32)
-            _distance.find_remapped_distance_means(zero_indices0,
-                                                   zero_indices1,
-                                                   mids,
-                                                   zero_means,
-                                                   self.distance_parameters,
-                                                   self.chromosome_means[chrint])
             # if precorrecting using binning correction values, find correction matrices and adjust distance means
             if precorrect:
                 if not self.silent:
@@ -628,113 +737,155 @@ class HiC(object):
                                                              self.binning_corrections,
                                                              self.binning_correction_indices,
                                                              self.binning_num_bins,
-                                                             self.binning_fend_indices)
+                                                             self.binning_fend_indices[rev_mapping + start_fend, :])
                 _optimize.find_binning_correction_adjustment(zero_means,
                                                              zero_indices0,
                                                              zero_indices1,
                                                              self.binning_corrections,
                                                              self.binning_correction_indices,
                                                              self.binning_num_bins,
-                                                             self.binning_fend_indices)
-            del mids
-            # if requested, find fend means after adjustment by distance means as correction starting point
+                                                             self.binning_fend_indices[rev_mapping + start_fend, :])
+            # if precalculating, find approximate corrections
             if precalculate:
-                enrichments = counts / nonzero_means
-                count_sums = numpy.bincount(nonzero_indices0, weights=enrichments, minlength=rev_mapping.shape[0])
-                count_sums += numpy.bincount(nonzero_indices1, weights=enrichments, minlength=rev_mapping.shape[0])
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rPrecalculating corrections for chromosome %s...") %\
+                        (' ' * 80, chrom),
+                expected = numpy.bincount(nonzero_indices0, weights=nonzero_means, minlength=rev_mapping.shape[0]).astype(numpy.float64)
+                expected += numpy.bincount(nonzero_indices1, weights=nonzero_means, minlength=rev_mapping.shape[0])
+                expected += numpy.bincount(zero_indices0, weights=zero_means, minlength=rev_mapping.shape[0])
+                expected += numpy.bincount(zero_indices1, weights=zero_means, minlength=rev_mapping.shape[0])
+                observed = numpy.bincount(nonzero_indices0, minlength=rev_mapping.shape[0]).astype(numpy.int32)
+                observed += numpy.bincount(nonzero_indices1, minlength=rev_mapping.shape[0])
+                corrections = numpy.zeros(rev_mapping.shape[0], dtype=numpy.float32)
                 if self.rank == 0:
                     for i in range(1, self.num_procs):
-                        count_sums += self.comm.recv(source=i, tag=11)
-                    corrections = ((count_sums / interactions.astype(numpy.float32)) ** 0.5).astype(numpy.float32)
+                        self.comm.Recv(temp, source=i, tag=13)
+                        expected += temp
+                        observed += self.comm.recv(source=i, tag=11)
+                    corrections[:] = numpy.minimum(100.0, numpy.maximum(0.01, observed / expected))
                     for i in range(1, self.num_procs):
-                        self.comm.send(corrections, dest=i, tag=11)
+                        self.comm.Send(corrections, dest=i, tag=13)
                 else:
-                    self.comm.send(count_sums, dest=0, tag=11)
-                    corrections = self.comm.recv(source=0, tag=11)
+                    self.comm.Send(expected, dest=0, tag=13)
+                    self.comm.send(observed, dest=0, tag=11)
+                    self.comm.Recv(corrections, source=0, tag=13)
             else:
                 corrections = self.corrections[numpy.where(mapping >= 0)[0] + start_fend]
+            new_corrections = numpy.copy(corrections)
+            # calculate correction gradients
             gradients = numpy.zeros(corrections.shape[0], dtype=numpy.float64)
             cont = True
-            # calculate correction gradients
-            learningstep = learningrate / max(1, annealing_iterations)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
-            cost = 0.0
-            for phase in ['burnin', 'annealing']:
-                if phase == 'burnin':
-                    iterations = burnin_iterations
-                else:
-                    iterations = annealing_iterations
-                if iterations == 0:
-                    cont = False
-                else:
-                    cont = True
-                iteration = 1
-                while cont:
-                    gradients.fill(0.0)
-                    if display > 0 and iteration%display == 0:
-                        findcost = True
-                    else:
-                        findcost = False
-                    _optimize.calculate_prob_gradients(zero_indices0,
-                                                       zero_indices1,
-                                                       nonzero_indices0,
-                                                       nonzero_indices1,
-                                                       nonzero_means,
-                                                       zero_means,
-                                                       counts,
-                                                       corrections,
-                                                       gradients)
-                    if findcost:
-                        cost = _optimize.calculate_prob_cost(zero_indices0,
-                                                             zero_indices1,
-                                                             nonzero_indices0,
-                                                             nonzero_indices1,
-                                                             nonzero_means,
-                                                             zero_means,
-                                                             counts,
-                                                             corrections)
-                        if self.rank == 0:
-                            for i in range(1, self.num_procs):
-                                cost += self.comm.recv(source=i, tag=11)
-                        else:
-                            self.comm.send(cost, dest=0, tag=11)
+                print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),            
+            nonzero_means = numpy.log(nonzero_means)
+            log_corrections = numpy.log(corrections).astype(numpy.float32)
+            start_cost = _optimize.calculate_binom_cost(zero_indices0,
+                                                        zero_indices1,
+                                                        nonzero_indices0,
+                                                        nonzero_indices1,
+                                                        nonzero_means,
+                                                        zero_means,
+                                                        corrections,
+                                                        log_corrections)
+            if self.rank == 0:
+                for i in range(1, self.num_procs):
+                    start_cost += self.comm.recv(source=i, tag=11)
+            else:
+                self.comm.send(start_cost, dest=0, tag=11)
+            previous_cost = start_cost
+            change = 0.0
+            cont = True
+            iteration = 0
+            while cont:
+                gradients.fill(0.0)
+                inv_corrections = (1.0 / corrections).astype(numpy.float32)
+                _optimize.calculate_binom_gradients(zero_indices0,
+                                                   zero_indices1,
+                                                   nonzero_indices0,
+                                                   nonzero_indices1,
+                                                   zero_means,
+                                                   corrections,
+                                                   inv_corrections,
+                                                   gradients)
+                self._exchange_gradients(gradients, temp)
+                if self.rank == 0:
+                    gradients /= interactions
+                    gradient_norm = numpy.sum(gradients ** 2.0)
+                # find best step size
+                armijo = numpy.inf
+                t = 1.0
+                while armijo > 0.0:
                     # if using multiple cores, pass gradients to root
-                    self._exchange_gradients(gradients, temp)
-                    change = self._exchange_corrections(corrections,
-                                                         gradients,
-                                                         interactions,
-                                                         learningrate)
-                    if not self.silent and findcost > 0:
-                        print >> sys.stderr, ("\r%s phase:%s iteration:%i  cost:%f  change:%f %s") %\
-                                             ('Learning corrections...', phase, iteration, cost, change, ' ' * 20),
-                    if phase == 'annealing':
-                        learningrate -= learningstep
-                        if iteration >= annealing_iterations:
-                            cont = False
-                    elif iteration >= burnin_iterations and change <= minchange:
-                        cont = False
-                    iteration += 1
+                    if self.rank == 0:
+                        new_corrections = numpy.minimum(100.0, numpy.maximum(0.01,
+                                                        corrections - t * gradients)).astype(numpy.float32)
+                        for i in range(1, self.num_procs):
+                            self.comm.Send(new_corrections, dest=i, tag=13)
+                    else:
+                        self.comm.Recv(new_corrections, source=0, tag=13)
+                    log_corrections = numpy.log(new_corrections)
+                    cost = _optimize.calculate_binom_cost(zero_indices0,
+                                                          zero_indices1,
+                                                          nonzero_indices0,
+                                                          nonzero_indices1,
+                                                          nonzero_means,
+                                                          zero_means,
+                                                          new_corrections,
+                                                          log_corrections)
+                    if self.rank == 0:
+                        for i in range(1, self.num_procs):
+                            cost += self.comm.recv(source=i, tag=11)
+                        if numpy.isnan(cost):
+                            cost = numpy.inf
+                            armijo = numpy.inf
+                        else:
+                            armijo = cost - previous_cost + t * gradient_norm
+                        for i in range(1, self.num_procs):
+                            self.comm.send(armijo, dest=i, tag=11)
+                        if not self.silent:
+                            print >> sys.stderr, ("\r%s iteration:%i cost:%f change:%f armijo: %f %s") %\
+                                                 ('Learning corrections...', iteration, previous_cost,
+                                                  change, armijo, ' ' * 20),
+                    else:
+                        self.comm.send(cost, dest=0, tag=11)
+                        armijo = self.comm.recv(source=0, tag=11)
+                    t *= learningstep
+                previous_cost = cost
+                corrections = new_corrections
+                # find change
+                if self.rank == 0:
+                    change = numpy.amax(numpy.abs(gradients / corrections))
+                    for i in range(1, self.num_procs):
+                        self.comm.send(change, dest=i, tag=11)
+                else:
+                    change = self.comm.recv(source=0, tag=11)
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s iteration:%i cost:%f change:%f %s") %\
+                                         ('Learning corrections...', iteration, cost, change, ' ' * 40),
+                iteration += 1
+                if iteration >= max_iterations or change <= minchange:
+                    cont = False
             # calculate chromosome mean
             chrom_mean = numpy.sum(corrections)
             chrom_mean = chrom_mean ** 2.0 - numpy.sum(corrections ** 2.0)
             chrom_mean /= corrections.shape[0] * (corrections.shape[0] - 1)
             self.chromosome_means[self.chr2int[chrom]] += numpy.log(chrom_mean)
-            cost = _optimize.calculate_prob_cost(zero_indices0,
+            log_corrections = numpy.log(corrections).astype(numpy.float32)
+            cost = _optimize.calculate_binom_cost(zero_indices0,
                                                  zero_indices1,
                                                  nonzero_indices0,
                                                  nonzero_indices1,
                                                  nonzero_means,
                                                  zero_means,
-                                                 counts,
-                                                 corrections)
+                                                 corrections,
+                                                 log_corrections)
             self.corrections[rev_mapping + start_fend] = corrections / (chrom_mean ** 0.5)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     cost += self.comm.recv(source=i, tag=11)
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rLearning corrections... chromosome %s  Final Cost:%f  Done\n") % \
-                        (' ' * 80, chrom, cost),
+                    print >> sys.stderr, ("\r%s\rLearning corrections... chromosome %s  Initial Cost:%f  Final Cost:%f  Done\n") % \
+                        (' ' * 80, chrom, start_cost, cost),
             else:
                 self.comm.send(cost, dest=0, tag=11)
             del counts, nonzero_indices0, nonzero_indices1, nonzero_means, zero_indices0, zero_indices1, zero_means
@@ -743,7 +894,7 @@ class HiC(object):
         if precorrect:
             self.normalization = 'binning-probability'
         else:
-            self.normalization = 'probabilistic'
+            self.normalization = 'probability'
         self.history += "Success\n"
         return None
 
@@ -756,28 +907,12 @@ class HiC(object):
             self.comm.Send(gradients, dest=0, tag=13)
         return None
 
-    def _exchange_corrections(self, corrections, gradients, interactions, learningrate):
-        if self.rank == 0:
-            gradients /= interactions
-            old_corrections = numpy.copy(corrections)
-            corrections[:] = numpy.minimum(100.0, numpy.maximum(0.01,
-                                           corrections - learningrate * gradients))
-            change = numpy.amax(numpy.abs(corrections / old_corrections - 1.0))
-            for i in range(1, self.num_procs):
-                self.comm.Send(corrections, dest=i, tag=13)
-            for i in range(1, self.num_procs):
-                self.comm.send(change, dest=i, tag=11)
-        else:
-            self.comm.Recv(corrections, source=0, tag=13)
-            change = self.comm.recv(source=0, tag=11)
-        return change
-
     def find_express_fend_corrections(self, iterations=100, mindistance=0, maxdistance=0, remove_distance=True, 
-                                      usereads='cis', mininteractions=0, chroms=[], precorrect=False):
+                                      usereads='cis', mininteractions=0, minchange=0.0001, chroms=[], precorrect=False):
         """
         Using iterative matrix-balancing approximation, learn correction values for each valid fend. This function is MPI compatible.
 
-        :param iterations: The number of iterations to use for learning fend corrections.
+        :param iterations: The minimum number of iterations to use for learning fend corrections.
         :type iterations: int.
         :param mindistance: This is the minimum distance between fend midpoints needed to be included in the analysis. All possible and observed interactions with a distance shorter than this are ignored. If 'usereads' is set to 'trans', this value is ignored.
         :param maxdistance: The maximum inter-fend distance to be included in modeling. If 'usereads' is set to 'trans', this value is ignored.
@@ -789,11 +924,17 @@ class HiC(object):
         :type usereads: str.
         :param mininteractions: If a non-zero 'mindistance' is specified or only 'trans' interactions are used, fend filtering will be performed again to ensure that the data being used is sufficient for analyzed fends. This parameter may specify how many interactions are needed for valid fends. If not given, the value used for the last call to :func:`filter_fends` is used or, barring that, one.
         :type mininteractions: int.
+        :param minchange: The minimum mean change in fend correction parameter values needed to keep running past 'iterations' number of iterations.
+        :type minchange: float
         :param chroms: A list of chromosomes to calculate corrections for. If set as None, all chromosome corrections are found.
         :type chroms: list
         :param precorrect: Use binning-based corrections in expected value calculations, resulting in a chained normalization approach.
         :type precorrect: bool.
         :returns: None
+
+        :Attributes: * **corrections** (*ndarray*) - A numpy array of type float32 and length equal to the number of fends. All invalid fends have an associated correction value of zero.
+
+        The 'normalization' attribute is updated to 'express' or 'binning-express', depending on if the 'precorrect' option is selected. In addition, the 'chromosome_means' attribute is updated such that the mean correction (sum of all valid chromosomal correction value pairs) is adjusted to zero and the corresponding chromosome mean is adjusted the same amount but the opposite sign. 
         """
         self.history += "HiC.find_express_fend_corrections(iterations=%i, mindistance=%i, maxdistance=%s, remove_distance=%s, usereads='%s', mininteractions=%i, chroms=%s, precorrect=%s) - " % (iterations, mindistance, str(maxdistance), remove_distance, usereads, mininteractions, str(chroms), precorrect)
         if mininteractions is None:
@@ -1023,7 +1164,11 @@ class HiC(object):
         if self.rank == 0:
             temp = numpy.zeros(filt.shape[0], dtype=numpy.float64)
         corrections = numpy.copy(self.corrections)
-        for iteration in range(iterations):
+        cont = True
+        iteration = 0
+        change = numpy.zeros(1, dtype=numpy.float64)
+        while cont:
+            iteration += 1
             _optimize.find_fend_means(distance_means,
                                       trans_means,
                                       fend_means,
@@ -1036,21 +1181,23 @@ class HiC(object):
                 for i in range(1, self.num_procs):
                     self.comm.Recv(temp, source=i, tag=13)
                     fend_means += temp
-                #for i in range(filt.shape[0]):
-                #    if filt[i] == 1:
-                #        print interactions[i], fend_means[i], corrections[i]
                 cost = _optimize.update_express_corrections(filt,
                                                             interactions,
                                                             fend_means,
-                                                            corrections)
+                                                            corrections,
+                                                            change)
+                if iteration >= iterations and change[0] < minchange:
+                    cont = False
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rFinding fend corrections  Iteration: %i  Cost: %f") % (' ' * 80,
-                                          iteration, cost),
+                    print >> sys.stderr, ("\r%s\rFinding fend corrections  Iteration: %i  Cost: %f  Change: %f") % (' ' * 80,
+                                          iteration, cost, change),
                 for i in range(1, self.num_procs):
                     self.comm.Send(corrections, dest=i, tag=13)
+                    self.comm.send(cont, dest=i, tag=11)
             else:
                 self.comm.Send(fend_means, dest=0, tag=13)
                 self.comm.Recv(corrections, source=0, tag=13)
+                cont = self.comm.recv(source=0, tag=11)
         # calculate chromosome mean
         if self.chromosome_means is None:
             self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
@@ -1093,7 +1240,7 @@ class HiC(object):
         :type model: list
         :param num_bins: A list of the number of approximately equal-sized bins two divide model components into.
         :type num_bins: list
-        :para parameters: A list of types, one for each model parameter. Types can be either 'even' or 'fixed', indicating whether each parameter bin should contain approximately even numbers of interactions or be of fixed width spanning 1 / Nth of the range of the parameter's values, respectively. Parameter types can also have the suffix '-const' to indicate that the parameter should not be optimized.
+        :param parameters: A list of types, one for each model parameter. Types can be either 'even' or 'fixed', indicating whether each parameter bin should contain approximately even numbers of interactions or be of fixed width spanning 1 / Nth of the range of the parameter's values, respectively. Parameter types can also have the suffix '-const' to indicate that the parameter should not be optimized.
         :type parameters: list
         :param learning_threshold: The minimum change in log-likelihood needed to continue iterative learning process.
         :type learning_threshold: float
@@ -1102,6 +1249,14 @@ class HiC(object):
         :param usereads: Specifies which set of interactions to use, 'cis', 'trans', and 'all'.
         :type usereads: str.
         :returns: None
+ 
+        :Attributes: * **model_parameters** (*ndarray*) - A numpy array of strings containing model parameter names. If distance was included in the 'model' option, it is not included in this array since it is only for learning values, not for subsequent corretion.
+                     * **binning_num_bins** (*ndarray*) - A numpy array of type int32 containing the number of bins for each non-distance model parameter.
+                     * **binning corrections** (*ndarray*) - A numpy array of type float32 and length equal to the sum of binning_num_bins * (binning_num_bins - 1) / 2. This array contains a 1D stack of correction values, ordered according to the parameter order in the 'model_parameters' attribute.
+                     * **binning_correction_indices** (*ndarray*) - A numpy array of type int32 and length equal to the number of non-distance model parameters plus one. This array contains the first position in 'binning_corrections' for the first bin of the model parameter in the corresponding position in the 'model_parameters' array. The last position in the array contains the total number of binning correction values.
+                     * **binning_fend_indices** (*ndarray*) - A numpy array of type int32 and size N x M where M is the number of non-distance model parameters and N is the number of fends. This array contains the binning index for each parameter for each fend.
+        
+        The 'normalization' attribute is updated to 'binning'.
         """
         self.history += "HiC.find_binning_fend_corrections(max_iterations=%i, mindistance=%i, maxdistance=%s, usereads='%s', chroms=%s num_bins=%s, parameters=%s, model=%s, learning_threshold=%f) - " % (max_iterations, mindistance, str(maxdistance), usereads, str(chroms), num_bins, parameters, model, learning_threshold)
         for parameter in model:
@@ -1348,8 +1503,8 @@ class HiC(object):
                                  (correction_indices[i + 1] - correction_indices[i]))
             temp0 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 0], minlength=num_bins[i])
             temp1 = numpy.bincount(all_indices[:, i], weights=bin_counts[:, 1], minlength=num_bins[i])
-            where = numpy.where(temp1 > 0)[0]
-            all_corrections[where + correction_indices[i]] = temp0[where] / temp1[where].astype(numpy.float64) / prior
+            all_corrections[correction_indices[i]:correction_indices[i + 1]] = (
+                   numpy.maximum(1, temp0) / numpy.maximum(1, temp1).astype(numpy.float64) / prior)
         if distance_bins > 0:
             distance_indices = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / distance_div) %
                                 distance_corrections.shape[0])
@@ -1360,7 +1515,6 @@ class HiC(object):
                 minlength=distance_corrections.shape[0])) * prior)).astype(numpy.float64)
         else:
             distance_indices = None
-        bin_counts[:, 1] -= bin_counts[:, 0]
 
         def find_ll(indices, corrections, correction_indices, distance_c, distance_i, counts, prior, min_p):
             prod = numpy.ones(counts.shape[0], dtype=numpy.float64)
@@ -1402,7 +1556,6 @@ class HiC(object):
         iteration = 0
         delta = numpy.inf
         pgtol = 1e-8
-
 
         old_settings = numpy.seterr(invalid='ignore', divide='ignore')
         while iteration < max_iterations and delta >= learning_threshold:
@@ -1471,6 +1624,8 @@ class HiC(object):
         Calculate the mean signals across all valid fend-pair trans interactions for each chromosome pair.
 
         :returns: None
+
+        :Attributes: * **trans_mean** (*float*) - A float corresponding to the mean signal of inter-chromosome interactions.
         """
         self.history += "HiC.find_trans_mean() - "
         if not self.silent:

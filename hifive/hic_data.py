@@ -17,7 +17,7 @@ class HiCData(object):
 
     """This class handles interaction count data for HiC experiments.
 
-    This class stores mapped paired-end reads, indexing them by fragment-end (fend) number, in an h5dict.
+    This class stores mapped paired-end reads, indexing them by fend-end (fend) number, in an h5dict.
 
     .. note::
       This class is also available as hifive.HiCData
@@ -31,6 +31,10 @@ class HiCData(object):
     :param silent: Indicates whether to print information about function execution for this object.
     :type silent: bool.
     :returns: :class:`HiCData` class object.
+
+    :Attributes: * **file** (*str.*) A string containing the name of the file passed during object creation for saving the object to.
+                 * **silent** (*bool.*) - A boolean indicating whether to suppress all of the output messages.
+                 * **history** (*str.*) - A string containing all of the commands executed on this object and their outcomes.
     """
 
     def __init__(self, filename, mode='r', silent=False):
@@ -122,6 +126,16 @@ class HiCData(object):
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
         :returns: None
+
+        :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
+                     * **cis_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero intra-chromosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend, the second column contains the idnex of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
+                     * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-chroosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :].
+                     * **frags** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
+                     * **maxinsert** (*int.*) - An interger denoting the maximum included distance sum between both read ends and their downstream RE site.
+
+        When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
         self.history += "HiCData.load_data_from_raw(fendfilename='%s', filelist=%s, maxinsert=%i) - " % (fendfilename, str(filelist), maxinsert)
         # determine if fend file exists and if so, load it
@@ -195,6 +209,16 @@ class HiCData(object):
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
         :returns: None
+
+        :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
+                     * **cis_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero intra-chromosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend, the second column contains the idnex of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
+                     * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-chroosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :].
+                     * **frags** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
+                     * **maxinsert** (*int.*) - An interger denoting the maximum included distance sum between both read ends and their downstream RE site.
+
+        When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
         self.history += "HiCData.load_data_from_bam(fendfilename='%s', filelist=%s, maxinsert=%i) - " % (fendfilename, str(filelist), maxinsert)
         if 'pysam' not in sys.modules.keys():
@@ -325,6 +349,16 @@ class HiCData(object):
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
         :returns: None
+
+        :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
+                     * **cis_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero intra-chromosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend, the second column contains the idnex of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
+                     * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-chroosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :].
+                     * **frags** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
+                     * **maxinsert** (*int.*) - An interger denoting the maximum included distance sum between both read ends and their downstream RE site.
+
+        When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
         self.history += "HiCData.load_data_from_mat(fendfilename='%s', filename='%s', maxinsert=%i) - " % (fendfilename, filename, maxinsert)
         # determine if fend file exists and if so, load it
@@ -423,7 +457,7 @@ class HiCData(object):
         return None
 
     def _clean_fend_pairs(self, fend_pairs):
-        # remove fend pairs from same fragment or opposite strand adjacents
+        # remove fend pairs from same fend or opposite strand adjacents
         for i in range(self.fends['chromosomes'].shape[0]):
             for j in range(self.fends['chr_indices'][i], self.fends['chr_indices'][i + 1] - 2, 2):
                 # same fend
@@ -433,11 +467,11 @@ class HiCData(object):
                 name = (j + 1, j + 1)
                 if name in fend_pairs:
                     del fend_pairs[name]
-                # same fragment
+                # same fend
                 name = (j, j + 1)
                 if name in fend_pairs:
                     del fend_pairs[name]
-                # adjacent fragments, opposite strands
+                # adjacent fends, opposite strands
                 name = (j, j + 3)
                 if name in fend_pairs:
                     del fend_pairs[name]
@@ -452,7 +486,7 @@ class HiCData(object):
             name = (j + 1, j + 1)
             if name in fend_pairs:
                 del fend_pairs[name]
-            # same fragment
+            # same fend
             name = (j, j + 1)
             if name in fend_pairs:
                 del fend_pairs[name]

@@ -70,11 +70,10 @@ def calculate_gradients(
         np.ndarray[DTYPE_t, ndim=1] gradients not None,
         double sigma):
     cdef long long int frag1, frag2, h, i
-    cdef double value0, value, cost, expected, z_p, z_n, pdf_p, pdf_n, cdf_p, cdf_n
+    cdef double value0, value, expected, z_p, z_n, pdf_p, pdf_n, cdf_p, cdf_n
     cdef long long int num_data = data.shape[0]
     cdef double sigma_2 = pow(sigma, 2.0)
     with nogil:
-        cost = 0.0
         for i in range(num_data):
             frag1 = data[i, 0]
             frag2 = data[i, 1]
@@ -90,13 +89,43 @@ def calculate_gradients(
                 value = (pdf_p - pdf_n) / value0
                 gradients[frag1] += value
                 gradients[frag2] += value
-                cost -= log(cdf_p - cdf_n)
             else:
                 value = (expected - log_counts[i]) / sigma_2
                 gradients[frag1] += value
                 gradients[frag2] += value
-                value0 = pow(log_counts[i] - expected, 2.0) / sigma_2
-                cost += value0 * 0.5
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_prob_cost(
+        np.ndarray[DTYPE_int_t, ndim=2] data not None,
+        np.ndarray[DTYPE_t, ndim=1] log_counts_n not None,
+        np.ndarray[DTYPE_t, ndim=1] log_counts not None,
+        np.ndarray[DTYPE_t, ndim=1] log_counts_p not None,
+        np.ndarray[DTYPE_t, ndim=1] distance_signal not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections not None,
+        double sigma):
+    cdef long long int frag1, frag2, i
+    cdef double value, cost, expected, z_p, z_n, cdf_p, cdf_n
+    cdef long long int num_data = data.shape[0]
+    cdef double sigma_2 = pow(sigma, 2.0)
+    with nogil:
+        cost = 0.0
+        for i in range(num_data):
+            frag1 = data[i, 0]
+            frag2 = data[i, 1]
+            expected = max(0.01, corrections[frag1] + corrections[frag2] + distance_signal[i])
+            z_p = (log_counts_p[i] - expected) / sigma
+            cdf_p = stdnorm_cdf(z_p)
+            z_n = (log_counts_n[i] - expected) / sigma
+            cdf_n = stdnorm_cdf(z_n)
+            value = (cdf_p - cdf_n) * sigma
+            if value != 0:
+                cost -= log(cdf_p - cdf_n)
+            else:
+                cost += 0.5 * pow(log_counts[i] - expected, 2.0) / sigma_2
     return cost
 
 
@@ -106,8 +135,8 @@ def calculate_gradients(
 def update_corrections(
     np.ndarray[DTYPE_int_t, ndim=1] filter not None,
     np.ndarray[DTYPE_t, ndim=1] corrections not None,
+    np.ndarray[DTYPE_t, ndim=1] new_corrections not None,
     np.ndarray[DTYPE_t, ndim=1] gradients not None,
-    np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
     double learning_rate ):
     cdef long long int i
     cdef long long int num_frags = filter.shape[0]
@@ -115,7 +144,7 @@ def update_corrections(
         for i in range(num_frags):
             if filter[i] == 0:
                 continue
-            corrections[i] = max(-10.0, min(10.0, corrections[i] - learning_rate * gradients[i] / interactions[i]))
+            new_corrections[i] = max(-10.0, min(10.0, corrections[i] - learning_rate * gradients[i]))
     return None
 
 

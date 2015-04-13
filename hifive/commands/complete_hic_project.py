@@ -81,14 +81,13 @@ def run(args):
         precorrect = True
     if args.algorithm in ['probability', 'binning-probability']:
         hic.find_probability_fend_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
-                                              minchange=args.change, burnin_iterations=args.burnin,
-                                              annealing_iterations=args.anneal, learningrate=args.rate,
-                                              display=args.display, chroms=chroms,
+                                              minchange=args.change, max_iterations=args.probiter,
+                                              learningstep=args.step, chroms=chroms,
                                               precalculate=args.precalc, precorrect=precorrect)
     elif args.algorithm in ['express', 'binning-express']:
         hic.find_express_fend_corrections(iterations=args.expiter, mindistance=args.mindist,
                                           maxdistance=args.maxdist, remove_distance=args.nodist,
                                           usereads=args.expreads, mininteractions=args.minint,
-                                          chroms=chroms, precorrect=precorrect)
+                                          chroms=chroms, minchange=args.change, precorrect=precorrect)
     if rank == 0:
         hic.save()

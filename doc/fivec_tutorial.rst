@@ -117,18 +117,18 @@ Learn 5C normalization parameters
 Using the probability algorithm
 +++++++++++++++++++++++++++++++
 
-When using the probability algorithm for learning fragment corrections, :mod:`HiFive` uses two rounds of gradient descent, one with constant learning rate (the 'burn-in' phase) and the second with a linearly decreasing learning rate (the 'annealing' phase). :mod:`HiFive` limits which interactions it uses to learn the model parameters to those that fall within a user-specified maximum interaction distance.
+In order to learn the correction model for 5C data using the probability algorithm, :mod:`HiFive` uses a bactracking line gradient descent. In addition, :mod:`HiFive` limits which interactions it uses to learn the model parameters to those that fall within a user-specified maximum interaction distance.
 
 To learn 5C corrections using the probability approach, you can use the following command::
 
   fivec.find_probability_fragment_corrections(mindistance=50000,
                                               maxdistance=0,
-                                              learningrate=0.01,
-                                              burnin_iterations=5000,
-                                              annealing_iterations=10000,
+                                              learningstep=0.5,
+                                              max_iterations=1000,
+                                              minchange=0.005,
                                               regions=[0, 1, 2])
 
-In the above call, 'mindistance' is set to 50 kb, indicating that interactions shorter than that distance are no useed in calculating correction values. maxdistance' is set to zero, indicating that there is no upper limit on interaction distance to be used for learning model parameters. The 'learningrate' specifies what percentage of the gradient to apply towards value updates. Finally, the 'regions' parameter specifies that we only want to learn corrections for regions 0 - 3. Not specifying a value for this parameter would default to including all regions.
+In the above call, 'mindistance' is set to 50 kb, indicating that interactions shorter than that distance are no useed in calculating correction values. maxdistance' is set to zero, indicating that there is no upper limit on interaction distance to be used for learning model parameters. TThe 'learningstep' specifies how quickly to scale down the step value if the current try doesn't meet the arjimo learning criterion. The 'max_iterations' specifies a limit for how long to run the learning process for. 'minchange' is the stopping threshold such that if all absolute gradient values are below this the learning terminates early. Finally, the 'regions' parameter specifies that we only want to learn corrections for regions 0 - 3. Not specifying a value for this parameter would default to including all regions.
 
 
 Using the express algorithm
