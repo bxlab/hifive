@@ -45,7 +45,7 @@ def main():
 
     metadata = dict(
         name = "hifive",
-        version = VERSION,
+        version = FULLVERSION,
         description = 'Python library for normalizing and analyzing HiC and 5C data',
         zip_safe = False,
         include_package_data = True,
