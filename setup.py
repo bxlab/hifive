@@ -61,7 +61,7 @@ def main():
         author = "Michael Sauria",
         author_email = "mike.sauria@jhu.edu",
         url='https://github.com/bxlab/hifive',
-        download_url='https://github.com/bxlab/hifive/tarball/%s' % VERSION)
+        download_url='https://github.com/bxlab/hifive/tarball/%s' % FULLVERSION)
     setup(**metadata)
 
 # ---- Extension Modules ----------------------------------------------------
