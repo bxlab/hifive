@@ -38,7 +38,9 @@ def run(args):
             chroms = []
     hic = HiC(args.project, 'r', silent=args.silent)
     hic.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans,
-                      datatype=args.datatype, chroms=chroms)
+                      datatype=args.datatype, chroms=chroms, dynamically_binned=args.dynamic,
+                      expansion_binsize=args.expbinsize, minobservations=args.minobs,
+                      searchdistance=args.search, removefailed=args.remove)
     if rank > 0:
         sys.exit(0)
     if not args.image is None:

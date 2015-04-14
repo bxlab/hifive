@@ -21,6 +21,7 @@ The easiest way to get :mod:`HiFive` is using pip::
 :mod:`HiFive` can also be obtained from `HiFive <https://github.com/bxlab/hifive/>`_ using the following command::
 
   > git clone https://github.com/bxlab/hifive.git
+
 or alternatively, download a snapshot of the repository using the following commands::
 
   > wget https://github.com/bxlab/hifive/tarball/1.0

@@ -33,7 +33,9 @@ def run(args):
             return 1
     fivec = FiveC(args.project, 'r', silent=args.silent)
     fivec.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans, arraytype=args.arraytype,
-                        datatype=args.datatype, regions=regions)
+                        datatype=args.datatype, regions=regions, dynamically_binned=args.dynamic,
+                        expansion_binsize=args.expbinsize, minobservations=args.minobs, searchdistance=args.search,
+                        removefailed=args.remove)
     if not args.image is None:
         kwargs = {}
         for arg in args.keywords:

@@ -144,15 +144,13 @@ probability, express, binning, probability-binning, express-binning, binning-pro
 5c-heatmap
 ++++++++++
 
-This command is MPI-compatible.
-
 ::
 
-  > [mpirun -np NP] hifive 5c-heatmap [-h] [-b BINSIZE] [-t]
-                        [-r REGIONS]
-                        [-d {raw,fragment,distance,enrichment,expected}]
-                        [-a {compact,full}] [-i IMAGE] [-p] [-l] [-n]
-                        [-k KEYWORDS] [-q] project output
+  > hifive 5c-heatmap [-h] [-b BINSIZE] [-t] [-r REGIONS]
+        [-d {raw,fragment,distance,enrichment,expected}]
+        [-a {compact,full}] [-y] [-x EXPBINSIZE] [-f MINOBS]
+        [-g SEARCH] [-v] [-i IMAGE] [-p] [-l] [-n]
+        [-k KEYWORDS] [-q] project output
 
 Arguments:
 
@@ -161,7 +159,7 @@ Arguments:
 
 Options:
 
--h/--help, -b/--binsize, -t/--trans, -r/--regions, -d/--datatype, -a/arraytype, -i/--image, -p/--pdf, -l/--legend, -n/--names, -k/--keyword, -q/--quiet
+-h/--help, -b/--binsize, -t/--trans, -r/--regions, -d/--datatype, -a/arraytype, -y/--dynamically-bin, -x/--expansion-binsize, -f/--minobservations, -g/--search-distance, -v/--remove-failed, -i/--image, -p/--pdf, -l/--legend, -n/--names, -k/--keyword, -q/--quiet
 
 .. _5c_interval:
 
@@ -170,9 +168,11 @@ Options:
 
 ::
 
-  > hifive 5c-interval [-h] -c REGION [-s START] [-e STOP] [-b BINSIZE]
-        [-d {raw,fragment,distance,enrichment,expected}] [-i IMAGE] [-p]
-        [-r] [-t] [-l] [-k KEYWORDS] [-q] project output
+  > hifive 5c-interval [-h] -c REGION [-s START] [-e STOP] [--region2 REGION2]
+        [--start2 START2] [--stop2 STOP2] [-b BINSIZE]
+        [-d {raw,fragment,distance,enrichment,expected}] [-y] [-x EXPBINSIZE]
+        [-f MINOBS] [-g SEARCH] [-v] [-i IMAGE] [-p] [-r] [-t] [-l]
+        [-k KEYWORDS] [-q] project output
 
 Arguments:
 
@@ -181,7 +181,7 @@ Arguments:
 
 Options:
 
--h/--help, -c/--region, -s/--start, -e/--stop, -b/--binsize, -d/--datatype, -i/--image, -p/--pdf, -r/--rotate, -t/--ticks, -l/--legend, -k/--keyword, -q/--quiet
+-h/--help, -c/--region, -s/--start, -e/--stop, -b/--binsize, -d/--datatype, -y/--dynamically-bin, -x/--expansion-binsize, -f/--minobservations, -g/--search-distance, -v/--remove-failed, -i/--image, -p/--pdf, -r/--rotate, -t/--ticks, -l/--legend, -k/--keyword, -q/--quiet
 
 .. _5c_combine_replicates:
 
@@ -268,19 +268,28 @@ Universal Options:
 
 5C Heatmap Options:
 
--b, --binsize int    The width of bins (in basepairs) to partition data into. A value of zero indicates that each bin is to correspond with a single fragment. [10000]
--t, --trans          Calculate and include trans interactions in heatmaps.
--r, --regions str    A comma-separated list if region numbers to include in the heatmaps. [all regions]
--d, --datatype str   Type of data to produce for the heatmaps. Valid options are raw, fragment (only fragment corrections applied), distance (only distance-dependence signal removed), enrichment (both fragment correction and distance-dependence signal removed), and expected (only predicted signal). [fragment]
--a, --arraytype str  If data is unbinned, this option specifies whether the heatmaps should be full or compact. Full means that there is a row and column for every fragment, while compact means that rows are forward fragments only and columns are reverse fragments only. [full]
+-b, --binsize int            The width of bins (in basepairs) to partition data into. A value of zero indicates that each bin is to correspond with a single fragment. [10000]
+-t, --trans                  Calculate and include trans interactions in heatmaps.
+-r, --regions str            A comma-separated list if region numbers to include in the heatmaps. [all regions]
+-d, --datatype str           Type of data to produce for the heatmaps. Valid options are raw, fragment (only fragment corrections applied), distance (only distance-dependence signal removed), enrichment (both fragment correction and distance-dependence signal removed), and expected (only predicted signal). [fragment]
+-a, --arraytype str          If data is unbinned, this option specifies whether the heatmaps should be full or compact. Full means that there is a row and column for every fragment, while compact means that rows are forward fragments only and columns are reverse fragments only. [full]
+-y, --dynamically-bin        Dynamically bin heatmap.
+-x, --expansion-binsize int  The size of bins, in base pairs, to group data into for expanding under-populated bins. [10000]
+-f, --minobservations int    The minimum number of observed reads in a bin for it to be considered valid. [20]
+-g, --search-distance int    The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [0]
+-v, --remove-failed          If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.
 
 5C Interval Options:
 
--c, --region int    The index of the region to pull data from.
--b, --binsize int   The width of bins (in basepairs) to partition data into. A value of zero indicates that each bin is to correspond with a single fragment.
--s, --start int     The first coordinate of the region to pull data from. None indicates the beginning of the region. [None]
--e, --stop int      The last coordinate + 1 of the region to pull data from. None indicates the end of the region. [None]
--d, --datatype str  Type of data to produce for the heatmaps. Valid options are raw, fragment (only fragment corrections applied), distance (only distance-dependence signal removed), enrichment (both fragment correction and distance-dependence signal removed), and expected (only predicted signal). [fragment]
+-c, --region int             The index of the region to pull data from.
+-b, --binsize int            The width of bins (in basepairs) to partition data into. A value of zero indicates that each bin is to correspond with a single fragment.
+-s, --start int              The first coordinate of the region to pull data from. None indicates the beginning of the region. [None]
+-e, --stop int               The last coordinate + 1 of the region to pull data from. None indicates the end of the region. [None]
+-y, --dynamically-bin        Dynamically bin heatmap.
+-x, --expansion-binsize int  The size of bins, in base pairs, to group data into for expanding under-populated bins. [10000]
+-f, --minobservations int    The minimum number of observed reads in a bin for it to be considered valid. [20]
+-g, --search-distance int    The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [0]
+-v, --remove-failed          If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.
 
 5C Plotting Options:
 
@@ -423,8 +432,9 @@ This command is MPI-compatible.
   > [mpirun -np NP] hifive hic-heatmap [-h] [-b BINSIZE] [-t]
                         [-c CHROMS]
                         [-d {raw,fend,distance,enrichment,expected}]
-                        [-i IMAGE] [-p] [-l] [-n] [-k KEYWORDS] [-q]
-                        project output
+                        [-y] [-x EXPBINSIZE] [-f MINOBS] [-a SEARCH]
+                        [-v]  [-i IMAGE] [-p] [-l] [-n] [-k KEYWORDS]
+                        [-q] project output
 
 Arguments:
 
@@ -433,7 +443,7 @@ Arguments:
 
 Options:
 
--h/--help, -b/--binsize, -t/--trans, -c/--chromosomes, -d/--datatype, -i/--image, -p/--pdf, -l/--legend, -n/--names, -k/--keyword, -q/--quiet
+-h/--help, -b/--binsize, -t/--trans, -c/--chromosomes, -d/--datatype, -y/--dynamically-bin, -x/--expansion-binsize, -f/--minobservations, -a/--search-distance, -v/--remove-failed, -i/--image, -p/--pdf, -l/--legend, -n/--names, -k/--keyword, -q/--quiet
 
 .. _hic_interval:
 
@@ -443,8 +453,9 @@ hic-interval
 ::
 
   > hifive hic-interval [-h] -c CHROM [-s START] [-e STOP] [-b BINSIZE]
-        [-m MAXDIST] [-d {raw,fend,distance,enrichment,expected}]
-        [-i IMAGE] [-p] [-r] [-t] [-l] [-k KEYWORDS] [-q] project output
+        [-m MAXDIST] [-d {raw,fend,distance,enrichment,expected}] [-y]
+        [-x EXPBINSIZE] [-f MINOBS] [-a SEARCH] [-v] [-i IMAGE] [-p]
+        [-r] [-t] [-l] [-k KEYWORDS] [-q] project output
 
 Arguments:
 
@@ -453,7 +464,7 @@ Arguments:
 
 Options:
 
--h/--help, -c/--chromosome, -s/--start, -e/--stop, -b/--binsize, -m/--max-distance, -d/--datatype, -i/--image, -p/--pdf, -r/--rotate, -t/--ticks, -l/--legend, -k/--keyword, -q/--quiet
+-h/--help, -c/--chromosome, -s/--start, -e/--stop, -b/--binsize, -m/--max-distance, -d/--datatype, -y/--dynamically-bin, -x/--expansion-binsize, -f/--minobservations, -a/--search-distance, -v/--remove-failed, -i/--image, -p/--pdf, -r/--rotate, -t/--ticks, -l/--legend, -k/--keyword, -q/--quiet
 
 .. _hic_combine_replicates:
 
@@ -551,6 +562,11 @@ HiC Heatmap Options:
 -t, --trans              Calculate and include trans interactions in heatmaps.
 -c, --chromosomes str    A comma-separated list if chromosome names to include in the heatmaps. [all chromosomes]
 -d, --datatype str       Type of data to produce for the heatmaps. Valid options are raw, fend (only fend corrections applied), distance (only distance-dependence signal removed), enrichment (both fend correction and distance-dependence signal removed), and expected (only predicted signal). [fend]
+-y, --dynamically-bin        Dynamically bin heatmap.
+-x, --expansion-binsize int  The size of bins, in base pairs, to group data into for expanding under-populated bins. [10000]
+-f, --minobservations int    The minimum number of observed reads in a bin for it to be considered valid. [20]
+-a, --search-distance int    The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [0]
+-v, --remove-failed          If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.
 
 HiC Interval Options:
 
@@ -560,6 +576,11 @@ HiC Interval Options:
 -e, --stop int          The last coordinate + 1 of the chromosome to pull data from. None indicates the end of the chromosome. [None]
 -m, --max-distance int  The largest interaction distance to include in the interval file. A value of zero indicates no upper limit. [0]
 -d, --datatype str      Type of data to produce for the heatmaps. Valid options are raw, fend (only fend corrections applied), distance (only distance-dependence signal removed), enrichment (both fend correction and distance-dependence signal removed), and expected (only predicted signal). [fend]
+-y, --dynamically-bin        Dynamically bin heatmap.
+-x, --expansion-binsize int  The size of bins, in base pairs, to group data into for expanding under-populated bins. [10000]
+-f, --minobservations int    The minimum number of observed reads in a bin for it to be considered valid. [20]
+-a, --search-distance int    The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [0]
+-v, --remove-failed          If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.
 
 HiC Plotting Options:
 

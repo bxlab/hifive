@@ -1188,7 +1188,7 @@ class HiC(object):
                                                             fend_means,
                                                             corrections,
                                                             change)
-                if iteration >= iterations and change[0] < minchange:
+                if iteration >= iterations or change[0] < minchange:
                     cont = False
                 if not self.silent:
                     print >> sys.stderr, ("\r%s\rFinding fend corrections  Iteration: %i  Cost: %f  Change: %f") % (' ' * 80,
@@ -1918,7 +1918,9 @@ class HiC(object):
             img.save(image_file, format='png')
         return data
 
-    def write_heatmap(self, filename, binsize, includetrans=True, datatype='enrichment', chroms=[]):
+    def write_heatmap(self, filename, binsize, includetrans=True, datatype='enrichment', chroms=[], 
+                      dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
+                      removefailed=False):
         """
         Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
@@ -1932,10 +1934,30 @@ class HiC(object):
         :type datatype: str.
         :param chroms: A list of chromosome names indicating which chromosomes should be included. If left empty, all chromosomes are included. Optional.
         :type chroms: list
+        :param dynamically_binned: If 'True', return dynamically binned data.
+        :type dynamically_binned: bool.
+        :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+        :type minobservations: int.
+        :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+        :type searchdistance: int.
+        :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+        :type expansion_binsize: int.
+        :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+        :type removefailed: bool.
         :returns: None
+
+        The following attributes are created within the hdf5 dictionary file. Arrays are accessible as datasets while the resolution is held as an attribute.
+
+        :Attributes: * **resolution** (*int.*) - The bin size that data are accumulated in.
+                     * **chromosomes** (*ndarray*) - A numpy array of strings listing all of the chromosomes included in the heatmaps.
+                     * **N.positions** (*ndarray*) - A series of numpy arrays of type int32, one for each chromosome where N is the chromosome name, containing one row for each bin and four columns denoting the start and stop coordinates and first fend and last fend plus one for each bin.
+                     * **N.counts** (*ndarray*) - A series of numpy arrays of type int32, one for each chromosome where N is the chromosome name, containing the observed counts for valid fend combinations. Arrays are in an upper-triangle format such that they have N * (N - 1) / 2 entries where N is the number of fends or bins in the chromosome.
+                     * **N.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each chromosome where N is the chromosome name, containing the expected counts for valid fend combinations. Arrays are in an upper-triangle format such that they have N * (N - 1) / 2 entries where N is the number of fends in the chromosome.
+                     * **N_by_M.counts** (*ndarray*) - A series of numpy arrays of type int32, one for each chromosome pair N and M if trans data are included, containing the observed counts for valid fend combinations. The chromosome name order specifies which axis corresponds to which chromosome.
+                     * **N_by_M.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each chromosome pair N and M if trans data are included, containing the expected counts for valid fend combinations. The chromosome name order specifies which axis corresponds to which chromosome.
         """
         history = self.history
-        history += "HiC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', chroms=%s)" % (filename, binsize, includetrans, datatype, str(chroms))
+        history += "HiC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', chroms=%s, dynamically_binned=%s, minobservations=%i, searchdistance=%i, expansion_binsize=%i, removefailed=%s)" % (filename, binsize, includetrans, datatype, str(chroms), dynamically_binned, minobservations, searchdistance, expansion_binsize, removefailed)
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -1943,6 +1965,9 @@ class HiC(object):
                 chroms == ''):
             chroms = self.chr2int.keys()
             chroms.sort()
-        hic_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
-                                       datatype=datatype, chroms=chroms, silent=self.silent, history=history)
+        hic_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans, datatype=datatype,
+                                       chroms=chroms, dynamically_binned=dynamically_binned,
+                                       minobservations=minobservations, searchdistance=searchdistance,
+                                       expansion_binsize=expansion_binsize, removefailed=removefailed,
+                                       silent=self.silent, history=history)
         return None

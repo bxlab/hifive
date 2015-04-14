@@ -18,6 +18,7 @@ Contents:
    filtering_data.rst
    distance_dependence.rst
    normalization.rst
+   binning.rst
    hifive.rst
    fivec_tutorial.rst
    hic_tutorial.rst

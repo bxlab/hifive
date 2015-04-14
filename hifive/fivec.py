@@ -1006,7 +1006,7 @@ class FiveC(object):
         :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
         """
         # check that all values are acceptable
-        if datatype not in ['raw', 'fend', 'distance', 'enrichment', 'expected']:
+        if datatype not in ['raw', 'fragment', 'distance', 'enrichment', 'expected']:
             if not self.silent:
                 print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
             return None
@@ -1026,7 +1026,7 @@ class FiveC(object):
             expansion, exp_mapping = fivec_binning.find_cis_signal(self, region, binsize=expansion_binsize,
                                                                    start=start, stop=stop, startfrag=startfrag,
                                                                    stopfrag=stopfrag, datatype=datatype,
-                                                                   arraytype=arraytype, skipfiltered=True,
+                                                                   arraytype='full', skipfiltered=True,
                                                                    returnmapping=True, silent=self.silent)
             binned, mapping = fivec_binning.find_cis_signal(self, region, binsize=binsize, binbounds=binbounds,
                                                             start=start, stop=stop, startfrag=startfrag,
@@ -1119,7 +1119,7 @@ class FiveC(object):
             if not self.silent:
                 print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
             return None
-        if arraytype != 'full' and (not dynamically_binned and arraytype not in ['compact', 'full']):
+        if arraytype not in ['compact', 'full'] or (dynamically_binned and arraytype == 'compact'):
             if not self.silent:
                 print >> sys.stderr, ("Unrecognized or inappropriate array type. No data returned.\n"),
             return None
@@ -1147,7 +1147,7 @@ class FiveC(object):
                                                                          stopfrag1=stopfrag1, binbounds2=binbounds2,
                                                                          start2=start2, stop2=stop2,
                                                                          startfrag2=startfrag2, stopfrag2=stopfrag2,
-                                                                         datatype=datatype, arraytype='full',
+                                                                         datatype=datatype, arraytype=arraytype,
                                                                          skipfiltered=True, returnmapping=True,
                                                                          silent=self.silent)
             fivec_binning.dynamically_bin_trans_array(expansion, exp_map1, exp_map2, binned, mapping1, mapping2,
@@ -1172,7 +1172,8 @@ class FiveC(object):
         return data
 
     def write_heatmap(self, filename, binsize, includetrans=True, datatype='enrichment', arraytype='full',
-                      regions=[]):
+                      regions=[], dynamically_binned=False, minobservations=0,  searchdistance=0, expansion_binsize=0,
+                      removefailed=False):
         """
         Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
@@ -1188,10 +1189,31 @@ class FiveC(object):
         :type arraytype: str.
         :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
         :type regions: list.
+        :param dynamically_binned: If 'True', return dynamically binned data.
+        :type dynamically_binned: bool.
+        :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+        :type minobservations: int.
+        :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+        :type searchdistance: int.
+        :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+        :type expansion_binsize: int.
+        :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
         :returns: None
+
+        The following attributes are created within the hdf5 dictionary file. Arrays are accessible as datasets while the resolution is held as an attribute.
+
+        :Attributes: * **resolution** (*int.*) - The bin size that data are accumulated in.
+                     * **regions** (*ndarray*) - A numpy array containing region data for each region included in the heatmaps.
+                     * **N.positions** (*ndarray*) - A series of numpy arrays of type int32, one for each region where N is the region index, containing one row for each bin and four columns denoting the start and stop coordinates and first fragment and last fragment plus one for each bin. This is included if data is in the 'full' format.
+                     * **N.forward_positions** (*ndarray*) - A series of numpy arrays of type int32, one for each region where N is the region index, containing one row for each bin along the first axis and four columns denoting the start and stop coordinates and first fragment and last fragment plus one for each bin. This is included if data is in the 'compact' format and corresponds to only forward strand fragments.
+                     * **N.reverse_positions** (*ndarray*) - A series of numpy arrays of type int32, one for each region where N is the region index, containing one row for each bin along the second axis and four columns denoting the start and stop coordinates and first fragment and last fragment plus one for each bin. This is included if data is in the 'compact' format and corresponds to only reverse strand fragments.
+                     * **N.counts** (*ndarray*) - A series of numpy arrays of type int32, one for each region where N is the region index, containing the observed counts for valid fragment combinations. If arrays are in the 'compact' format, the first axis corresponds to forward fragments and the second axis corresponds to reverse fragments. If the array is in the 'upper' format,data are in an upper-triangle format such that they have N * (N - 1) / 2 entries where N is the number of fragments or bins in the region.
+                     * **N.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each region where N is the region index, containing the expected counts for valid fragment combinations. If the array is in the 'upper' format,data are in an upper-triangle format such that they have N * (N - 1) / 2 entries where N is the number of fragments or bins in the region.
+                     * **N_by_M.counts** (*ndarray*) - A series of numpy arrays of type int32, one for each region pair N and M if trans data are included, containing the observed counts for valid fragment combinations. The region index order specifies which axis corresponds to which region. If data are in the 'compact' format, both region index orders will be present.
+                     * **N_by_M.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each region pair N and M if trans data are included, containing the expected counts for valid fend combinations. The chromosome name order specifies which axis corresponds to which region. If data are in the 'compact' format, both region index orders will be present.
         """
         history = self.history
-        history += "FiveC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', arraytype='%s', regions=%s)" % (filename, binsize, includetrans, datatype, arraytype, str(regions))
+        history += "FiveC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', arraytype='%s', regions=%s, dynamically_binned=%s, minobservations=%i, searchdistance=%i, expansion_binsize=%i, removefailed=%s)" % (filename, binsize, includetrans, datatype, arraytype, str(regions), dynamically_binned, minobservations, searchdistance, expansion_binsize, removefailed)
         if (regions is None or
                 (isinstance(regions, list) and
                 (len(regions) == 0 or
@@ -1203,5 +1225,8 @@ class FiveC(object):
                 regions[i] = int(regions[i])
         fivec_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
                                          datatype=datatype, arraytype=arraytype,
-                                         regions=regions, silent=self.silent, history=history)
+                                         regions=regions, silent=self.silent, history=history,
+                                         dynamically_binned=dynamically_binned, minobservations=minobservations,
+                                         searchdistance=searchdistance, expansion_binsize=expansion_binsize,
+                                         removefailed=removefailed)
         return None

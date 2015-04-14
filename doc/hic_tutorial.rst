@@ -261,6 +261,24 @@ In order to immediately make use of data, :mod:`HiFive` allows you to pull data 
 
 In the above call, All valid possible interactions were queried from chromosome 1 between 1000000 and 3000000. For valid interactions that had no observation, an expected value was still added to the bin. 'enrichment' specifies to find the observed counts and expected counts, which includes the distance-dependence and fend bias values. The observed counts are in the first index of the last dimension of the returned array, the expected counts are in the second index of the last dimension. 'Upper' specifies a row-major upper triangle array (all values above the matrix diagonal flattened).
 
+Accessing heatmap data
+======================
+
+When a heatmap is generated, data are stored in an HDF5 dictionary, a binary file format that allows easy access through python. In order to access data from your heatmap, you can load it as follows::
+
+  import h5py
+  import numpy
+  heatmap = h5py.File(heatmap_file, 'r')
+  print heatmap.keys()
+  counts = heatmap['0.counts'][...]
+  expected = heatmap['0.expected'][...]
+  enrichment = numpy.zeros((counts.shape[0], 2), dtype=numpy.float32)
+  where = numpy.where(counts > 0)[0]
+  enrichment[where, 0] = numpy.log(counts[where] / expected[where])
+  enrichment[where, 1] = 1
+
+Note that we used the 'r' option when opening the file with h5py. This ensures that we are in 'read' mode. You could also use 'a' for 'append' mode, which is the default. First we printed out the available dataset names in our heatmap file. These are all of the arrays that are accessible to us by calling them like any other key value in a dictionary. Next, in order to load data from the heatmap into memory rather than access it from the disk every time we refer to it, we use the '[...]' indexing call after pass the heatmap filestream the name of the data we want. In this case, we asked for the counts and expected values for region zero. In order to look at the enrichments, we took the log of the ratio of observed to expected values for each bin. However, there are likely bins that contain no observed counts which would give us a divide by zero error in the log function. So, we can use numpy's 'where' function to get a index list of places that match our criterion, in this case non-zero counts. Finally, we have made the enrichment array 2D so we can keep track of which bins are valid (nonzero counts). If we were looking at trans data, we would need one more dimension as the counts and expected arrays would be two-dimensional instead of one.
+
 .. _plotting_a_hic_heatmap:
 
 Plotting a heatmap

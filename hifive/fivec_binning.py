@@ -840,12 +840,12 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     binedges1 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
     binedges1[:, 0] = numpy.searchsorted(unbinnedmids1, binbounds1[:, 0])
     binedges1[:, 1] = numpy.searchsorted(unbinnedmids1, binbounds1[:, 1])
-    binedges2 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
+    binedges2 = numpy.zeros(binbounds2.shape, dtype=numpy.int32)
     binedges2[:, 0] = numpy.searchsorted(unbinnedmids2, binbounds2[:, 0])
     binedges2[:, 1] = numpy.searchsorted(unbinnedmids2, binbounds2[:, 1])
     # Determine bin midpoints
     mids1 = (binbounds1[:, 0] + binbounds1[:, 1]) / 2
-    mids2 = (binbounds1[:, 0] + binbounds1[:, 1]) / 2
+    mids2 = (binbounds2[:, 0] + binbounds2[:, 1]) / 2
     # Dynamically bin using appropriate array type combination
     _fivec_binning.dynamically_bin_trans(unbinned, unbinnedmids1, unbinnedmids2, binned, binedges1,
                                          binedges2, mids1, mids2, minobservations, searchdistance, int(removefailed))
@@ -855,7 +855,8 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
 
 
 def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='enrichment',
-                       regions=[], arraytype='full', **kwargs):
+                       regions=[], arraytype='full', dynamically_binned=False, minobservations=0,
+                       searchdistance=0, expansion_binsize=0, removefailed=False, **kwargs):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
@@ -873,6 +874,15 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     :type arraytype: str.
     :param regions: If given, indicates which regions should be included. If left empty, all regions are included.
     :type regions: list.
+    :param dynamically_binned: If 'True', return dynamically binned data.
+    :type dynamically_binned: bool.
+    :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+    :type minobservations: int.
+    :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+    :type searchdistance: int.
+    :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+    :type expansion_binsize: int.
+    :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
     :returns: None
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -880,6 +890,8 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     else:
         silent = False
     if binsize > 0:
+        arraytype='full'
+    elif dynamically_binned:
         arraytype='full'
     # Check if trans mean is needed and calculate if not already done
     if includetrans and datatype in ['distance', 'enrichment'] and 'trans_mean' not in fivec.__dict__.keys():
@@ -902,8 +914,22 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     # Find cis heatmaps
     remove = []
     for region in regions:
-        results = find_cis_signal(fivec, region, binsize=binsize, datatype=datatype, arraytype=arraytype,
-                                  returnmapping=True, silent=silent, skipfiltered=True)
+        if dynamically_binned:
+            temp = find_cis_signal(fivec, region, binsize=expansion_binsize, datatype=datatype, arraytype='full',
+                                   returnmapping=True, silent=silent, skipfiltered=True)
+            if temp is None:
+                remove.append(region)
+                continue
+            expansion, exp_mapping = temp
+            binned, mapping = find_cis_signal(fivec, region, binsize=binsize, datatype=datatype, arraytype=arraytype,
+                                              returnmapping=True, silent=silent, skipfiltered=True)
+
+            dynamically_bin_cis_array(expansion, exp_mapping, binned, mapping, minobservations=minobservations,
+                                      searchdistance=searchdistance, removefailed=removefailed, silent=silent)
+            results = [binned, mapping]
+        else:
+            results = find_cis_signal(fivec, region, binsize=binsize, datatype=datatype, arraytype=arraytype,
+                                      returnmapping=True, silent=silent, skipfiltered=True)
         # Check if array contains data
         if results is None or results[0].shape[0] == 0:
             remove.append(region)
@@ -923,20 +949,52 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     if includetrans:
         for i in range(len(regions)-1):
             for j in range(i + 1, len(regions)):
-                if arraytype == 'compact':
-                    results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
-                                                arraytype=arraytype, skipfiltered=True, silent=silent)
-                    output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
-                    output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
-                    results = find_trans_signal(fivec, regions[j], regions[i], binsize=binsize, datatype=datatype,
-                                                arraytype=arraytype, skipfiltered=True, silent=silent)
-                    output.create_dataset('%s_by_%s.counts' % (regions[j], regions[i]), data=results[:, :, 0])
-                    output.create_dataset('%s_by_%s.expected' % (regions[j], regions[i]), data=results[:, :, 1])
-                else:
-                    results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
-                                                arraytype=arraytype, skipfiltered=True, silent=silent)
-                    output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
-                    output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
+                if dynamically_binned:
+                    expansion, exp_map1, exp_map2 = find_trans_signal(fivec, regions[i], regions[j],
+                                                                      binsize=expansion_binsize, datatype=datatype,
+                                                                      arraytype='full', skipfiltered=True,
+                                                                      silent=silent)
+                    if arraytype == 'compact':
+                        binned, mapping1, mapping2 = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize,
+                                                                       datatype=datatype, arraytype=arraytype,
+                                                                       skipfiltered=True, silent=silent)
+                        dynamically_bin_trans_array(expansion, exp_map1, exp_map2, binned, mapping1, mapping2,
+                                                    minobservations=minobservations, searchdistance=searchdistance,
+                                                    removefailed=removefailed, silent=silent)
+                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=binned[:, :, 0])
+                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=binned[:, :, 1])
+                        binned, mapping1, mapping2 = find_trans_signal(fivec, regions[j], regions[i], binsize=binsize,
+                                                                       datatype=datatype, arraytype=arraytype,
+                                                                       skipfiltered=True, silent=silent)
+                        dynamically_bin_trans_array(expansion, exp_map1, exp_map2, binned, mapping1, mapping2,
+                                                    minobservations=minobservations, searchdistance=searchdistance,
+                                                    removefailed=removefailed, silent=silent)
+                        output.create_dataset('%s_by_%s.counts' % (regions[j], regions[i]), data=binned[:, :, 0])
+                        output.create_dataset('%s_by_%s.expected' % (regions[j], regions[i]), data=binned[:, :, 1])
+                    else:
+                        binned, mapping1, mapping2 = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize,
+                                                                       datatype=datatype, arraytype=arraytype,
+                                                                       skipfiltered=True, silent=silent)
+                        dynamically_bin_trans_array(expansion, exp_map1, exp_map2, binned, mapping1, mapping2,
+                                                    minobservations=minobservations, searchdistance=searchdistance,
+                                                    removefailed=removefailed, silent=silent)
+                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
+                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
+                else:   
+                    if arraytype == 'compact':
+                        results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
+                                                    arraytype=arraytype, skipfiltered=True, silent=silent)
+                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
+                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
+                        results = find_trans_signal(fivec, regions[j], regions[i], binsize=binsize, datatype=datatype,
+                                                    arraytype=arraytype, skipfiltered=True, silent=silent)
+                        output.create_dataset('%s_by_%s.counts' % (regions[j], regions[i]), data=results[:, :, 0])
+                        output.create_dataset('%s_by_%s.expected' % (regions[j], regions[i]), data=results[:, :, 1])
+                    else:
+                        results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
+                                                    arraytype=arraytype, skipfiltered=True, silent=silent)
+                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
+                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
     if 'history' in kwargs:
         output.attrs['history'] = kwargs['history']
     output.close()

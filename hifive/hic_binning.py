@@ -915,7 +915,9 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
         print >> sys.stderr, ("Done\n"),
     return None
 
-def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enrichment', chroms=[], **kwargs):
+def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enrichment', chroms=[], 
+                       dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
+                       removefailed=False, **kwargs):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
@@ -931,6 +933,16 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
     :type datatype: str.
     :param chroms: A list of chromosome names indicating which chromosomes should be included. If left empty, all chromosomes are included. Optional.
     :type chroms: list
+    :param dynamically_binned: If 'True', return dynamically binned data.
+    :type dynamically_binned: bool.
+    :param minobservations: The fewest number of observed reads needed for a bin to counted as valid and stop expanding.
+    :type minobservations: int.
+    :param searchdistance: The furthest distance from the bin minpoint to expand bounds. If this is set to zero, there is no limit on expansion distance.
+    :type searchdistance: int.
+    :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
+    :type expansion_binsize: int.
+    :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+    :type removefailed: bool.
     :returns: None
     """
     # check if MPI is available
@@ -990,15 +1002,45 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
     for chrom in node_needed:
         if len(chrom) == 1:
             # Find cis heatmap
-            heatmaps[chrom] = find_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype, arraytype='upper',
-                                              returnmapping=True, silent=silent, skipfiltered=True)
-            # Check if array contains data
-            if heatmaps[chrom] is None or heatmaps[chrom][0].shape[0] == 0:
-                del heatmaps[chrom]
+            # determine if data is to be dynamically binned
+            if not dynamically_binned:
+                heatmaps[chrom] = find_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype,
+                                                  arraytype='upper', returnmapping=True, silent=silent,
+                                                  skipfiltered=True)
+            else:
+                temp = find_cis_signal(hic, chrom[0], binsize=expansion_binsize, datatype=datatype, arraytype='upper',
+                                       returnmapping=True, silent=silent)
+                if temp is None:
+                    continue
+                expansion, exp_mapping = temp
+                binned, mapping = find_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype,
+                                                  arraytype='upper', returnmapping=True, silent=silent)
+                dynamically_bin_cis_array(expansion, exp_mapping, binned, mapping, minobservations=minobservations,
+                                          searchdistance=searchdistance, removefailed=removefailed, silent=silent)
+
+                heatmaps[chrom] = [binned, mapping]
         else:
             # Find trans heatmap
-            heatmaps[chrom] = find_trans_signal(hic, chrom[0], chrom[1], binsize=binsize, datatype=datatype,
-                                                skipfiltered=True, silent=silent)
+            # determine if data is to be dynamically binned
+            if not dynamically_binned:
+                heatmaps[chrom] = find_trans_signal(hic, chrom[0], chrom[1],  binsize=binsize, datatype=datatype,
+                                                    returnmapping=False, silent=silent, skipfiltered=True)
+            else:
+                temp = find_trans_signal(hic, chrom[0], chrom[1], binsize=expansion_binsize, datatype=datatype, 
+                                         returnmapping=True, silent=silent)
+                if temp is None:
+                    continue
+                expansion, exp_mapping1, exp_mapping2 = temp
+                binned, mapping1, mapping2 = find_trans_signal(hic, chrom[0], chrom[1], binsize=binsize,
+                                                               datatype=datatype, returnmapping=True, silent=silent)
+                dynamically_bin_trans_array(expansion, exp_mapping1, exp_mapping2, binned, mapping1, mapping2,
+                                            minobservations=minobservations, searchdistance=searchdistance,
+                                            removefailed=removefailed, silent=silent)
+
+                heatmaps[chrom] = binned
+        # Check if array contains data
+        if heatmaps[chrom] is None or heatmaps[chrom][0].shape[0] == 0:
+            del heatmaps[chrom]
     # Collect heatmaps at node 0 and write to h5dict
     if rank == 0:
         if num_procs > 1:

@@ -325,6 +325,16 @@ def add_fivec_heatmap_subparser(subparsers):
     parser.add_argument("-a", "--arraytype", dest="arraytype", default="full",
         help="The type of array layout to store data in ('compact' only valid for unbinned data). [default: %(default)s]",
         choices=["compact", "full"])
+    parser.add_argument("-y", "--dynamically-bin", dest="dynamic", default=False, action="store_true",
+        help="Dynamically bin heatmap.")
+    parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into for expanding under-populated bins. [default: %(default)s]")
+    parser.add_argument("-f", "--minobservations", dest="minobs", default=20, type=int,
+        help="The minimum number of observed reads in a bin for it to be considered valid. [default: %(default)s]")
+    parser.add_argument("-g", "--search-distance", dest="search", default=0, type=int,
+        help="The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [default: %(default)s]")
+    parser.add_argument("-v", "--remove-failed", dest="remove", default=False, action="store_true",
+        help="If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.")
     parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
         help="Save the data as an image to this file.")
     parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
@@ -352,11 +362,27 @@ def add_fivec_interval_subparser(subparsers):
         help="The start coordinate of the pulled region to return. (None indicates the first valid bin in the region) [default %(default)s]")
     parser.add_argument("-e", "--stop", dest="stop", default=None, required=False, type=int,
         help="The stop coordinate of the pulled region to return. (None indicates the last valid bin in the region) [default %(default)s]")
+    parser.add_argument("--region2", dest="region2", default=None, required=False, type=int,
+        help="The second region from which to pull interaction data from if trans interactions are desired.")
+    parser.add_argument("--start2", dest="start2", default=None, required=False, type=int,
+        help="The start coordinate of the second pulled region to return. (None indicates the first valid bin in the region) [default %(default)s]")
+    parser.add_argument("--stop2", dest="stop2", default=None, required=False, type=int,
+        help="The stop coordinate of the second pulled region to return. (None indicates the last valid bin in the region) [default %(default)s]")
     parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
         help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
     parser.add_argument("-d", "--data-type", dest="datatype", default="fragment",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fragment", "distance", "enrichment", "expected"])
+    parser.add_argument("-y", "--dynamically-bin", dest="dynamic", default=False, action="store_true",
+        help="Dynamically bin heatmap.")
+    parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into for expanding under-populated bins. [default: %(default)s]")
+    parser.add_argument("-f", "--minobservations", dest="minobs", default=20, type=int,
+        help="The minimum number of observed reads in a bin for it to be considered valid. [default: %(default)s]")
+    parser.add_argument("-g", "--search-distance", dest="search", default=0, type=int,
+        help="The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [default: %(default)s]")
+    parser.add_argument("-v", "--remove-failed", dest="remove", default=False, action="store_true",
+        help="If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.")
     parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
         help="Save the data as an image to this file.")
     parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
@@ -603,6 +629,16 @@ def add_hic_heatmap_subparser(subparsers):
     parser.add_argument("-d", "--datatype", dest="datatype", default="fend",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fend", "distance", "enrichment", "expected"])
+    parser.add_argument("-y", "--dynamically-bin", dest="dynamic", default=False, action="store_true",
+        help="Dynamically bin heatmap.")
+    parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into for expanding under-populated bins. [default: %(default)s]")
+    parser.add_argument("-f", "--minobservations", dest="minobs", default=20, type=int,
+        help="The minimum number of observed reads in a bin for it to be considered valid. [default: %(default)s]")
+    parser.add_argument("-a", "--search-distance", dest="search", default=0, type=int,
+        help="The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [default: %(default)s]")
+    parser.add_argument("-v", "--remove-failed", dest="remove", default=False, action="store_true",
+        help="If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.")
     parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
         help="Save the data as an image to this file.")
     parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
@@ -626,10 +662,16 @@ def add_hic_interval_subparser(subparsers):
         help="HiFive Binning Function: Create a tabular interaction file containing data from a HiFive HiC project. Data are a genomic-interval format (chr1 start1 stop1 chr2 start2 stop2).")
     parser.add_argument("-c", "--chromosome", dest="chrom", default=None, required=True, type=str,
         help="The chromosome from which to pull interaction data from.")
+    parser.add_argument("--chromosome2", dest="chrom2", default=None, required=False, type=str,
+        help="The second chromosome from which to pull interaction data from if pulling trans data.")
     parser.add_argument("-s", "--start", dest="start", default=None, required=False, type=int,
         help="The start coordinate of the pulled region to return. (None indicates the first valid bin on the chromosome) [default %(default)s]")
     parser.add_argument("-e", "--stop", dest="stop", default=None, required=False, type=int,
         help="The stop coordinate of the pulled region to return. (None indicates the last valid bin on the chromosome) [default %(default)s]")
+    parser.add_argument("--start2", dest="start2", default=None, required=False, type=int,
+        help="The start coordinate of the second chromosome pulled region to return. (None indicates the first valid bin on the chromosome) [default %(default)s]")
+    parser.add_argument("--stop2", dest="stop2", default=None, required=False, type=int,
+        help="The stop coordinate of the second chromosome pulled region to return. (None indicates the last valid bin on the chromosome) [default %(default)s]")
     parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
         help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
     parser.add_argument("-m", "--max-distance", dest="maxdist", default=None, type=int,
@@ -637,12 +679,22 @@ def add_hic_interval_subparser(subparsers):
     parser.add_argument("-d", "--data-type", dest="datatype", default="fend",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fend", "distance", "enrichment", "expected"])
+    parser.add_argument("-y", "--dynamically-bin", dest="dynamic", default=False, action="store_true",
+        help="Dynamically bin heatmap.")
+    parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,
+        help="The size of bins, in base pairs, to group data into for expanding under-populated bins. [default: %(default)s]")
+    parser.add_argument("-f", "--minobservations", dest="minobs", default=20, type=int,
+        help="The minimum number of observed reads in a bin for it to be considered valid. [default: %(default)s]")
+    parser.add_argument("-a", "--search-distance", dest="search", default=0, type=int,
+        help="The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [default: %(default)s]")
+    parser.add_argument("-v", "--remove-failed", dest="remove", default=False, action="store_true",
+        help="If a non-zero 'search-distance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'remove-failed' is set, the observed and expected values for that bin are zero.")
     parser.add_argument("-i", "--image-file", dest="image", default=None, type=str,
         help="Save the data as an image to this file.")
     parser.add_argument("-p", "--pdf", dest="pdf", default=False, action="store_true",
         help="Format the image in PDF format. [default: %(default)s]")
     parser.add_argument("-r", "--rotate", dest="rotate", default=False, action="store_true",
-        help="Rotate the plot 45 degrees (binned only). [default: %(default)s]")
+        help="Rotate the plot 45 degrees (cis binned only). [default: %(default)s]")
     parser.add_argument("-t", "--ticks", dest="ticks", default=False, action="store_true",
         help="Add tick marks and labels to the plot (pdf format and binned only). [default: %(default)s]")
     parser.add_argument("-l", "--legend", dest="legend", default=False, action="store_true",
