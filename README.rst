@@ -39,7 +39,7 @@ or alternatively, download a snapshot of the repository using the following comm
 
 Required Packages
 -----------------
-  * `Scipy <http://www.scipy.ord>`_
+  * `Scipy <http://www.scipy.org>`_
   * `Numpy <http://www.numpy.org>`_
   * `Cython <http://www.cython.org>`_
   * `h5py <http://www.h5py.org>`_
