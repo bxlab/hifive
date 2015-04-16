@@ -1517,6 +1517,7 @@ class HiC(object):
                 minlength=distance_corrections.shape[0])) * prior)).astype(numpy.float64)
         else:
             distance_indices = None
+        bin_counts[:, 1] -= bin_counts[:, 0]
 
         def find_ll(indices, corrections, correction_indices, distance_c, distance_i, counts, prior, min_p):
             prod = numpy.ones(counts.shape[0], dtype=numpy.float64)
