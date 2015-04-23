@@ -46,7 +46,7 @@ def run(args):
         hic.find_binning_fend_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
                                           chroms=chroms, num_bins=modelbins, model=model, parameters=parameters,
                                           usereads=args.binreads, learning_threshold=args.threshold,
-                                          max_iterations=args.biniter)
+                                          max_iterations=args.biniter, pseudocounts=args.pseudo)
         precorrect = True
     if args.algorithm in ['probability', 'binning-probability']:
         hic.find_probability_fend_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
@@ -57,6 +57,7 @@ def run(args):
         hic.find_express_fend_corrections(iterations=args.expiter, mindistance=args.mindist,
                                           maxdistance=args.maxdist, remove_distance=args.nodist,
                                           usereads=args.expreads, mininteractions=args.minint,
-                                          chroms=chroms, minchange=args.change, precorrect=precorrect)
+                                          chroms=chroms, minchange=args.change, precorrect=precorrect,
+                                          binary=args.binary, kr=args.kr)
     if rank == 0:
         hic.save(args.output)

@@ -36,10 +36,9 @@ def find_binning_correction_adjustment(
         np.ndarray[DTYPE_int_t, ndim=1] indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] indices1 not None,
         np.ndarray[DTYPE_t, ndim=1] binning_corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
         np.ndarray[DTYPE_int_t, ndim=1] num_bins,
-        np.ndarray[DTYPE_int_t, ndim=2] fend_indices):
-    cdef long long int i, j, fend1, fend2, bin1, bin2, index
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices):
+    cdef long long int i, j, fend1, fend2, index
     cdef long long int num_fends = corrections.shape[0]
     cdef long long int num_parameters = fend_indices.shape[1]
     with nogil:
@@ -47,10 +46,10 @@ def find_binning_correction_adjustment(
             fend1 = indices0[i]
             fend2 = indices1[i]
             for j in range(num_parameters):
-                bin1 = min(fend_indices[fend1, j], fend_indices[fend2, j])
-                bin2 = max(fend_indices[fend1, j], fend_indices[fend2, j])
-                index = (num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
-                corrections[i] *= binning_corrections[index]
+                if fend_indices[fend1, j, 0] < fend_indices[fend2, j, 0]:
+                    corrections[i] *= binning_corrections[fend_indices[fend1, j, 1] + fend_indices[fend2, j, 0]]
+                else:
+                    corrections[i] *= binning_corrections[fend_indices[fend2, j, 1] + fend_indices[fend1, j, 0]]
     return None
 
 
@@ -124,7 +123,8 @@ def find_fend_means(
         np.ndarray[DTYPE_int_t, ndim=2] trans_data,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         double mu,
-        double trans_mu):
+        double trans_mu,
+        int binary):
     cdef long long int i, fend1, fend2, num_trans_data, num_data
     cdef double temp
     cdef long long int num_fends = fend_means.shape[0]
@@ -139,28 +139,52 @@ def find_fend_means(
     with nogil:
         for i in range(num_fends):
             fend_means[i] = 0.0
-        if distance_means is None:
-            for i in range(num_data):
-                fend1 = data[i, 0]
-                fend2 = data[i, 1]
-                temp = data[i, 2] / (mu * corrections[fend1] * corrections[fend2])
+        if binary == 0:
+            if distance_means is None:
+                for i in range(num_data):
+                    fend1 = data[i, 0]
+                    fend2 = data[i, 1]
+                    temp = data[i, 2] / (mu * corrections[fend1] * corrections[fend2])
+                    fend_means[fend1] += temp
+                    fend_means[fend2] += temp
+            else:
+                for i in range(num_data):
+                    fend1 = data[i, 0]
+                    fend2 = data[i, 1]
+                    temp = data[i, 2] / (distance_means[i] * corrections[fend1] * corrections[fend2])
+                    fend_means[fend1] += temp
+                    fend_means[fend2] += temp
+            for i in range(num_trans_data):
+                fend1 = trans_data[i, 0]
+                fend2 = trans_data[i, 1]
+                temp = trans_data[i, 2] / (trans_mu * corrections[fend1] * corrections[fend2])
+                if not trans_means is None:
+                    temp /= trans_means[i]
                 fend_means[fend1] += temp
                 fend_means[fend2] += temp
         else:
-            for i in range(num_data):
-                fend1 = data[i, 0]
-                fend2 = data[i, 1]
-                temp = data[i, 2] / (distance_means[i] * corrections[fend1] * corrections[fend2])
+            if distance_means is None:
+                for i in range(num_data):
+                    fend1 = data[i, 0]
+                    fend2 = data[i, 1]
+                    temp = 1.0 / (mu * corrections[fend1] * corrections[fend2])
+                    fend_means[fend1] += temp
+                    fend_means[fend2] += temp
+            else:
+                for i in range(num_data):
+                    fend1 = data[i, 0]
+                    fend2 = data[i, 1]
+                    temp = 1.0 / (distance_means[i] * corrections[fend1] * corrections[fend2])
+                    fend_means[fend1] += temp
+                    fend_means[fend2] += temp
+            for i in range(num_trans_data):
+                fend1 = trans_data[i, 0]
+                fend2 = trans_data[i, 1]
+                temp = 1.0 / (trans_mu * corrections[fend1] * corrections[fend2])
+                if not trans_means is None:
+                    temp /= trans_means[i]
                 fend_means[fend1] += temp
                 fend_means[fend2] += temp
-        for i in range(num_trans_data):
-            fend1 = trans_data[i, 0]
-            fend2 = trans_data[i, 1]
-            temp = trans_data[i, 2] / (trans_mu * corrections[fend1] * corrections[fend2])
-            if not trans_means is None:
-                temp /= trans_means[i]
-            fend_means[fend1] += temp
-            fend_means[fend2] += temp
     return None
 
 
@@ -192,3 +216,76 @@ def update_express_corrections(
             corrections[i] *= temp
         cost = pow(cost, 0.5)
     return cost
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_v(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_64_t, ndim=1] counts,
+        np.ndarray[DTYPE_64_t, ndim=1] trans_counts,
+        np.ndarray[DTYPE_64_t, ndim=2] corrections,
+        np.ndarray[DTYPE_64_t, ndim=2] v):
+    cdef long long int i, fend1, fend2, num_data, num_trans_data
+    cdef double correction
+    if not data is None:
+        num_data = data.shape[0]
+    else:
+        num_data = 0
+    if not trans_data is None:
+        num_trans = trans_data.shape[0]
+    else:
+        num_trans = 0
+    with nogil:
+        for i in range(num_data):
+            fend1 = data[i, 0]
+            fend2 = data[i, 1]
+            correction = corrections[fend1, 0] * corrections[fend2, 0] * counts[i]
+            v[fend1, 0] += correction
+            v[fend2, 0] += correction
+        for i in range(num_trans):
+            fend1 = trans_data[i, 0]
+            fend2 = trans_data[i, 1]
+            correction = corrections[fend1, 0] * corrections[fend2, 0] * trans_counts[i]
+            v[fend1, 0] += correction
+            v[fend2, 0] += correction
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_w(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_64_t, ndim=1] counts,
+        np.ndarray[DTYPE_64_t, ndim=1] trans_counts,
+        np.ndarray[DTYPE_64_t, ndim=2] corrections,
+        np.ndarray[DTYPE_64_t, ndim=2] p,
+        np.ndarray[DTYPE_64_t, ndim=2] w):
+    cdef long long int i, fend1, fend2, num_data, num_trans_data
+    cdef double correction
+    if not data is None:
+        num_data = data.shape[0]
+    else:
+        num_data = 0
+    if not trans_data is None:
+        num_trans = trans_data.shape[0]
+    else:
+        num_trans = 0
+    with nogil:
+        for i in range(num_data):
+            fend1 = data[i, 0]
+            fend2 = data[i, 1]
+            correction = corrections[fend1, 0] * corrections[fend2, 0] * counts[i]
+            w[fend1, 0] += correction * p[fend2, 0]
+            w[fend2, 0] += correction * p[fend1, 0]
+        for i in range(num_trans):
+            fend1 = trans_data[i, 0]
+            fend2 = trans_data[i, 1]
+            correction = corrections[fend1, 0] * corrections[fend2, 0] * trans_counts[i]
+            w[fend1, 0] += correction * p[fend2, 0]
+            w[fend2, 0] += correction * p[fend1, 0]
+    return None

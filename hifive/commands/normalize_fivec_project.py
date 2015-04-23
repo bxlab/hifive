@@ -47,7 +47,7 @@ def run(args):
         fivec.find_express_fragment_corrections(iterations=args.expiter, mindistance=args.mindist,
                                                 maxdistance=args.maxdist, remove_distance=args.nodist,
                                                 usereads=args.expreads, regions=regions,
-                                                precorrect=False)
+                                                precorrect=False, logged=args.logged, kr=args.kr)
     if len(args.algorithm.split('-')) > 1:
         if args.algorithm.split('-')[1] == 'binning':
             fivec.find_binning_fragment_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
@@ -64,5 +64,5 @@ def run(args):
             fivec.find_express_fragment_corrections(iterations=args.expiter, mindistance=args.mindist,
                                                     maxdistance=args.maxdist, remove_distance=args.nodist,
                                                     usereads=args.expreads, regions=regions,
-                                                    precorrect=True)
+                                                    precorrect=True, logged=args.logged, kr=args.kr)
     fivec.save(args.output)

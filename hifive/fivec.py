@@ -298,14 +298,14 @@ class FiveC(object):
         # find distances between fragment pairs
         log_distances = numpy.log(mids[data[valid, 1]] - mids[data[valid, 0]])
         # find regression line
-        log_counts = numpy.log(data[valid, 2])
+        counts = numpy.log(data[valid, 2])
         if not self.corrections is None:
-            log_counts -= self.corrections[data[valid, 0]] - self.corrections[data[valid, 1]]
-        temp = linregress(log_distances, log_counts)[:2]
+            counts -= self.corrections[data[valid, 0]] - self.corrections[data[valid, 1]]
+        temp = linregress(log_distances, counts)[:2]
         self.gamma = -float(temp[0])
         if self.region_means is None:
             self.region_means = numpy.zeros(self.frags['regions'].shape[0], dtype=numpy.float32) + temp[1]
-        self.sigma = float(numpy.std(log_counts - temp[1] + self.gamma * log_distances))
+        self.sigma = float(numpy.std(counts - temp[1] + self.gamma * log_distances))
         if not self.silent:
             print >> sys.stderr, ("Done\n"),
         self.history += "Success\n"
@@ -370,9 +370,9 @@ class FiveC(object):
                             (distances >= mindistance) * (distances < maxdistance))[0]
         data = data[valid, :]
         distances = numpy.log(distances[valid])
-        log_counts_n = numpy.log(data[:, 2] - 0.5).astype(numpy.float32)
-        log_counts = numpy.log(data[:, 2]).astype(numpy.float32)
-        log_counts_p = numpy.log(data[:, 2] + 0.5).astype(numpy.float32)
+        counts_n = numpy.log(data[:, 2] - 0.5).astype(numpy.float32)
+        counts = numpy.log(data[:, 2]).astype(numpy.float32)
+        counts_p = numpy.log(data[:, 2] + 0.5).astype(numpy.float32)
         distance_signal = (-self.gamma * distances).astype(numpy.float32)
         distance_signal += self.region_means[self.frags['fragments']['region'][data[:, 0]]]
         # create empty arrays
@@ -384,7 +384,7 @@ class FiveC(object):
         interactions = numpy.maximum(1, interactions)
         # if precalculation requested, find fragment means
         if precalculate:
-            enrichments = log_counts - distance_signal
+            enrichments = counts - distance_signal
             count_sums = numpy.bincount(data[:, 0], weights=enrichments, minlength=gradients.shape[0])
             count_sums += numpy.bincount(data[:, 1], weights=enrichments, minlength=gradients.shape[0])
             self.corrections = ((count_sums / numpy.maximum(1, interactions)) * 0.5).astype(numpy.float32)
@@ -405,9 +405,9 @@ class FiveC(object):
         change = numpy.inf
         new_corrections = numpy.copy(self.corrections)
         start_cost = _optimize.calculate_prob_cost(data,
-                                                   log_counts_n,
-                                                   log_counts,
-                                                   log_counts_p,
+                                                   counts_n,
+                                                   counts,
+                                                   counts_p,
                                                    distance_signal,
                                                    self.corrections,
                                                    self.sigma)
@@ -417,9 +417,9 @@ class FiveC(object):
             # find gradients
             gradients.fill(0.0)
             _optimize.calculate_gradients(data,
-                                          log_counts_n,
-                                          log_counts,
-                                          log_counts_p,
+                                          counts_n,
+                                          counts,
+                                          counts_p,
                                           distance_signal,
                                           self.corrections,
                                           gradients,
@@ -440,9 +440,9 @@ class FiveC(object):
                                              gradients,
                                              t)
                 cost = _optimize.calculate_prob_cost(data,
-                                                     log_counts_n,
-                                                     log_counts,
-                                                     log_counts_p,
+                                                     counts_n,
+                                                     counts,
+                                                     counts_p,
                                                      distance_signal,
                                                      new_corrections,
                                                      self.sigma)
@@ -469,9 +469,9 @@ class FiveC(object):
                                                  gradients,
                                                  t)
                     cost = _optimize.calculate_prob_cost(data,
-                                                         log_counts_n,
-                                                         log_counts,
-                                                         log_counts_p,
+                                                         counts_n,
+                                                         counts,
+                                                         counts_p,
                                                          distance_signal,
                                                          new_corrections,
                                                          self.sigma)
@@ -513,7 +513,7 @@ class FiveC(object):
         return None
 
     def find_express_fragment_corrections(self, mindistance=0, maxdistance=0, iterations=1000, remove_distance=False,
-                                          usereads='cis', regions=[], precorrect=False):
+                                          usereads='cis', regions=[], precorrect=False, logged=True, kr=False):
         """
         Using iterative approximation, learn correction values for each valid fragment.
 
@@ -531,6 +531,10 @@ class FiveC(object):
         :type regions: list
         :param precorrect: Use binning-based corrections in expected value calculations, resulting in a chained normalization approach.
         :type precorrect: bool.
+        :param logged: Use log-counts instead of counts for learning.
+        :type logged: bool.
+        :param kr: Use the Knight Ruiz matrix balancing algorithm instead of weighted matrix balancing. This option ignores 'iterations' and 'logged'.
+        :type kr: bool.
         :returns: None
 
         Calling this function creates the following attributes:
@@ -539,7 +543,7 @@ class FiveC(object):
 
         The 'normalization' attribute is updated to 'express' or 'binning-express', depending on if the 'precorrect' option is selected. In addition, if the 'remove_distance' option is selected, the 'region_means' attribute is updated such that the mean correction (sum of all valid regional correction value pairs) is adjusted to zero and the corresponding region mean is adjusted the same amount but the opposite sign. 
         """
-        self.history += "FiveC.find_express_fragment_corrections(mindistance=%s, maxdistance=%s, iterations=%i, remove_distance=%s, usereads='%s', regions=%s, precorrect=%s) - " % (str(mindistance), str(maxdistance), iterations, remove_distance, usereads, str(regions), precorrect)
+        self.history += "FiveC.find_express_fragment_corrections(mindistance=%s, maxdistance=%s, iterations=%i, remove_distance=%s, usereads='%s', regions=%s, precorrect=%s, logged=%s, kr=%s) - " % (str(mindistance), str(maxdistance), iterations, remove_distance, usereads, str(regions), precorrect, logged, kr)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
@@ -556,6 +560,10 @@ class FiveC(object):
             regions = numpy.arange(self.frags['regions'].shape[0])
         if self.corrections is None:
             self.corrections = numpy.zeros(self.frags['fragments'].shape[0], dtype=numpy.float32)
+        if kr:
+            self._find_kr_corrections(mindistance, maxdistance, remove_distance, 
+                             usereads, regions, precorrect, logged)
+            return None
         # limit corrections to only requested regions
         filt = numpy.copy(self.filter)
         for i in range(self.frags['regions'].shape[0]):
@@ -566,8 +574,8 @@ class FiveC(object):
         # copy and calculate needed arrays
         data = None
         trans_data = None
-        log_counts = None
-        trans_log_counts = None
+        counts = None
+        trans_counts = None
         distance_signal = None
         trans_signal = None
         corrections = numpy.copy(self.corrections)
@@ -580,7 +588,7 @@ class FiveC(object):
             valid = numpy.where((filt[data[:, 0]] * filt[data[:, 1]]) *
                                 (distances >= mindistance) * (distances < maxdistance))[0]
             data = data[valid, :]
-            log_counts = numpy.log(data[:, 2]).astype(numpy.float32)
+            counts = numpy.log(data[:, 2]).astype(numpy.float64)
             distances = distances[valid]
             if remove_distance:
                 if self.gamma is None:
@@ -591,7 +599,7 @@ class FiveC(object):
             trans_data =  self.data['trans_data'][...]
             valid = numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0]
             trans_data = trans_data[valid, :]
-            trans_log_counts = numpy.log(trans_data[:, 2]).astype(numpy.float32)
+            trans_counts = numpy.log(trans_data[:, 2]).astype(numpy.float64)
             if remove_distance:
                 if self.trans_mean is None:
                     self.find_trans_mean()
@@ -631,15 +639,26 @@ class FiveC(object):
         # learn corrections
         for iteration in range(iterations):
             # update corrections
-            cost = _optimize.find_fragment_means(distance_signal,
-                                                 trans_signal,
-                                                 interactions,
-                                                 fragment_means,
-                                                 data,
-                                                 trans_data,
-                                                 log_counts,
-                                                 trans_log_counts,
-                                                 corrections)
+            if logged:
+                cost = _optimize.find_log_fragment_means(distance_signal,
+                                                     trans_signal,
+                                                     interactions,
+                                                     fragment_means,
+                                                     data,
+                                                     trans_data,
+                                                     counts,
+                                                     trans_counts,
+                                                     corrections)
+            else:
+                cost = _optimize.find_fragment_means(distance_signal,
+                                                     trans_signal,
+                                                     interactions,
+                                                     fragment_means,
+                                                     data,
+                                                     trans_data,
+                                                     counts,
+                                                     trans_counts,
+                                                     corrections)
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLearning corrections... iteration:%i  cost:%f ") % (' ' * 80, iteration,
                                                                                                  cost),
@@ -671,6 +690,251 @@ class FiveC(object):
         else:
             self.normalization = 'express'
         self.history += 'Success\n'
+        return None
+
+    def _find_kr_corrections(self, mindistance=0, maxdistance=0, remove_distance=True, 
+                             usereads='cis', regions=[], precorrect=False, logged=False):
+        if self.gamma is None:
+            self.find_distance_parameters()
+        all_regions = numpy.copy(regions)
+        filt = numpy.copy(self.filter)
+        if maxdistance == 0 or maxdistance is None:
+            maxdistance = 99999999999
+        if usereads != 'cis':
+            for i in range(self.frags['regions'].shape[0]):
+                if i not in regions:
+                    filt[self.frags['regions']['start_frag'][i]:self.frags['regions']['stop_frag'][i]] = 0
+            regions = ['all']
+        for region in regions:
+            if region == 'all':
+                startfrag = 0
+                stopfrag = self.frags['chr_indices'][-1]
+                regfilt = filt
+            else:
+                startfrag = self.frags['regions']['start_frag'][region]
+                stopfrag = self.frags['regions']['stop_frag'][region]
+                regfilt = filt[startfrag:stopfrag]
+            # create needed arrays
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
+            mids = self.frags['fragments']['mid'][startfrag:stopfrag]
+            strands = self.frags['fragments']['strand'][startfrag:stopfrag]
+            if usereads in ['cis', 'all']:
+                start_index = self.data['cis_indices'][startfrag]
+                stop_index = self.data['cis_indices'][stopfrag]
+                data = self.data['cis_data'][start_index:stop_index, :]
+                distances = mids[data[:, 1] - startfrag] - mids[data[:, 0] - startfrag]
+                valid = numpy.where(regfilt[data[:, 0] - startfrag] * regfilt[data[:, 1] - startfrag] *
+                                    (distances >= mindistance) * (distances < maxdistance))[0]
+                data = data[valid, :]
+            else:
+                data = None
+            if usereads in ['trans', 'all']:
+                trans_data = self.data['trans_data'][...]
+                valid = numpy.where(filt[trans_data[:, 0]] * filt[trans_data[:, 1]])[0]
+                trans_data = trans_data[valid, :]
+            else:
+                trans_data = None
+            trans_means = None
+            # remapped data
+            rev_mapping = numpy.where(regfilt)[0]
+            mapping = numpy.zeros(regfilt.shape[0], dtype=numpy.int32) - 1
+            mapping[rev_mapping] = numpy.arange(rev_mapping.shape[0])
+            if not data is None:
+                data[:, 0] = mapping[data[:, 0] - startfrag]
+                data[:, 1] = mapping[data[:, 1] - startfrag]
+            if not trans_data is None:
+                trans_data[:, 0] = mapping[trans_data[:, 0]]
+                trans_data[:, 1] = mapping[trans_data[:, 1]]
+            mids = mids[rev_mapping]
+            strands = strands[rev_mapping]
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\rChecking for fragment interaction count...") % (' ' * 80),
+            # precalculate interaction distance means for all included interactions
+            if not data is None:
+                counts = data[:, 2].astype(numpy.float64)
+            else:
+                counts = None
+            if not trans_data is None:
+                trans_counts = trans_data[:, 2].astype(numpy.float64)
+            else:
+                trans_counts = None
+            trans_means = None
+            distance_means = None
+            if remove_distance:
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rPrecalculating distances...") % (' ' * 80),
+                if usereads != 'cis':
+                    trans_mean = numpy.sum(trans_counts).astype(numpy.float64)
+                    ffrags = numpy.where(strands == 0)[0]
+                    rfrags = numpy.where(strands == 1)[0]
+                    interactions = ffrags.shape[0] * rfrags.shape[0]
+                    all_ints = self.frags['fragments']['region'][rev_mapping]
+                    fints = all_ints[ffrags]
+                    rints = all_ints[rfrags]
+                    interactions -= numpy.sum(
+                            numpy.bincount(fints, minlength=self.frags['regions'].shape[0]) *
+                            numpy.bincount(rints, minlength=self.frags['regions'].shape[0]))
+                    trans_mean /= interactions
+                    trans_means = numpy.empty(trans_data.shape[0], dtype=numpy.float32).fill(trans_mean)
+                    if not data is None:
+                        distance_means = numpy.zeros(data.shape[0], dtype=numpy.float32)
+                        findices = numpy.r_[0, numpy.bincount(fints)]
+                        rindices = numpy.r_[0, numpy.bincount(rints)]
+                        for i in range(1, findices.shape[0]):
+                            findices[i] += findices[i - 1]
+                            rindices[i] += rindices[i - 1]
+                        for i in range(findices.shape[0] - 1):
+                            if findices[i] < findices[i + 1] and rindices[i] < rindices[i + 1]:
+                                distance_means[:] = numpy.exp(-self.gamma *
+                                        numpy.log(mids[data[:, 1]] - mids[data[:, 0]]) +
+                                        self.region_means[all_ints[data[:, 0]]])
+                else:
+                    distance_means = numpy.zeros(data.shape[0], dtype=numpy.float32)
+                    distance_means[:] = (-self.gamma * numpy.log(mids[data[:, 1]] - mids[data[:, 0]]) +
+                                         self.region_means[region])
+            if precorrect:
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rFinding binning corrections...") % (' ' * 80),
+                if not data is None:
+                    if distance_means is None:
+                        distance_means = numpy.ones(data.shape[0], dtype=numpy.float32)
+                    _optimize.find_binning_correction_adjustment(distance_means,
+                                                                 data,
+                                                                 self.binning_corrections,
+                                                                 self.binning_correction_indices,
+                                                                 self.binning_num_bins,
+                                                                 self.binning_frag_indices)
+                if not trans_data is None:
+                    if trans_means is None:
+                        trans_means = numpy.ones(trans_data.shape[0], dtype=numpy.float32)
+                    _optimize.find_binning_correction_adjustment(trans_means,
+                                                                 trans_data,
+                                                                 self.binning_corrections,
+                                                                 self.binning_correction_indices,
+                                                                 self.binning_num_bins,
+                                                                 self.binning_frag_indices)
+            if not distance_means is None:
+                counts /= numpy.exp(distance_means)
+            if not trans_means is None:
+                trans_counts /= numpy.exp(trans_means)
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\rFinding fend corrections...") % (' ' * 80),
+            # add psuedo-count diagonal
+            if data is None:
+                data = numpy.zeros((rev_mapping.shape[0], 2), dtype=numpy.int32)
+                data[:, 0] = numpy.arange(rev_mapping.shape[0])
+                data[:, 1] = numpy.arange(rev_mapping.shape[0])
+                counts = numpy.ones(data.shape[0], dtype=numpy.float64) * 0.5
+            else:
+                temp = numpy.zeros((rev_mapping.shape[0], 3), dtype=numpy.int32)
+                temp[:, 0] = numpy.arange(rev_mapping.shape[0])
+                temp[:, 1] = numpy.arange(rev_mapping.shape[0])
+                data = numpy.vstack((data, temp))
+                counts = numpy.hstack((counts, numpy.ones(data.shape[0], dtype=numpy.float64) * 0.5))
+            # calculate corrections
+            corrections = numpy.ones((rev_mapping.shape[0], 1), dtype=numpy.float64)
+            g = 0.9
+            eta = etamax = 0.1
+            tol = 1e-12
+            stop_tol = tol * 0.5
+            rt = tol ** 2.0
+            delta = 0.1
+            Delta = 3
+            v = numpy.zeros((corrections.shape[0], 1), dtype=numpy.float64)
+            w = numpy.zeros((corrections.shape[0], 1), dtype=numpy.float64)
+            _optimize.calculate_v(data, trans_data, counts, trans_counts, corrections, v)
+            rk = 1.0 - v
+            rho_km1 = numpy.dot(rk.T, rk)[0, 0]
+            rho_km2 = rho_km1
+            rold = rout = rho_km1
+            i = MVP = 0
+            while rout > rt:
+                i += 1
+                k = 0
+                y = numpy.ones((rev_mapping.shape[0], 1), dtype=numpy.float64)
+                innertol = max(eta ** 2.0 * rout, rt)
+                while rho_km1 > innertol:
+                    k += 1
+                    if k == 1:
+                        Z = rk / v
+                        p = numpy.copy(Z)
+                        rho_km1 = numpy.dot(rk.T, Z)
+                    else:
+                        beta = rho_km1 / rho_km2
+                        p = Z + beta * p
+                    # Update search direction efficiently
+                    w.fill(0.0)
+                    _optimize.calculate_w(data, trans_data, counts, trans_counts, corrections, p, w)
+                    w += v * p
+                    alpha = rho_km1 / numpy.dot(p.T, w)[0, 0]
+                    ap = alpha * p
+                    # Test distance to boundary of cone
+                    ynew = y + ap
+                    if numpy.amin(ynew) <= delta:
+                        if delta == 0:
+                            break
+                        ind = numpy.where(ap < 0.0)[0]
+                        gamma = numpy.amin((delta - y[ind]) / ap[ind])
+                        y += gamma * ap
+                        break
+                    if numpy.amax(ynew) >= Delta:
+                        ind = numpy.where(ynew > Delta)[0]
+                        gamma = numpy.amin((Delta - y[ind]) / ap[ind])
+                        y += gamma * ap
+                        break
+                    y = numpy.copy(ynew)
+                    rk -= alpha * w
+                    rho_km2 = rho_km1
+                    Z = rk / v
+                    rho_km1 = numpy.dot(rk.T, Z)[0, 0]
+                corrections *= y
+                v.fill(0.0)
+                _optimize.calculate_v(data, trans_data, counts, trans_counts, corrections, v)
+                rk = 1.0 - v
+                rho_km1 = numpy.dot(rk.T, rk)[0, 0]
+                rout = rho_km1
+                MVP += k + 1
+                # Update inner iteration stopping criterion
+                rat = rout / rold
+                rold = rout
+                res_norm = rout ** 0.5
+                eta_o = eta
+                eta = g * rat
+                if g * eta_o ** 2.0 > 0.1:
+                    eta = max(eta, g * eta_o ** 2.0)
+                eta = max(min(eta, etamax), stop_tol / res_norm)
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rIteration %i Residual: %e") % (" " * 80, i, rout),
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\rFinding fragment corrections... Region: %s Done\n") % (' ' * 80, str(region)),
+            self.corrections[rev_mapping + startfrag] = numpy.log(1.0 / corrections)
+        # calculate chromosome mean
+        if self.region_means is None:
+            self.region_means = numpy.zeros(self.frags['regions'].shape[0], dtype=numpy.float32)
+        for i in all_regions:
+            start = self.frags['regions']['start_frag'][i]
+            stop = self.frags['regions']['stop_frag'][i]
+            forward = (numpy.where(self.filter[start:stop] * 
+                                   (self.frags['fragments']['strand'][start:stop] == 0))[0] + start)
+            reverse = (numpy.where(self.filter[start:stop] * 
+                                   (self.frags['fragments']['strand'][start:stop] == 1))[0] + start)
+            if forward.shape[0] == 0 or reverse.shape[0] == 0:
+                continue
+            region_mean = (numpy.sum(self.corrections[forward]) * reverse.shape[0] +
+                           numpy.sum(self.corrections[reverse]) * forward.shape[0])
+            region_mean /= forward.shape[0] * reverse.shape[0]
+            self.corrections[forward] -= region_mean / 2.0
+            self.corrections[reverse] -= region_mean / 2.0
+            if remove_distance:
+                self.region_means[i] += region_mean
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\rCompleted learning express corrections.\n") % (' ' * 80),
+        if precorrect:
+            self.normalization = 'binning-express'
+        else:
+            self.normalization = 'express'
+        self.history += "Succcess\n"
         return None
 
     def find_binning_fragment_corrections(self, mindistance=0, maxdistance=0, model=['gc', 'len'], num_bins=[10, 10],
@@ -967,7 +1231,7 @@ class FiveC(object):
         """
         Return a heatmap of cis data of the type and shape specified by the passed arguments.
 
-        This function returns a heatmap for a single region, bounded by either 'start' and 'stop' or 'startfend' and 'stopfend' ('start' and 'stop' take precedence). If neither is given, the complete region is included. The data in the array is determined by the 'datatype', being raw, fragment-corrected, distance-corrected, enrichment, or expected data. The array shape is given by 'arraytype' and can be compact (if unbinned), upper, or full. See :mod:`fivec_binning <hifive.fivec_binning>` for further explanation of 'datatype' and 'arraytype'. If using dynamic binning ('dynamically_binned' is set to True), 'minobservations', 'searchdistance', 'expansion_binsize', and 'removefailed' are used to control the dynamic binning process. Otherwise these arguments are ignored.
+        This function returns a heatmap for a single region, bounded by either 'start' and 'stop' or 'startfrag' and 'stopfrag' ('start' and 'stop' take precedence). If neither is given, the complete region is included. The data in the array is determined by the 'datatype', being raw, fragment-corrected, distance-corrected, enrichment, or expected data. The array shape is given by 'arraytype' and can be compact (if unbinned), upper, or full. See :mod:`fivec_binning <hifive.fivec_binning>` for further explanation of 'datatype' and 'arraytype'. If using dynamic binning ('dynamically_binned' is set to True), 'minobservations', 'searchdistance', 'expansion_binsize', and 'removefailed' are used to control the dynamic binning process. Otherwise these arguments are ignored.
 
         :param region: The index of the region to obtain data from.
         :type region: int.

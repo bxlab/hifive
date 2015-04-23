@@ -151,15 +151,15 @@ def update_corrections(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def find_fragment_means(
+def find_log_fragment_means(
         np.ndarray[DTYPE_t, ndim=1] distance_means,
         np.ndarray[DTYPE_t, ndim=1] trans_means,
         np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
         np.ndarray[DTYPE_64_t, ndim=1] fragment_means not None,
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=2] trans_data,
-        np.ndarray[DTYPE_t, ndim=1] log_counts,
-        np.ndarray[DTYPE_t, ndim=1] trans_log_counts,
+        np.ndarray[DTYPE_64_t, ndim=1] log_counts,
+        np.ndarray[DTYPE_64_t, ndim=1] trans_log_counts,
         np.ndarray[DTYPE_t, ndim=1] corrections not None):
     cdef long long int i, frag1, frag2, num_data, num_trans
     cdef double cost, temp
@@ -172,7 +172,6 @@ def find_fragment_means(
         num_trans = trans_data.shape[0]
     else:
         num_trans = 0
-
     with nogil:
         cost = 0.0
         for i in range(num_frags):
@@ -203,3 +202,132 @@ def find_fragment_means(
             cost += pow(temp, 2.0)
         cost = pow(cost, 0.5)
     return cost
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_fragment_means(
+        np.ndarray[DTYPE_t, ndim=1] distance_means,
+        np.ndarray[DTYPE_t, ndim=1] trans_means,
+        np.ndarray[DTYPE_int_t, ndim=1] interactions not None,
+        np.ndarray[DTYPE_64_t, ndim=1] fragment_means not None,
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_64_t, ndim=1] log_counts,
+        np.ndarray[DTYPE_64_t, ndim=1] log_trans_counts,
+        np.ndarray[DTYPE_t, ndim=1] corrections not None):
+    cdef long long int i, frag1, frag2, num_data, num_trans
+    cdef double cost, temp
+    cdef long long int num_frags = interactions.shape[0]
+    if not data is None:
+        num_data = data.shape[0]
+    else:
+        num_data = 0
+    if not trans_data is None:
+        num_trans = trans_data.shape[0]
+    else:
+        num_trans = 0
+    with nogil:
+        cost = 0.0
+        for i in range(num_frags):
+            fragment_means[i] = 0.0
+        for i in range(num_data):
+            frag1 = data[i, 0]
+            frag2 = data[i, 1]
+            if distance_means is None:
+                temp = exp(log_counts[i] - corrections[frag1] - corrections[frag2])
+            else:
+                temp = exp(log_counts[i] - distance_means[i] - corrections[frag1] - corrections[frag2])
+            fragment_means[frag1] += temp
+            fragment_means[frag2] += temp
+        for i in range(num_trans):
+            frag1 = trans_data[i, 0]
+            frag2 = trans_data[i, 1]
+            if trans_means is None:
+                temp = exp(log_trans_counts[i] - corrections[frag1] - corrections[frag2])
+            else:
+                temp = exp(log_trans_counts[i] - trans_means[i] - corrections[frag1] - corrections[frag2])
+            fragment_means[frag1] += temp
+            fragment_means[frag2] += temp
+        for i in range(num_frags):
+            if interactions[i] == 0:
+                continue
+            temp = fragment_means[i] / interactions[i]
+            corrections[i] += log(temp) * 0.5
+            cost += pow(temp - 1.0, 2.0)
+        cost = pow(cost, 0.5)
+    return cost
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_v(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_64_t, ndim=1] counts,
+        np.ndarray[DTYPE_64_t, ndim=1] trans_counts,
+        np.ndarray[DTYPE_64_t, ndim=2] corrections,
+        np.ndarray[DTYPE_64_t, ndim=2] v):
+    cdef long long int i, frag1, frag2, num_data, num_trans_data
+    cdef double correction
+    if not data is None:
+        num_data = data.shape[0]
+    else:
+        num_data = 0
+    if not trans_data is None:
+        num_trans = trans_data.shape[0]
+    else:
+        num_trans = 0
+    with nogil:
+        for i in range(num_data):
+            frag1 = data[i, 0]
+            frag2 = data[i, 1]
+            correction = corrections[frag1, 0] * corrections[frag2, 0] * counts[i]
+            v[frag1, 0] += correction
+            v[frag2, 0] += correction
+        for i in range(num_trans):
+            frag1 = trans_data[i, 0]
+            frag2 = trans_data[i, 1]
+            correction = corrections[frag1, 0] * corrections[frag2, 0] * trans_counts[i]
+            v[frag1, 0] += correction
+            v[frag2, 0] += correction
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_w(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=2] trans_data,
+        np.ndarray[DTYPE_64_t, ndim=1] counts,
+        np.ndarray[DTYPE_64_t, ndim=1] trans_counts,
+        np.ndarray[DTYPE_64_t, ndim=2] corrections,
+        np.ndarray[DTYPE_64_t, ndim=2] p,
+        np.ndarray[DTYPE_64_t, ndim=2] w):
+    cdef long long int i, frag1, frag2, num_data, num_trans_data
+    cdef double correction
+    if not data is None:
+        num_data = data.shape[0]
+    else:
+        num_data = 0
+    if not trans_data is None:
+        num_trans = trans_data.shape[0]
+    else:
+        num_trans = 0
+    with nogil:
+        for i in range(num_data):
+            frag1 = data[i, 0]
+            frag2 = data[i, 1]
+            correction = corrections[frag1, 0] * corrections[frag2, 0] * counts[i]
+            w[frag1, 0] += correction * p[frag2, 0]
+            w[frag2, 0] += correction * p[frag1, 0]
+        for i in range(num_trans):
+            frag1 = trans_data[i, 0]
+            frag2 = trans_data[i, 1]
+            correction = corrections[frag1, 0] * corrections[frag2, 0] * trans_counts[i]
+            w[frag1, 0] += correction * p[frag2, 0]
+            w[frag2, 0] += correction * p[frag1, 0]
+    return None

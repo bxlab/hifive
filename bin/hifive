@@ -280,6 +280,10 @@ def add_fivec_express_group(subparser):
         action='store_true', help="Remove the distant-dependent portion of the signal prior to learning corrections with the express algorithm. [default: %(default)s]")
     subparser.add_argument("-w", "--express-reads", dest="expreads", required=False, type=str, default='cis',
         choices=['cis', 'trans', 'all'], help="Which set of reads to use for express normalization. [default: %(default)s]")
+    subparser.add_argument("-k", "--logged", dest="logged", required=False, default=False,
+        action='store_true', help="Use log counts. [default: %(default)s]")
+    subparser.add_argument("-z", "--knight-ruiz", dest="kr", required=False, default=False,
+        action='store_true', help="Use Knight-Ruiz algorithm for unweighted matrix balancing. [default: %(default)s]")
     return
 
 def add_fivec_binning_group(subparser):
@@ -450,7 +454,7 @@ def add_hicproject_subparser(subparsers):
     parser.add_argument("-j", "--min-binsize", dest="minbin", required=False, type=int, default=1000,
         action='store', help="The smallest interaction distance bin size for the distance-dependence function. [default: %(default)s]")
     parser.add_argument("-n", "--num-bins", dest="numbins", required=False, type=int, default=100,
-        action='store', help="The number of bins to partion the interaction distance range into for distance-dependence function. [default: %(default)s]")
+        action='store', help="The number of bins to partion the interaction distance range into for distance-dependence function. A value of zero indicates that finding the distance dependence function should be skipped. [default: %(default)s]")
     parser.add_argument(dest="data", type=str,
         help="The file name of an appropriate HiFive HiCData file.")
     parser.add_argument(dest="output", type=str,
@@ -539,7 +543,7 @@ def add_complete_hic_group(subparser):
     subparser.add_argument("-j", "--min-binsize", dest="minbin", required=False, type=int, default=1000,
         action='store', help="The smallest interaction distance bin size for the distance-dependence function. [default: %(default)s]")
     subparser.add_argument("-n", "--num-bins", dest="numbins", required=False, type=int, default=100,
-        action='store', help="The number of bins to partion the interaction distance range into for distance-dependence function. [default: %(default)s]")
+        action='store', help="The number of bins to partion the interaction distance range into for distance-dependence function. A value of zero indicates that finding the distance dependence function should be skipped. [default: %(default)s]")
     add_silent_argument(subparser)
     outfile_group = subparser.add_mutually_exclusive_group(required=True)
     outfile_group.add_argument("-P", "--prefix", dest="prefix", type=str, default=None,
@@ -585,6 +589,10 @@ def add_hic_express_group(subparser):
         action='store_true', help="Remove the distant-dependent portion of the signal prior to learning corrections with the express algorithm. [default: %(default)s]")
     subparser.add_argument("-w", "--express-reads", dest="expreads", required=False, type=str, default='cis',
         choices=['cis', 'trans', 'all'], help="Which set of reads to use for express normalization. [default: %(default)s]")
+    subparser.add_argument("-k", "--binary", dest="binary", required=False, default=False,
+        action='store_true', help="Use binary indicator instead of counts. [default: %(default)s]")
+    subparser.add_argument("-z", "--knight-ruiz", dest="kr", required=False, default=False,
+        action='store_true', help="Use Knight-Ruiz algorithm for unweighted matrix balancing. [default: %(default)s]")
     return
 
 def add_hic_binning_group(subparser):
@@ -597,10 +605,12 @@ def add_hic_binning_group(subparser):
         choices=['cis', 'trans', 'all'], help="Which set of reads to use for binning normalization. [default: %(default)s]")
     subparser.add_argument("-v", "--model", dest="model", required=False, type=str, default="len,distance",
         action='store', help="A comma-separated list of parameters to include in binning model. [default: %(default)s]")
-    subparser.add_argument("-z", "--model-bins", dest="modelbins", required=False, type=str, default="20,20",
+    subparser.add_argument("-s", "--model-bins", dest="modelbins", required=False, type=str, default="20,20",
         action='store', help="A comma-separated list of the number of bins to separate model parameters into. [default: %(default)s]")
     subparser.add_argument("-u", "--parameter-types", dest="parameters", required=False, type=str, default="even,fixed-const",
         action='store', help="A comma-separated list parameter types ('even' or 'fixed', depending on whether bins should contain equal numbers of fends or be equally spaced along the parameter range, and a '-const' suffix to indicate the values are not to be optimized). [default: %(default)s]")
+    subparser.add_argument("--pseudocounts", dest="pseudo", required=False, type=int, default=None,
+        action='store', help="The number of pseudo-counts to add to each bin prior to learning. [default: %(default)s]")
     return
 
 def add_hic_combine_replicates_subparser(subparsers):

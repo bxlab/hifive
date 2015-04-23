@@ -178,7 +178,8 @@ def find_nonzero_node_indices(
         np.ndarray[DTYPE_int_t, ndim=1] indices0,
         np.ndarray[DTYPE_int_t, ndim=1] indices1,
         np.ndarray[DTYPE_int_t, ndim=1] counts,
-        np.ndarray[DTYPE_int_t, ndim=2] data):
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int_t, ndim=1] interactions):
     cdef long long int i, j
     cdef long long int num_data = data.shape[0]
     with nogil:
@@ -190,6 +191,8 @@ def find_nonzero_node_indices(
                 indices0[i] = data[j, 0]
                 indices1[i] = data[j, 1]
                 counts[i] = data[j, 2]
+                interactions[data[j, 0]] += 1
+                interactions[data[j, 1]] += 1
                 i += 1
     return None
 
@@ -204,6 +207,7 @@ def find_zero_node_indices(
         np.ndarray[DTYPE_int_t, ndim=1] nzindices1,
         np.ndarray[DTYPE_int_t, ndim=1] zindices0,
         np.ndarray[DTYPE_int_t, ndim=1] zindices1,
+        np.ndarray[DTYPE_int_t, ndim=1] interactions,
         long long int start,
         long long int stop,
         int startfend):
@@ -225,6 +229,8 @@ def find_zero_node_indices(
                 elif nzpos == num_nz or nzindices1[nzpos] != j or nzindices0[nzpos] != i:
                     zindices0[zpos] = i
                     zindices1[zpos] = j
+                    interactions[i] += 1
+                    interactions[j] += 1
                     zpos += 1
     return None
 
@@ -321,3 +327,29 @@ def find_distancebound_possible_interactions(
                                 total -= filter[j + 2]
                     interactions[j] += total
     return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def sum_weighted_indices(
+        np.ndarray[DTYPE_int_t, ndim=1] indices0,
+        np.ndarray[DTYPE_int_t, ndim=1] indices1,
+        np.ndarray[DTYPE_t, ndim=1] weights,
+        np.ndarray[DTYPE_64_t, ndim=1] sums):
+    cdef long long int i
+    cdef long long int num_indices = indices0.shape[0]
+    with nogil:
+        if not weights is None:
+            for i in range(num_indices):
+                sums[indices0[i]] += weights[i]
+                sums[indices1[i]] += weights[i]
+        else:
+            for i in range(num_indices):
+                sums[indices0[i]] += 1
+                sums[indices1[i]] += 1
+    return None
+
+
+
+

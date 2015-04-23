@@ -21,3 +21,5 @@ HiC data cover a wide range of interaction distances and while portions of the d
 .. image:: _static/hic_distance.png
 
 The log-distance range covered by interactions is divided into equal-sized bins and the mean signal and mean log-distance are calculated for each bin. Finally, a series of line segments connecting adjacent log-mean signal and mean log-distance points are calculated. When estimating the expected distance-dependent signal for a given log-distance, HiFive uses the line segment spanning the query log-distance value. If the value falls before the first mean log-distance or after the last mean log-distance, the nearest line segment equation is used to infer the expected signal.
+
+The same strategy is used to simultaneously estimate a distance-dependence relationship between log-distance and a binary indicator of observed/unobserved instead of counts.

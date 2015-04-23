@@ -156,7 +156,8 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         start_indices = numpy.searchsorted(binbounds[:, 0], mids[valid], side='right') - 1
         stop_indices = numpy.searchsorted(binbounds[:, 1], mids[valid], side='right')
         where = numpy.where(start_indices == stop_indices)[0]
-        mapping[valid[where]] = start_indices[where]
+        valid = valid[where]
+        mapping[valid] = start_indices[where]
         num_bins = binbounds.shape[0]
     else:
         mapping[valid] = (mids[valid] - start) / binsize
@@ -178,7 +179,6 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     # If correction is required, determine what type and get appropriate data
     corrections = None
     binning_corrections = None
-    correction_indices = None
     binning_num_bins = None
     fend_indices = None
     if datatype in ['fend', 'enrichment', 'expected']:
@@ -186,9 +186,12 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             corrections = hic.corrections[startfend:stopfend]
         if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
             binning_corrections = hic.binning_corrections
-            correction_indices = hic.binning_correction_indices
             binning_num_bins = hic.binning_num_bins
             fend_indices = hic.binning_fend_indices
+        if hic.normalization in ['express', 'probability'] and datatype == 'fend':
+            correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid]).astype(numpy.float64)
+        else:
+            correction_sums = None
     if datatype in ['distance', 'enrichment', 'expected']:
         distance_parameters = hic.distance_parameters
         chrom_mean = hic.chromosome_means[chrint]
@@ -203,9 +206,9 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     # Fill in data values
     if arraytype == 'compact':
         if datatype != 'raw':
-            _hic_binning.find_cis_compact_expected(mapping, corrections, binning_corrections, correction_indices,
+            _hic_binning.find_cis_compact_expected(mapping, corrections, binning_corrections,
                                                    binning_num_bins, fend_indices, mids, distance_parameters,
-                                                   max_fend, data_array, chrom_mean, startfend)
+                                                   max_fend, data_array, correction_sums, chrom_mean, startfend)
         if datatype != 'expected':
             _hic_binning.find_cis_compact_observed(data, data_indices, mapping, max_fend, data_array)
         else:
@@ -216,9 +219,9 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             data_array[where[0], where[1], 1] = 1.0
     else:
         if datatype != 'raw':
-            _hic_binning.find_cis_upper_expected(mapping, corrections, binning_corrections, correction_indices,
+            _hic_binning.find_cis_upper_expected(mapping, corrections, binning_corrections,
                                                  binning_num_bins, fend_indices, mids, distance_parameters,
-                                                 max_fend, data_array, chrom_mean, startfend)
+                                                 max_fend, data_array, correction_sums, chrom_mean, startfend)
         if datatype != 'expected':
             _hic_binning.find_cis_upper_observed(data, data_indices, mapping, max_fend, data_array)
         else:
@@ -625,7 +628,8 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         start_indices = numpy.searchsorted(binbounds1[:, 0], mids1[valid1], side='right') - 1
         stop_indices = numpy.searchsorted(binbounds1[:, 1], mids1[valid1], side='right')
         where = numpy.where(start_indices == stop_indices)[0]
-        mapping1[valid1[where]] = start_indices[where]
+        valid1 = valid1[where]
+        mapping1[valid1] = start_indices[where]
         num_bins1 = binbounds1.shape[0]
     else:
         mapping1[valid1] = (mids1[valid1] - start1) / binsize
@@ -641,7 +645,8 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         start_indices = numpy.searchsorted(binbounds2[:, 0], mids2[valid2], side='right') - 1
         stop_indices = numpy.searchsorted(binbounds2[:, 1], mids2[valid2], side='right')
         where = numpy.where(start_indices == stop_indices)[0]
-        mapping2[valid2[where]] = start_indices[where]
+        valid2 = valid2[where]
+        mapping2[valid2] = start_indices[where]
         num_bins2 = binbounds2.shape[0]
     else:
         mapping2[valid2] = (mids2[valid2] - start2) / binsize
@@ -655,7 +660,6 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     corrections1 = None
     corrections2 = None
     binning_corrections = None
-    correction_indices = None
     binning_num_bins = None
     fend_indices = None
     if datatype in ['fend', 'enrichment', 'expected']:
@@ -664,9 +668,14 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
             corrections2 = hic.corrections[startfend2:stopfend2]
         if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
             binning_corrections = hic.binning_corrections
-            correction_indices = hic.binning_correction_indices
             binning_num_bins = hic.binning_num_bins
             fend_indices = hic.binning_fend_indices
+        if hic.normalization in ['express', 'probability'] and datatype == 'fend':
+            correction_sums1 = numpy.bincount(mapping1[valid1], weights=corrections1[valid1]).astype(numpy.float64)
+            correction_sums2 = numpy.bincount(mapping2[valid2], weights=corrections2[valid2]).astype(numpy.float64)
+        else:
+            correction_sums1 = None
+            correction_sums2 = None
     if datatype in ['distance', 'enrichment', 'expected']:
         if 'trans_means' not in hic.__dict__.keys():
             hic.find_trans_means()
@@ -686,15 +695,15 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     if chrint1 < chrint2:
         if datatype != 'raw':
             _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, binning_corrections,
-                                             correction_indices, binning_num_bins, fend_indices, data_array,
-                                             trans_mean, startfend1, startfend2)
+                                             binning_num_bins, fend_indices, data_array,
+                                             correction_sums1, correction_sums2, trans_mean, startfend1, startfend2)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping1, mapping2, data_array)
     else:
         if datatype != 'raw':
             _hic_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, binning_corrections,
-                                             correction_indices, binning_num_bins, fend_indices, data_array,
-                                             trans_mean, startfend2, startfend1)
+                                             binning_num_bins, fend_indices, data_array,
+                                             correction_sums2, correction_sums1, trans_mean, startfend2, startfend1)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping2, mapping1, data_array)
     if chrint2 < chrint1:

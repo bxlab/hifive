@@ -31,7 +31,7 @@ class HiCProject(unittest.TestCase):
         self.compare_hdf5_dicts(self.data, project, 'project')
 
     def test_hic_project_probability(self):
-        subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 100 -l 0.4 -g 0.0015 -p %s" %
+        subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 10 -l 0.4 -g 0.0015 -p %s" %
                         (self.project_fname), shell=True)
         project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
@@ -49,7 +49,7 @@ class HiCProject(unittest.TestCase):
             "chromosome means don't match target values")
 
     def test_hic_project_binning(self):
-        subprocess.call("./bin/hifive hic-normalize binning -q -m 20000 -o test/data/test_temp.hcp -r 5 -y cis -t 1.0 -v len,distance -z 3,3 -u even,fixed-const %s" %
+        subprocess.call("./bin/hifive hic-normalize binning -q -m 20000 -o test/data/test_temp.hcp -r 5 -y cis -t 1.0 -v len,distance -s 3,3 -u even,fixed-const %s" %
                         (self.project_fname), shell=True)
         project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
         self.assertTrue(numpy.allclose(self.binning.binning_corrections, project.binning_corrections),

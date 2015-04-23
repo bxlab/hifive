@@ -97,7 +97,7 @@ Options:
 ::
 
   > hifive 5c-normalize <SUBCOMMAND> [-h] [-m MINDIST] [-x MAXDIST]
-        [-r REGIONS] [-o OUTPUT] [-q] [subcommand options] project
+        [-r REGIONS] [-o OUTPUT] [-q] [normalization options] project
 
 HiFive's 5C normalization subcommand allows the user to select the normalization approach to use. Each approach has its own set of options.
 
@@ -123,7 +123,7 @@ probability, express, binning, probability-binning, express-binning, binning-pro
   > hifive 5c-complete <SUBCOMMAND> [-h] [-r RE] [-g GENOME]
         (-B BAM BAM | -C COUNT) [-f MININT] [-m MINDIST] [-x MAXDIST]
         [-r REGIONS] (-o OUTPUT OUTPUT OUTPUT | -P PREFIX) [-q]
-        [subcommand options] bed
+        [normalization options] bed
 
 HiFive's complete 5C analysis subcommand allows the user to select the normalization approach to use. Each approach has its own set of options.
 
@@ -253,6 +253,8 @@ Universal Options:
 -e, --express-iterations int  The number of iterations to run the learning process for. [1000]
 -d, --remove-distance         Calculate and subtract out the predicted distance-dependence signal from each log-count prior to learning correction parameters.
 -w, --express-reads str       Which set reads to use for learning correction parameter values, cis, trans, or all. [cis]
+-k, --logged                  Use log-counts instead of counts for learning.
+-z, --knight-ruiz             Use the Knight Ruiz matrix balancing algorithm instead of weighted matrix balancing. This option ignores 'iterations' and 'logged'.
 
 5C Binning Options:
 
@@ -377,7 +379,7 @@ This command is MPI-compatible.
 
   > [mpirun -np NP] hifive hic-normalize <SUBCOMMAND> [-h] [-m MINDIST]
                         [-x MAXDIST] [-c CHROMS] [-o OUTPUT] [-q]
-                        [subcommand options] project
+                        [normalization options] project
 
 HiFive's HiC normalization subcommand allows the user to select the normalization approach to use. Each approach has its own set of options.
 
@@ -408,7 +410,7 @@ This command is MPI-compatible.
                         [-f MININT] [-m MINDIST] [-x MAXDIST]
                         [-j MINBIN] [-n NUMBINS] [-c CHROMS]
                         (-o OUTPUT OUTPUT OUTPUT | -P PREFIX) [-q]
-                        [subcommand options]
+                        [normalization options]
 
 HiFive's complete HiC analysis subcommand allows the user to select the normalization approach to use. Each approach has its own set of options.
 
@@ -515,7 +517,7 @@ HiC Project Options:
 -m, --min-distance int      The minimum distance between fend midpoints to include in calculating numbers of interactions for fend filtering and (if called by hic-normalization or hic-complete) the minimum interaction distance included in learning correction parameter values. [0]
 -x, --max-distance int      The maximum distance between fend midpoints to include in calculating numbers of interactions for fend filtering and (if called by hic-normalization or hic-complete) the maximum interaction distance included in learning correction parameter values. A value of zero indicates no maximum distance cutoff. [0]
 -j, --min-binsize int       The cutoff size limit for the smallest distance bin used for estimating the distance dependence (see `HiC Distance Dependence Estimation <distance_dependence.html>`_ for more information). [1000]
--n, --num-bins int          The number of bins to partition the interaction size ranges into for estimating the distance dependence function (see `HiC Distance Dependence Estimation <distance_dependence.html>`_ for more information).
+-n, --num-bins int          The number of bins to partition the interaction size ranges into for estimating the distance dependence function (see `HiC Distance Dependence Estimation <distance_dependence.html>`_ for more information). A value of zero indicates that finding the distance dependence function should be skipped.
 
 HiC Normalization Options:
 
@@ -542,7 +544,10 @@ HiC Express Options:
 -e, --express-iterations int  The number of iterations to run the learning process for. [1000]
 -d, --remove-distance         Calculate and divide out the predicted distance-dependence signal from each count prior to learning correction parameters.
 -w, --express-reads str       Which set reads to use for learning correction parameter values, cis, trans, or all. [cis]
+-g, --min-change              The minimum mean change in fend correction parameter values needed to keep running past 'iterations' number of iterations. If using the Knight-Ruiz algorithm this is the residual cutoff.
 -f, --min-interations int     The minimum number of interactions for fend filtering if refiltering is required due to distance cutoff parameters or selected reads to be used. [20]
+-k, --binary bool             Use binary indicator instead of counts.
+-z, --knight-ruiz bool        Use the Knight Ruiz matrix balancing algorithm instead of weighted matrix balancing. This option ignores 'iterations'.
 
 HiC Binning Options:
 
@@ -550,8 +555,9 @@ HiC Binning Options:
 -t, --learning-threshold dec  The maximum change in log-likelihood necessary to stop the learning process early. [1.0]
 -y, --binning-reads str       Which set of reads to use for learning correction parameter values, cis, trans, or all. [cis]
 -v, --model str               A comma-separated list of fend features to calculate corrections for. Acceptable features are len (length), distance, and any features loaded in the BED or FEND file used to create the HiFive fend file. [len,distance]
--n, --model-bins str          A comma-separated list of numbers of bins to partition fend features into for modeling. [20,20]
+-s, --model-bins str          A comma-separated list of numbers of bins to partition fend features into for modeling. [20,20]
 -u, --parameter-types str     A comma-separated list of model parameter types. Acceptable values are even, fixed, even-const, and fixed-const. Even means that fend features are partitioned such that each bin has approximately even numbers of fends. Fixed means that the range of the feature is divided into fixed-width bins. The -const suffix indicates that the correction values are held at their seed-values and not updated. [even,fixed-const]
+--pseudocounts int            The number of pseudo-counts to add to each bin prior to seeding and learning normalization values. [None]
 
 HiC Interaction Binning Options
 ++++++++++++++++++++++++++++++++

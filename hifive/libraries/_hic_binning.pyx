@@ -92,74 +92,97 @@ def find_cis_compact_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections,
         np.ndarray[DTYPE_t, ndim=1] binning_corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
         np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
-        np.ndarray[DTYPE_int_t, ndim=2] fend_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_t, ndim=2] parameters,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
+        np.ndarray[DTYPE_64_t, ndim=1] correction_sums,
         double chrom_mean,
         int startfend):
-    cdef long long int fend1, fend2, j, k, map1, map2, bin1, bin2, index, num_parameters
+    cdef long long int fend1, fend2, afend1, afend2, j, k, map1, map2, index, num_parameters, num_bins, max_bin
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
     if not fend_indices is None:
         num_parameters = fend_indices.shape[1]
     else:
         num_parameters = 0
+    if not correction_sums is None:
+        num_bins = correction_sums.shape[0]
+        max_bin = signal.shape[1]
     with nogil:
-        for fend1 in range(num_fends - 1):
-            map1 = mapping[fend1]
-            if map1 == -1:
-                continue
-            k = 0
-            # find opposite strand adjacents, skipping same fragment and same strand adjacents
-            fend2 = fend1 + 2
-            map2 = mapping[fend2]
-            if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
-                 # give starting expected value
-                value = 1.0
-                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
-                if not corrections is None:
-                    value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
-                if not binning_corrections is None:
-                    for j in range(num_parameters):
-                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
-                        value *= binning_corrections[index]
-                # if finding distance, enrichment, or expected, correct for distance
-                if not parameters is None:
-                    distance = log(mids[fend2] - mids[fend1])
-                    while distance > parameters[k, 0]:
-                        k += 1
-                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[map1, map2 - map1 - 1, 1] += value
-            for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
-                map2 = mapping[fend2]
-                if map2 == -1 or map2 == map1:
+        if correction_sums is None:
+            for fend1 in range(num_fends - 1):
+                map1 = mapping[fend1]
+                if map1 == -1:
                     continue
-                 # give starting expected value
-                value = 1.0
-                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
-                if not corrections is None:
-                    value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
-                if not binning_corrections is None:
-                    for j in range(num_parameters):
-                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
-                        value *= binning_corrections[index]
-                # if finding distance, enrichment, or expected, correct for distance
-                if not parameters is None:
-                    distance = log(mids[fend2] - mids[fend1])
-                    while distance > parameters[k, 0]:
-                        k += 1
-                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[map1, map2 - map1 - 1, 1] += value
+                k = 0
+                # find opposite strand adjacents, skipping same fragment and same strand adjacents
+                fend2 = fend1 + 2
+                map2 = mapping[fend2]
+                if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
+                     # give starting expected value
+                    value = 1.0
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections is None:
+                        value *= corrections[fend1] * corrections[fend2]
+                    # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                    if not binning_corrections is None:
+                        for j in range(num_parameters):
+                            afend1 = fend1 + startfend
+                            afend2 = fend2 + startfend
+                            if fend_indices[afend1, j, 0] < fend_indices[afend2, j, 0]:
+                                value *= binning_corrections[fend_indices[afend1, j, 1] + fend_indices[afend2, j, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
+                    # if finding distance, enrichment, or expected, correct for distance
+                    if not parameters is None:
+                        distance = log(mids[fend2] - mids[fend1])
+                        while distance > parameters[k, 0]:
+                            k += 1
+                        value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                    signal[map1, map2 - map1 - 1, 1] += value
+                for fend2 in range(((fend1 + startfend) / 2) * 2 + 4 - startfend, min(max_fend[fend1], num_fends)):
+                    map2 = mapping[fend2]
+                    if map2 == -1 or map2 == map1:
+                        continue
+                     # give starting expected value
+                    value = 1.0
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections is None:
+                        value *= corrections[fend1] * corrections[fend2]
+                    # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                    if not binning_corrections is None:
+                        for j in range(num_parameters):
+                            afend1 = fend1 + startfend
+                            afend2 = fend2 + startfend
+                            if fend_indices[afend1, j, 0] < fend_indices[afend2, j, 0]:
+                                value *= binning_corrections[fend_indices[afend1, j, 1] + fend_indices[afend2, j, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
+                    # if finding distance, enrichment, or expected, correct for distance
+                    if not parameters is None:
+                        distance = log(mids[fend2] - mids[fend1])
+                        while distance > parameters[k, 0]:
+                            k += 1
+                        value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                    signal[map1, map2 - map1 - 1, 1] += value
+        else:
+            for j in range(num_bins - 1):
+                for k in range(j + 1, min(num_bins, j + max_bin + 1)):
+                    signal[j, k - j - 1, 1] += correction_sums[j] * correction_sums[k]
+            for fend1 in range(num_fends - 1):
+                map1 = mapping[fend1]
+                if map1 == -1:
+                    continue
+                map2 = mapping[fend1 + 1]
+                if map2 > map1:
+                    signal[map1, map2, 1] -= corrections[fend1] * corrections[fend1 + 1]
+                if (fend1 + startfend) % 2 == 0 and fend1 + 3 < num_fends:
+                    map2 = mapping[fend1 + 3]
+                    if map2 > map1:
+                        signal[map1, map2, 1] -= corrections[fend1] * corrections[fend1 + 3]
     return None
 
 
@@ -170,16 +193,16 @@ def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_t, ndim=1] corrections,
         np.ndarray[DTYPE_t, ndim=1] binning_corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
         np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
-        np.ndarray[DTYPE_int_t, ndim=2] fend_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_t, ndim=2] parameters,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
+        np.ndarray[DTYPE_64_t, ndim=1] correction_sums,
         double chrom_mean,
         int startfend):
-    cdef long long int fend1, fend2, j, k, index, map1, map2, bin1, bin2, index2, num_parameters
+    cdef long long int fend1, fend2, afend1, afend2, j, k, index, map1, map2, index2, num_parameters
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
@@ -188,58 +211,80 @@ def find_cis_upper_expected(
     else:
         num_parameters = 0
     with nogil:
-        for fend1 in range(num_fends - 1):
-            map1 = mapping[fend1]
-            if map1 == -1:
-                continue
-            k = 0
-            index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
-            # find opposite strand adjacents, skipping same fragment and same strand adjacents
-            fend2 = fend1 + 2
-            map2 = mapping[fend2]
-            if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
-                 # give starting expected value
-                value = 1.0
-                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
-                if not corrections is None:
-                    value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
-                if not binning_corrections is None:
-                    for j in range(num_parameters):
-                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        index2 = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
-                        value *= binning_corrections[index2]
-                # if finding distance, enrichment, or expected, correct for distance
-                if not parameters is None:
-                    distance = log(mids[fend2] - mids[fend1])
-                    while distance > parameters[k, 0]:
-                        k += 1
-                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[index + map2, 1] += value
-            for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
-                map2 = mapping[fend2]
-                if map2 == -1 or map2 == map1:
+        if correction_sums is None:
+            for fend1 in range(num_fends - 1):
+                map1 = mapping[fend1]
+                if map1 == -1:
                     continue
-                 # give starting expected value
-                value = 1.0
-                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
-                if not corrections is None:
-                    value *= corrections[fend1] * corrections[fend2]
-                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
-                if not binning_corrections is None:
-                    for j in range(num_parameters):
-                        bin1 = min(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        bin2 = max(fend_indices[fend1 + startfend, j], fend_indices[fend2 + startfend, j]) 
-                        index2 = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
-                        value *= binning_corrections[index2]
-                # if finding distance, enrichment, or expected, correct for distance
-                if not parameters is None:
-                    distance = log(mids[fend2] - mids[fend1])
-                    while distance > parameters[k, 0]:
-                        k += 1
-                    value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                signal[index + map2, 1] += value
+                k = 0
+                index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
+                # find opposite strand adjacents, skipping same fragment and same strand adjacents
+                fend2 = fend1 + 2
+                map2 = mapping[fend2]
+                if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
+                     # give starting expected value
+                    value = 1.0
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections is None:
+                        value *= corrections[fend1] * corrections[fend2]
+                    # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                    if not binning_corrections is None:
+                        for j in range(num_parameters):
+                            afend1 = fend1 + startfend
+                            afend2 = fend2 + startfend
+                            if fend_indices[afend1, j, 0] < fend_indices[afend2, j, 0]:
+                                value *= binning_corrections[fend_indices[afend1, j, 1] + fend_indices[afend2, j, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
+                    # if finding distance, enrichment, or expected, correct for distance
+                    if not parameters is None:
+                        distance = log(mids[fend2] - mids[fend1])
+                        while distance > parameters[k, 0]:
+                            k += 1
+                        value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                    signal[index + map2, 1] += value
+                for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
+                    map2 = mapping[fend2]
+                    if map2 == -1 or map2 == map1:
+                        continue
+                     # give starting expected value
+                    value = 1.0
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections is None:
+                        value *= corrections[fend1] * corrections[fend2]
+                    # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                    if not binning_corrections is None:
+                        for j in range(num_parameters):
+                            afend1 = fend1 + startfend
+                            afend2 = fend2 + startfend
+                            if fend_indices[afend1, j, 0] < fend_indices[afend2, j, 0]:
+                                value *= binning_corrections[fend_indices[afend1, j, 1] + fend_indices[afend2, j, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
+                    # if finding distance, enrichment, or expected, correct for distance
+                    if not parameters is None:
+                        distance = log(mids[fend2] - mids[fend1])
+                        while distance > parameters[k, 0]:
+                            k += 1
+                        value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                    signal[index + map2, 1] += value
+        else:
+            for j in range(num_bins - 1):
+                index = j * (num_bins - 1) - j * (j + 1) / 2 - 1
+                for k in range(j + 1, num_bins):
+                    signal[index + k, 1] += correction_sums[j] * correction_sums[k]
+            for fend1 in range(num_fends - 1):
+                map1 = mapping[fend1]
+                if map1 == -1:
+                    continue
+                index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
+                map2 = mapping[fend1 + 1]
+                if map2 > map1:
+                    signal[index + map2, 1] -= corrections[fend1] * corrections[fend1 + 1]
+                if (fend1 + startfend) % 2 == 0 and fend1 + 3 < num_fends:
+                    map2 = mapping[fend1 + 3]
+                    if map2 > map1:
+                        signal[index + map2, 1] -= corrections[fend1] * corrections[fend1 + 3]
     return None
 
 
@@ -999,14 +1044,15 @@ def find_trans_expected(
         np.ndarray[DTYPE_t, ndim=1] corrections1,
         np.ndarray[DTYPE_t, ndim=1] corrections2,
         np.ndarray[DTYPE_t, ndim=1] binning_corrections,
-        np.ndarray[DTYPE_int_t, ndim=1] correction_indices,
         np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
-        np.ndarray[DTYPE_int_t, ndim=2] fend_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
+        np.ndarray[DTYPE_64_t, ndim=1] correction_sums1,
+        np.ndarray[DTYPE_64_t, ndim=1] correction_sums2,
         double trans_mean,
         int startfend1,
         int startfend2):
-    cdef long long int j, fend1, fend2, map1, map2, bin1, bin2, index, num_parameters
+    cdef long long int j, fend1, fend2, afend1, afend2, map1, map2, index, num_parameters, num_bins1, num_bins2
     cdef double value
     cdef long long int num_fends1 = mapping1.shape[0]
     cdef long long int num_fends2 = mapping2.shape[0]
@@ -1014,28 +1060,38 @@ def find_trans_expected(
         num_parameters = fend_indices.shape[1]
     else:
         num_parameters = 0
+    if not correction_sums1 is None:
+        num_bins1 = correction_sums1.shape[0]
+        num_bins2 = correction_sums2.shape[0]
     with nogil:
-        for fend1 in range(num_fends1 - 1):
-            map1 = mapping1[fend1]
-            if map1 == -1:
-                continue
-            for fend2 in range(num_fends2):
-                map2 = mapping2[fend2]
-                if map2 == -1:
+        if correction_sums1 is None:
+            for fend1 in range(num_fends1 - 1):
+                map1 = mapping1[fend1]
+                if map1 == -1:
                     continue
-                 # give starting expected value
-                value = trans_mean
-                # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
-                if not corrections1 is None:
-                    value *= corrections1[fend1] * corrections2[fend2]
-                # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
-                if not binning_corrections is None:
-                    for j in range(num_parameters):
-                        bin1 = min(fend_indices[fend1 + startfend1, j], fend_indices[fend2 + startfend2, j]) 
-                        bin2 = max(fend_indices[fend1 + startfend1, j], fend_indices[fend2 + startfend2, j]) 
-                        index = bin1 * (binning_num_bins[j] - 1) - bin1 * (bin1 - 1) / 2 + bin2 + correction_indices[j]
-                        value *= binning_corrections[index]
-                signal[map1, map2, 1] += value
+                for fend2 in range(num_fends2):
+                    map2 = mapping2[fend2]
+                    if map2 == -1:
+                        continue
+                     # give starting expected value
+                    value = trans_mean
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections1 is None:
+                        value *= corrections1[fend1] * corrections2[fend2]
+                    # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                    if not binning_corrections is None:
+                        for j in range(num_parameters):
+                            afend1 = fend1 + startfend1
+                            afend2 = fend2 + startfend2
+                            if fend_indices[afend1, j, 0] < fend_indices[afend2, j, 0]:
+                                value *= binning_corrections[fend_indices[afend1, j, 1] + fend_indices[afend2, j, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
+                    signal[map1, map2, 1] += value
+        else:
+            for fend1 in range(num_bins1):
+                for fend2 in range(num_bins2):
+                    signal[fend1, fend2, 1] += trans_mean * correction_sums1[fend1] * correction_sums2[fend2]
     return None
 
 
@@ -1144,7 +1200,7 @@ def binning_bin_cis_observed(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
         np.ndarray[DTYPE_int_t, ndim=1] num_bins,
         np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
@@ -1152,7 +1208,7 @@ def binning_bin_cis_observed(
         int distance_bins,
         int mindistance,
         int maxdistance):
-    cdef long long int i, j, k, distance, fend1, fend2, index, bin1, bin2, prev_fend
+    cdef long long int i, j, k, distance, fend1, fend2, index, prev_fend
     cdef long long int num_data = data.shape[0]
     cdef long long int num_features = all_indices.shape[1]
     with nogil:
@@ -1172,9 +1228,10 @@ def binning_bin_cis_observed(
                 continue
             index = 0
             for j in range(num_features):
-                bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
-                bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
-                index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
+                if all_indices[fend1, j, 0] < all_indices[fend2, j, 0]:
+                    index += (all_indices[fend1, j, 1] + all_indices[fend2, j, 0]) * bin_divs[j]
+                else:
+                    index += (all_indices[fend2, j, 1] + all_indices[fend1, j, 0]) * bin_divs[j]
             if distance_div > 0:
                 while distance > distance_cutoffs[k]:
                     k += 1
@@ -1190,7 +1247,7 @@ def binning_bin_cis_expected(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] distance_cutoffs,
         np.ndarray[DTYPE_int_t, ndim=1] num_bins,
         np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
@@ -1201,7 +1258,7 @@ def binning_bin_cis_expected(
         int startfend,
         int stopfend,
         int maxfend):
-    cdef long long int i, j, k, distance, fend1, fend2, index, bin1, bin2
+    cdef long long int i, j, k, distance, fend1, fend2, index
     cdef long long int num_features = all_indices.shape[1]
     with nogil:
         for fend1 in range(startfend, min(stopfend, maxfend - 2)):
@@ -1213,9 +1270,10 @@ def binning_bin_cis_expected(
             if filt[fend2] == 1 and distance >= mindistance and distance <= maxdistance:
                 index = 0
                 for j in range(num_features):
-                    bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
-                    bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
-                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
+                    if all_indices[fend1, j, 0] < all_indices[fend2, j, 0]:
+                        index += (all_indices[fend1, j, 1] + all_indices[fend2, j, 0]) * bin_divs[j]
+                    else:
+                        index += (all_indices[fend2, j, 1] + all_indices[fend1, j, 0]) * bin_divs[j]
                 if distance_div > 0:
                     while distance > distance_cutoffs[k]:
                         k += 1
@@ -1229,9 +1287,10 @@ def binning_bin_cis_expected(
                     continue
                 index = 0
                 for j in range(num_features):
-                    bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
-                    bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
-                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
+                    if all_indices[fend1, j, 0] < all_indices[fend2, j, 0]:
+                        index += (all_indices[fend1, j, 1] + all_indices[fend2, j, 0]) * bin_divs[j]
+                    else:
+                        index += (all_indices[fend2, j, 1] + all_indices[fend1, j, 0]) * bin_divs[j]
                 if distance_div > 0:
                     while distance > distance_cutoffs[k]:
                         k += 1
@@ -1247,12 +1306,12 @@ def binning_bin_trans_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] num_bins,
         np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
         int distance_bins):
-    cdef long long int i, j, fend1, fend2, index, bin1, bin2
+    cdef long long int i, j, fend1, fend2, index
     cdef long long int num_data = data.shape[0]
     cdef long long int num_features = all_indices.shape[1]
     with nogil:
@@ -1265,9 +1324,10 @@ def binning_bin_trans_observed(
                 continue
             index = 0
             for j in range(num_features):
-                bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
-                bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
-                index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
+                if all_indices[fend1, j, 0] < all_indices[fend2, j, 0]:
+                    index += (all_indices[fend1, j, 1] + all_indices[fend2, j, 0]) * bin_divs[j]
+                else:
+                    index += (all_indices[fend2, j, 1] + all_indices[fend1, j, 0]) * bin_divs[j]
             if distance_div > 0:
                 index += (distance_bins - 1) * distance_div
             counts[index, 0] += 1
@@ -1280,7 +1340,7 @@ def binning_bin_trans_observed(
 def binning_bin_trans_expected(
         np.ndarray[DTYPE_int_t, ndim=1] filt,
         np.ndarray[DTYPE_int64_t, ndim=2] counts,
-        np.ndarray[DTYPE_int_t, ndim=2] all_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] all_indices,
         np.ndarray[DTYPE_int_t, ndim=1] num_bins,
         np.ndarray[DTYPE_int_t, ndim=1] bin_divs,
         int distance_div,
@@ -1289,7 +1349,7 @@ def binning_bin_trans_expected(
         int stopfend1,
         int startfend2,
         int stopfend2):
-    cdef long long int i, j, fend1, fend2, index, bin1, bin2
+    cdef long long int i, j, fend1, fend2, index
     cdef long long int num_features = all_indices.shape[1]
     with nogil:
         for fend1 in range(startfend1, stopfend1):
@@ -1300,9 +1360,10 @@ def binning_bin_trans_expected(
                     continue
                 index = 0
                 for j in range(num_features):
-                    bin1 = min(all_indices[fend1, j], all_indices[fend2, j])
-                    bin2 = max(all_indices[fend1, j], all_indices[fend2, j])
-                    index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
+                    if all_indices[fend1, j, 0] < all_indices[fend2, j, 0]:
+                        index += (all_indices[fend1, j, 1] + all_indices[fend2, j, 0]) * bin_divs[j]
+                    else:
+                        index += (all_indices[fend2, j, 1] + all_indices[fend1, j, 0]) * bin_divs[j]
                 if distance_div > 0:
                     index += (distance_bins - 1) * distance_div
                 counts[index, 1] += 1

@@ -11,7 +11,7 @@ import numpy
 
 MAJOR = 1
 MINOR = 0
-MICRO = 2
+MICRO = 3
 ISRELEASED = False
 VERSION = '%d.%d' % (MAJOR, MINOR)
 FULLVERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)

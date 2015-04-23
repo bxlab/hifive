@@ -69,6 +69,8 @@ class HiCData(object):
         for key in self.__dict__.keys():
             if key in ['file', 'chr2int', 'fends', 'silent']:
                 continue
+            elif self[key] is None:
+                continue
             elif isinstance(self[key], numpy.ndarray):
                 datafile.create_dataset(key, data=self[key])
             elif not isinstance(self[key], dict):
@@ -524,12 +526,16 @@ class HiCData(object):
             for i in range(1, cis_indices.shape[0]):
                 cis_indices[i] += cis_indices[i - 1]
             self.cis_indices = cis_indices
+        else:
+            self.cis_data = None
         if self.trans_data.shape[0] > 0:
             trans_indices = numpy.r_[0, numpy.bincount(self.trans_data[:, 0],
                                      minlength=self.fends['fends'].shape[0])].astype(numpy.int64)
             for i in range(1, trans_indices.shape[0]):
                 trans_indices[i] += trans_indices[i - 1]
             self.trans_indices = trans_indices
+        else:
+            self.trans_data = None
         if not self.silent:
             print >> sys.stderr, ("Done\n"),
         return None

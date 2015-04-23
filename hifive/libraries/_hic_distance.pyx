@@ -39,7 +39,7 @@ def find_distance_bin_sums(
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_64_t, ndim=1] counts not None,
         np.ndarray[DTYPE_int_t, ndim=2] indices not None,
-        np.ndarray[DTYPE_int64_t, ndim=1] bin_size not None,
+        np.ndarray[DTYPE_int64_t, ndim=2] bin_size not None,
         np.ndarray[DTYPE_64_t, ndim=1] count_sum not None,
         np.ndarray[DTYPE_64_t, ndim=1] logdistance_sum not None,
         int start,
@@ -63,6 +63,7 @@ def find_distance_bin_sums(
             while log_dist > cutoffs[j]:
                 j += 1
             count_sum[j] += counts[i]
+            bin_size[j, 0] += 1
         for fend1 in range(start, stop):
             j = 0
             for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
@@ -76,13 +77,13 @@ def find_distance_bin_sums(
                 log_dist = log(mids[fend2] - mids[fend1])
                 while log_dist > cutoffs[j]:
                     j += 1
-                bin_size[j] += 1
+                bin_size[j, 1] += 1
                 logdistance_sum[j] += log_dist
             for fend2 in range(min(fend1 + 4, num_fends), num_fends):
                 log_dist = log(mids[fend2] - mids[fend1])
                 while log_dist > cutoffs[j]:
                     j += 1
-                bin_size[j] += 1
+                bin_size[j, 1] += 1
                 logdistance_sum[j] += log_dist
     return None
 
