@@ -858,7 +858,7 @@ class HiC(object):
 
         The 'normalization' attribute is updated to 'express' or 'binning-express', depending on if the 'precorrect' option is selected. In addition, the 'chromosome_means' attribute is updated such that the mean correction (sum of all valid chromosomal correction value pairs) is adjusted to zero and the corresponding chromosome mean is adjusted the same amount but the opposite sign. 
         """
-        self.history += "HiC.find_express_fend_corrections(iterations=%i, mindistance=%i, maxdistance=%s, remove_distance=%s, usereads='%s', mininteractions=%i, chroms=%s, precorrect=%s, binary=%s, kr=%s) - " % (iterations, mindistance, str(maxdistance), remove_distance, usereads, mininteractions, str(chroms), precorrect, binary, kr)
+        self.history += "HiC.find_express_fend_corrections(iterations=%i, mindistance=%i, maxdistance=%s, remove_distance=%s, usereads='%s', mininteractions=%i, minchange=%f, chroms=%s, precorrect=%s, binary=%s, kr=%s) - " % (iterations, mindistance, str(maxdistance), remove_distance, usereads, mininteractions, minchange, str(chroms), precorrect, binary, kr)
         if mininteractions is None:
             if 'mininteractions' in self.__dict__.keys():
                 mininteractions = self.mininteractions
@@ -1981,7 +1981,7 @@ class HiC(object):
     def cis_heatmap(self, chrom, start=None, stop=None, startfend=None, stopfend=None, binsize=0, binbounds=None,
                     datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
                     dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
-                    removefailed=False, image_file=None, **kwargs):
+                    removefailed=False, image_file=None, proportional=False, **kwargs):
         """
         Return a heatmap of cis data of the type and shape specified by the passed arguments.
 
@@ -2023,6 +2023,8 @@ class HiC(object):
         :type removefailed: bool.
         :param image_file: If a filename is specified, a PNG image file is written containing the heatmap data. Arguments for the appearance of the image can be passed as additional keyword arguments.
         :type image_file: str.
+        :param proportional: Indicates whether interactions should proportionally contribute to bins based on the amount of overlap instead of being attributed solely based on midpoint. Only valid for binned heatmaps and does not work in conjunction with dynamic binning.
+        :type proportional: bool.
         :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
 
         """
@@ -2044,7 +2046,8 @@ class HiC(object):
             data = hic_binning.find_cis_signal(self, chrom, binsize=binsize, binbounds=binbounds, start=start,
                                                stop=stop, startfend=startfend, stopfend=stopfend, datatype=datatype,
                                                arraytype=arraytype, maxdistance=maxdistance, skipfiltered=skipfiltered,
-                                               returnmapping=returnmapping, silent=self.silent)
+                                               returnmapping=returnmapping, proportional=proportional,
+                                               silent=self.silent)
         else:
             if not binbounds is None:
                 estart = binbounds[0, 0]

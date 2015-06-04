@@ -23,11 +23,11 @@ Fends associated with HiC data can be loaded from either a BED file or a HiCPipe
 
 ::
 
-  fend    frag    chr    coord     frag_len
-  1       1       1      3002506   3372
-  2       1       1      3005877   3372
-  3       2       1      3005878   389
-  4       2       1      3006266   389
+  fend    frag    chr    coord     valid    frag_len
+  1       1       1      3002506   1	    3372
+  2       1       1      3005877   1        3372
+  3       2       1      3005878   1        389
+  4       2       1      3006266   1        389
 
 .. note::
   HiCPipe-style fend files are 1-indexed, meaning that the first fragment and first fend both are labeled with a 1. This convention is used in HiFive only for these files to maintain compatibility with HiCPipe files.

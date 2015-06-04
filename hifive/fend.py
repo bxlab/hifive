@@ -256,8 +256,10 @@ class Fend(object):
                 data_len = data[chrom].shape[0] * 2
                 mids = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
                 fends['chr'][pos:(pos + data_len)] = i
-                fends['start'][pos:(pos + data_len)] = data[chrom]['start'][:]
-                fends['stop'][pos:(pos + data_len)] = data[chrom]['stop'][:]
+                fends['start'][pos:(pos + data_len):2] = data[chrom]['start'][:]
+                fends['start'][(pos + 1):(pos + data_len):2] = mids
+                fends['stop'][pos:(pos + data_len):2] = mids
+                fends['stop'][(pos + 1):(pos + data_len):2] = data[chrom]['stop'][:]
                 for j in range(len(feature_names)):
                     fends[feature_names[j]][pos:(pos + data_len):2] = data[chrom]["%s_1" % feature_names[j]]
                     fends[feature_names[j]][(pos + 1):(pos + data_len):2] = data[chrom]["%s_2" % feature_names[j]]

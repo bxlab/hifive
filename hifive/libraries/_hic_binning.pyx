@@ -37,8 +37,10 @@ def find_cis_compact_observed(
         np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
-        np.ndarray[DTYPE_t, ndim=3] signal not None):
-    cdef long long int fend1, fend2, i, map1, map2
+        np.ndarray[DTYPE_t, ndim=3] signal not None,
+        np.ndarray[DTYPE_int_t, ndim=2] ranges,
+        np.ndarray[DTYPE_t, ndim=2] overlap):
+    cdef long long int fend1, fend2, i, j, k, map1, map2, start1, start2, stop1, stop2
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
         for fend1 in range(num_fends - 1):
@@ -52,7 +54,32 @@ def find_cis_compact_observed(
                 map2 = mapping[fend2]
                 if map2 == -1 or map1 == map2 or fend2 >= max_fend[fend1]:
                     continue
-                signal[map1, map2 - map1 - 1, 0] += data[i, 2]
+                if ranges is None:
+                    signal[map1, map2 - map1 - 1, 0] += data[i, 2]
+                else:
+                    start1 = ranges[fend1, 0]
+                    start2 = ranges[fend2, 0]
+                    stop1 = ranges[fend1, 1]
+                    stop2 = ranges[fend2, 1]
+                    if start1 < start2:
+                        signal[start1, start2 - start1 - 1, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 0]
+                    if start1 < stop2:
+                        signal[start1, stop2 - start1 - 1, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 1]
+                    for j in range(max(start1, start2) + 1, stop2):
+                        signal[start1, j - start1 - 1, 0] += data[i, 2] * overlap[fend1, 0]
+                    if stop1 < start2:
+                        signal[stop1, start2 - stop1 - 1, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 0]
+                    if stop1 < stop2:
+                        signal[stop1, stop2 - stop1 - 1, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 1]
+                    for j in range(max(stop1, start2) + 1, stop2):
+                        signal[stop1, j - stop1 - 1, 0] += data[i, 2] * overlap[fend1, 1]
+                    for j in range(start1 + 1, stop1):
+                        if j < start2:
+                            signal[j, start2 - j - 1, 0] += data[i, 2] * overlap[fend2, 0]
+                        if j < stop2:
+                            signal[j, stop2 - j - 1, 0] += data[i, 2] * overlap[fend2, 1]
+                        for k in range(max(j, start2) + 1, stop2):
+                            signal[j, k - j - 1, 0] += data[i, 2]
     return None
 
 
@@ -64,8 +91,10 @@ def find_cis_upper_observed(
         np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
-        np.ndarray[DTYPE_t, ndim=2] signal not None):
-    cdef long long int fend1, fend2, i, index, map1, map2
+        np.ndarray[DTYPE_t, ndim=2] signal not None,
+        np.ndarray[DTYPE_int_t, ndim=2] ranges,
+        np.ndarray[DTYPE_t, ndim=2] overlap):
+    cdef long long int fend1, fend2, i, j, k, index, map1, map2, start1, start2, stop1, stop2, index1
     cdef long long int num_fends = mapping.shape[0]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
     with nogil:
@@ -81,7 +110,35 @@ def find_cis_upper_observed(
                 map2 = mapping[fend2]
                 if map2 == -1 or map2 == map1 or fend2 >= max_fend[fend1]:
                     continue
-                signal[index + map2, 0] += data[i, 2]
+                if ranges is None:
+                    signal[index + map2, 0] += data[i, 2]
+                else:
+                    start1 = ranges[fend1, 0]
+                    start2 = ranges[fend2, 0]
+                    stop1 = ranges[fend1, 1]
+                    stop2 = ranges[fend2, 1]
+                    index1 = start1 * (num_bins - 1) - start1 * (start1 + 1) / 2 - 1
+                    if start1 < start2:
+                        signal[index1 + start2, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 0]
+                    if start1 < stop2:
+                        signal[index1 + stop2, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 1]
+                    for j in range(max(start1, start2) + 1, stop2):
+                        signal[index1 + j, 0] += data[i, 2] * overlap[fend1, 0]
+                    index1 = stop1 * (num_bins - 1) - stop1 * (stop1 + 1) / 2 - 1
+                    if stop1 < start2:
+                        signal[index1 + start2, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 0]
+                    if stop1 < stop2:
+                        signal[index1 + stop2, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 1]
+                    for j in range(max(stop1, start2) + 1, stop2):
+                        signal[index1 + j, 0] += data[i, 2] * overlap[fend1, 1]
+                    for j in range(start1 + 1, stop1):
+                        index1 = j * (num_bins - 1) - j * (j + 1) / 2 - 1
+                        if j < start2:
+                            signal[index1 + start2, 0] += data[i, 2] * overlap[fend2, 0]
+                        if j < stop2:
+                            signal[index1 + stop2, 0] += data[i, 2] * overlap[fend2, 1]
+                        for k in range(max(j, start2) + 1, stop2):
+                            signal[index1 + k, 0] += data[i, 2]
     return None
 
 
@@ -99,9 +156,12 @@ def find_cis_compact_expected(
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         np.ndarray[DTYPE_64_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_int_t, ndim=2] ranges,
+        np.ndarray[DTYPE_t, ndim=2] overlap,
         double chrom_mean,
         int startfend):
     cdef long long int fend1, fend2, afend1, afend2, j, k, map1, map2, index, num_parameters, num_bins, max_bin
+    cdef long long int start1, start2, stop1, stop2, l, m
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
     if not fend_indices is None:
@@ -112,7 +172,7 @@ def find_cis_compact_expected(
         num_bins = correction_sums.shape[0]
         max_bin = signal.shape[1]
     with nogil:
-        if correction_sums is None:
+        if correction_sums is None or not ranges is None:
             for fend1 in range(num_fends - 1):
                 map1 = mapping[fend1]
                 if map1 == -1:
@@ -142,7 +202,32 @@ def find_cis_compact_expected(
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                    signal[map1, map2 - map1 - 1, 1] += value
+                    if ranges is None:
+                        signal[map1, map2 - map1 - 1, 1] += value
+                    else:
+                        start1 = ranges[fend1, 0]
+                        start2 = ranges[fend2, 0]
+                        stop1 = ranges[fend1, 1]
+                        stop2 = ranges[fend2, 1]
+                        if start1 < start2:
+                            signal[start1, start2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
+                        if start1 < stop2:
+                            signal[start1, stop2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
+                        for l in range(max(start1, start2) + 1, stop2):
+                            signal[start1, l - start1 - 1, 1] += value * overlap[fend1, 0]
+                        if stop1 < start2:
+                            signal[stop1, start2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
+                        if stop1 < stop2:
+                            signal[stop1, stop2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
+                        for l in range(max(stop1, start2) + 1, stop2):
+                            signal[stop1, l - stop1 - 1, 1] += value * overlap[fend1, 1]
+                        for l in range(start1 + 1, stop1):
+                            if l < start2:
+                                signal[l, start2 - l - 1, 1] += value * overlap[fend2, 0]
+                            if l < stop2:
+                                signal[l, stop2 - l - 1, 1] += value * overlap[fend2, 1]
+                            for m in range(max(l, start2) + 1, stop2):
+                                signal[l, m - l - 1, 1] += value
                 for fend2 in range(((fend1 + startfend) / 2) * 2 + 4 - startfend, min(max_fend[fend1], num_fends)):
                     map2 = mapping[fend2]
                     if map2 == -1 or map2 == map1:
@@ -167,7 +252,32 @@ def find_cis_compact_expected(
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                    signal[map1, map2 - map1 - 1, 1] += value
+                    if ranges is None:
+                        signal[map1, map2 - map1 - 1, 1] += value
+                    else:
+                        start1 = ranges[fend1, 0]
+                        start2 = ranges[fend2, 0]
+                        stop1 = ranges[fend1, 1]
+                        stop2 = ranges[fend2, 1]
+                        if start1 < start2:
+                            signal[start1, start2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
+                        if start1 < stop2:
+                            signal[start1, stop2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
+                        for l in range(max(start1, start2) + 1, stop2):
+                            signal[start1, l - start1 - 1, 1] += value * overlap[fend1, 0]
+                        if stop1 < start2:
+                            signal[stop1, start2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
+                        if stop1 < stop2:
+                            signal[stop1, stop2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
+                        for l in range(max(stop1, start2) + 1, stop2):
+                            signal[stop1, l - stop1 - 1, 1] += value * overlap[fend1, 1]
+                        for l in range(start1 + 1, stop1):
+                            if l < start2:
+                                signal[l, start2 - l - 1, 1] += value * overlap[fend2, 0]
+                            if l < stop2:
+                                signal[l, stop2 - l - 1, 1] += value * overlap[fend2, 1]
+                            for m in range(max(l, start2) + 1, stop2):
+                                signal[l, m - l - 1, 1] += value
         else:
             for j in range(num_bins - 1):
                 for k in range(j + 1, min(num_bins, j + max_bin + 1)):
@@ -200,9 +310,12 @@ def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         np.ndarray[DTYPE_64_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_int_t, ndim=2] ranges,
+        np.ndarray[DTYPE_t, ndim=2] overlap,
         double chrom_mean,
         int startfend):
     cdef long long int fend1, fend2, afend1, afend2, j, k, index, map1, map2, index2, num_parameters
+    cdef long long int start1, start2, stop1, stop2, l, m, index1
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
@@ -211,7 +324,7 @@ def find_cis_upper_expected(
     else:
         num_parameters = 0
     with nogil:
-        if correction_sums is None:
+        if correction_sums is None or not ranges is None:
             for fend1 in range(num_fends - 1):
                 map1 = mapping[fend1]
                 if map1 == -1:
@@ -242,8 +355,36 @@ def find_cis_upper_expected(
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                    signal[index + map2, 1] += value
-                for fend2 in range((fend1 / 2) * 2 + 4, min(max_fend[fend1], num_fends)):
+                    if ranges is None:
+                        signal[index + map2, 1] += value
+                    else:
+                        start1 = ranges[fend1, 0]
+                        start2 = ranges[fend2, 0]
+                        stop1 = ranges[fend1, 1]
+                        stop2 = ranges[fend2, 1]
+                        index1 = start1 * (num_bins - 1) - start1 * (start1 + 1) / 2 - 1
+                        if start1 < start2:
+                            signal[index1 + start2, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
+                        if start1 < stop2:
+                            signal[index1 + stop2, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
+                        for l in range(max(start1, start2) + 1, stop2):
+                            signal[index1 + l, 1] += value * overlap[fend1, 0]
+                        index1 = stop1 * (num_bins - 1) - stop1 * (stop1 + 1) / 2 - 1
+                        if stop1 < start2:
+                            signal[index1 + start2, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
+                        if stop1 < stop2:
+                            signal[index1 + stop2, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
+                        for l in range(max(stop1, start2) + 1, stop2):
+                            signal[index1 + l, 1] += value * overlap[fend1, 1]
+                        for l in range(start1 + 1, stop1):
+                            index1 = l * (num_bins - 1) - l * (l + 1) / 2 - 1
+                            if l < start2:
+                                signal[index1 + start2, 1] += value * overlap[fend2, 0]
+                            if l < stop2:
+                                signal[index1 + stop2, 1] += value * overlap[fend2, 1]
+                            for m in range(max(l, start2) + 1, stop2):
+                                signal[index1 + m, 1] += value
+                for fend2 in range(((fend1 + startfend) / 2) * 2 + 4 - startfend, min(max_fend[fend1], num_fends)):
                     map2 = mapping[fend2]
                     if map2 == -1 or map2 == map1:
                         continue
@@ -267,7 +408,35 @@ def find_cis_upper_expected(
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
-                    signal[index + map2, 1] += value
+                    if ranges is None:
+                        signal[index + map2, 1] += value
+                    else:
+                        start1 = ranges[fend1, 0]
+                        start2 = ranges[fend2, 0]
+                        stop1 = ranges[fend1, 1]
+                        stop2 = ranges[fend2, 1]
+                        index1 = start1 * (num_bins - 1) - start1 * (start1 + 1) / 2 - 1
+                        if start1 < start2:
+                            signal[index1 + start2, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
+                        if start1 < stop2:
+                            signal[index1 + stop2, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
+                        for l in range(max(start1, start2) + 1, stop2):
+                            signal[index1 + l, 1] += value * overlap[fend1, 0]
+                        index1 = stop1 * (num_bins - 1) - stop1 * (stop1 + 1) / 2 - 1
+                        if stop1 < start2:
+                            signal[index1 + start2, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
+                        if stop1 < stop2:
+                            signal[index1 + stop2, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
+                        for l in range(max(stop1, start2) + 1, stop2):
+                            signal[index1 + l, 1] += value * overlap[fend1, 1]
+                        for l in range(start1 + 1, stop1):
+                            index1 = l * (num_bins - 1) - l * (l + 1) / 2 - 1
+                            if l < start2:
+                                signal[index1 + start2, 1] += value * overlap[fend2, 0]
+                            if l < stop2:
+                                signal[index1 + stop2, 1] += value * overlap[fend2, 1]
+                            for m in range(max(l, start2) + 1, stop2):
+                                signal[index1 + m, 1] += value
         else:
             for j in range(num_bins - 1):
                 index = j * (num_bins - 1) - j * (j + 1) / 2 - 1

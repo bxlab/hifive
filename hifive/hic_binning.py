@@ -31,7 +31,7 @@ import libraries._hic_binning as _hic_binning
 
 def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=None, startfend=None, stopfend=None,
                     datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
-                    **kwargs):
+                    proportional=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.
 
@@ -61,6 +61,8 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     :type skipfiltered: bool.
     :param returnmapping: If 'True', a list containing the data array and a 2d array containing first coordinate included and excluded from each bin, and the first fend included and excluded from each bin is returned. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :param proportional: Indicates whether interactions should proportionally contribute to bins based on the amount of overlap instead of being attributed solely based on midpoint. Only valid for binned heatmaps.
+    :type proportional: bool.
     :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -171,11 +173,17 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     find_max_fend(max_fend, mids, hic.fends['fends']['chr'][startfend:stopfend],
                   hic.fends['chr_indices'][...], startfend, maxdistance)
     max_fend = numpy.minimum(max_fend, mapping.shape[0])
-    max_bin = numpy.amax(max_fend - numpy.arange(mapping.shape[0]))
-    if max_bin <= 0:
-        if not silent:
-            print >> sys.stderr, ("Insufficient data.\n"),
-        return None
+    if binsize == 0:
+        max_bin = numpy.amax(max_fend - numpy.arange(mapping.shape[0]))
+        if max_bin <= 0:
+            if not silent:
+                print >> sys.stderr, ("Insufficient data.\n"),
+            return None
+    else:
+        if maxdistance == 0:
+            max_bin = num_bins - 1
+        else:
+            max_bin = maxdistance / binsize
     # If correction is required, determine what type and get appropriate data
     corrections = None
     binning_corrections = None
@@ -198,6 +206,24 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     else:
         distance_parameters = None
         chrom_mean = 0.0
+    # If proportional is requested, find bin ranges
+    if proportional and binsize > 0:
+        fends = hic.fends['fends'][startfend:stopfend]
+        ranges = numpy.zeros((mapping.shape[0], 2), dtype=numpy.int32)
+        overlap = numpy.zeros(ranges.shape, dtype=numpy.float32)
+        positions = numpy.arange(1, 1 + num_bins) * binsize + start
+        ranges[:, 0] = numpy.searchsorted(positions, fends['start'])
+        ranges[:, 1] = numpy.searchsorted(positions[:-1], fends['stop'])
+        where = numpy.where(ranges[:, 0] < ranges[:, 1])[0]
+        overlap[where, 0] = numpy.minimum(positions[ranges[where, 0]] - fends['start'][where],
+                                          binsize) / float(binsize)
+        overlap[where, 1] = numpy.minimum(fends['stop'][where] - positions[ranges[where, 1]] + binsize,
+                                          binsize) / float(binsize)
+        where = numpy.where(ranges[:, 0] == ranges[:, 1])[0]
+        overlap[where, 0] = (fends['stop'][where] - fends['start'][where]) / float(binsize)
+    else:
+        ranges = None
+        overlap = None
     # Create requested array
     if arraytype == 'compact':
         data_array = numpy.zeros((num_bins, max_bin, 2), dtype=numpy.float32)
@@ -208,9 +234,10 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         if datatype != 'raw':
             _hic_binning.find_cis_compact_expected(mapping, corrections, binning_corrections,
                                                    binning_num_bins, fend_indices, mids, distance_parameters,
-                                                   max_fend, data_array, correction_sums, chrom_mean, startfend)
+                                                   max_fend, data_array, correction_sums, ranges, overlap,
+                                                   chrom_mean, startfend)
         if datatype != 'expected':
-            _hic_binning.find_cis_compact_observed(data, data_indices, mapping, max_fend, data_array)
+            _hic_binning.find_cis_compact_observed(data, data_indices, mapping, max_fend, data_array, ranges, overlap)
         else:
             where = numpy.where(data_array[:, :, 1] > 0.0)
             data_array[where[0], where[1], 0] = 1.0
@@ -221,9 +248,10 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         if datatype != 'raw':
             _hic_binning.find_cis_upper_expected(mapping, corrections, binning_corrections,
                                                  binning_num_bins, fend_indices, mids, distance_parameters,
-                                                 max_fend, data_array, correction_sums, chrom_mean, startfend)
+                                                 max_fend, data_array, correction_sums, ranges, overlap,
+                                                 chrom_mean, startfend)
         if datatype != 'expected':
-            _hic_binning.find_cis_upper_observed(data, data_indices, mapping, max_fend, data_array)
+            _hic_binning.find_cis_upper_observed(data, data_indices, mapping, max_fend, data_array, ranges, overlap)
         else:
             where = numpy.where(data_array[:, 1] > 0.0)[0]
             data_array[where, 0] = 1.0
