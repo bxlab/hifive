@@ -1,6 +1,10 @@
 .. image:: https://readthedocs.org/projects/bxlab-hifive/badge/?version=latest
   :target: http://bxlab-hifive.readthedocs.org/en/latest/
   :alt: Latest Documentation
+  
+.. image:: https://travis-ci.org/bxlab/hifive.svg?branch=master
+  :target: https://travis-ci.org/bxlab/hifive
+  :alt: Latest Build
 
 This repository contains code for the hifive package, a set of tools for
 handling HiC and 5C data. This includes managing data from mapped reads, either
