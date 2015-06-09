@@ -1224,6 +1224,10 @@ class HiC(object):
             trans_means = None
             # remapped data
             rev_mapping = numpy.where(chrfilt)[0]
+            if rev_mapping.shape[0] < 2:
+                if not self.silent:
+                    print >> sys.stderr, ("\nInsufficient valid fends for this chromosome. Skipping.\n"),
+                    continue
             mapping = numpy.zeros(chrfilt.shape[0], dtype=numpy.int32) - 1
             mapping[rev_mapping] = numpy.arange(rev_mapping.shape[0])
             if not data is None:

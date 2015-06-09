@@ -67,7 +67,7 @@ class HiCData(object):
         self.history.replace("'None'", "None")
         datafile = h5py.File(self.file, 'w')
         for key in self.__dict__.keys():
-            if key in ['file', 'chr2int', 'fends', 'silent']:
+            if key in ['file', 'chr2int', 'fends', 'silent', 'cuts']:
                 continue
             elif self[key] is None:
                 continue
@@ -109,6 +109,16 @@ class HiCData(object):
                 for i, chrom in enumerate(self.fends['chromosomes']):
                     self.chr2int[chrom] = i
         datafile.close()
+        return None
+
+    def _find_cut_sites(self):
+        self.cuts = []
+        chroms = self.fends['chromosomes'][...]
+        chr_indices = self.fends['chr_indices'][...]
+        for i in range(len(chroms)):
+            self.cuts.append(numpy.r_[
+                self.fends['fends']['start'][chr_indices[i]:(chr_indices[i + 1])][::2],
+                self.fends['fends']['stop'][chr_indices[i + 1] - 1]])
         return None
 
     def load_data_from_raw(self, fendfilename, filelist, maxinsert):
@@ -153,16 +163,24 @@ class HiCData(object):
         self.fends = h5py.File(fendfilename, 'r')
         self.history = self.fends['/'].attrs['history'] + self.history
         self.chr2int = {}
-        for i, j in enumerate(self.fends['chromosomes'][:]):
+        chroms = self.fends['chromosomes'][...]
+        for i, j in enumerate(chroms):
             self.chr2int[j] = i
         # load data from all files, skipping if chromosome not in the fend file.
-        strand = {'+': 0, '-': 1}
         if isinstance(filelist, str):
             filelist = [filelist]
-        fend_pairs = {}
+        fend_pairs = []
+        for i in range(len(chroms)):
+            fend_pairs.append([])
+            for j in range(i + 1):
+                fend_pairs[i].append({})
         total_reads = 0
         for fname in filelist:
-            data = {}
+            data = []
+            for i in range(len(chroms)):
+                data.append([])
+                for j in range(i + 1):
+                    data[i].append({})
             if not os.path.exists(fname):
                 if not self.silent:
                     print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
@@ -173,28 +191,64 @@ class HiCData(object):
             input = open(fname, 'r', 1)
             for line in input:
                 temp = line.strip('\n').split('\t')
+                temp[0].strip('chr')
+                temp[3].strip('chr')
                 if temp[0] not in self.chr2int or temp[3] not in self.chr2int:
                     continue
-                data[(self.chr2int[temp[0]], int(temp[1]), strand[temp[2]],
-                      self.chr2int[temp[3]], int(temp[4]), strand[temp[5]])] = 0
+                chrint1 = self.chr2int[temp[0]]
+                chrint2 = self.chr2int[temp[3]]
+                start1 = int(temp[1])
+                start2 = int(temp[4])
+                if chrint1 == chrint2:
+                    if start1 < start2:
+                        if temp[2] == '-':
+                            start1 = -start1
+                        if temp[5] == '-':
+                            start2 = -start2
+                        data[chrint2][chrint1][(start1, start2)] = None
+                    else:
+                        if temp[2] == '-':
+                            start1 = -start1
+                        if temp[5] == '-':
+                            start2 = -start2
+                        data[chrint1][chrint2][(start2, start1)] = None
+                elif chrint1 < chrint2:
+                    if temp[2] == '-':
+                        start1 = -start1
+                    if temp[5] == '-':
+                        start2 = -start2
+                    data[chrint2][chrint1][(start1, start2)] = None
+                else:
+                    if temp[2] == '-':
+                        start1 = -start1
+                    if temp[5] == '-':
+                        start2 = -start2
+                    data[chrint1][chrint2][(start2, start1)] = None
             input.close()
-            data = numpy.array(data.keys(), dtype=numpy.int32)
+            new_reads = 0
+            for i in range(len(data)):
+                for j in range(len(data[i])):
+                    data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
+                    new_reads += data[i][j].shape[0]
             if not self.silent:
-                print >> sys.stderr, ("%i validly-mapped reads pairs loaded.\n") % (data.shape[0]),
-            new_pairs = data.shape[0]
-            total_reads += new_pairs
+                print >> sys.stderr, ("%i validly-mapped reads pairs loaded.\n") % (new_reads),
+            total_reads += new_reads
             # map data to fends, filtering as needed
-            if new_pairs > 0:
+            if new_reads > 0:
                 self._find_fend_pairs(data, fend_pairs)
         self._clean_fend_pairs(fend_pairs)
-        if len(fend_pairs) == 0:
+        total_fend_pairs = 0
+        for i in range(len(fend_pairs)):
+            for j in range(len(fend_pairs[i])):
+                total_fend_pairs += len(fend_pairs[i][j])
+        if total_fend_pairs == 0:
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
             self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
-            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
-                             (total_reads,len(fend_pairs)),
+            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i valid fend pairs\n") %\
+                             (total_reads, total_fend_pairs),
         # write fend pairs to h5dict
         self._parse_fend_pairs(fend_pairs)
         self.history += 'Success\n'
@@ -240,15 +294,19 @@ class HiCData(object):
         self.fends = h5py.File(fendfilename, 'r')
         self.history = self.fends['/'].attrs['history'] + self.history
         self.chr2int = {}
-        for i, j in enumerate(self.fends['chromosomes'][:]):
+        chroms = self.fends['chromosomes'][...]
+        for i, j in enumerate(chroms):
             self.chr2int[j] = i
         # load data from all files, skipping if chromosome not in the fend file.
         if isinstance(filelist[0], str):
             filelist = [[filelist[0], filelist[1]]]
         total_reads = 0
-        fend_pairs = {}
+        fend_pairs = []
+        for i in range(len(chroms)):
+            fend_pairs.append([])
+            for j in range(i + 1):
+                fend_pairs[i].append({})
         for filepair in filelist:
-            data = []
             # determine which files have both mapped ends present
             present = True
             if not os.path.exists(filepair[0]):
@@ -283,18 +341,22 @@ class HiCData(object):
                 if read.tid not in idx2int:
                     continue
                 if read.is_reverse:
-                    strand = 1
-                    end = read.pos + len(read.seq)
+                    end = -(read.pos + len(read.seq))
                 else:
-                    strand = 0
                     end = read.pos
-                unpaired[read.qname] = [idx2int[read.tid], end, strand]
+
+                unpaired[read.qname] = (idx2int[read.tid], end)
             input.close()
             if not self.silent:
                 print >> sys.stderr, ("Done\n"),
             # load second half of paired ends
             if not self.silent:
                 print >> sys.stderr, ("Loading data from %s...") % (filepair[1].split('/')[-1]),
+            data = []
+            for i in range(len(chroms)):
+                data.append([])
+                for j in range(i + 1):
+                    data[i].append({})
             input = pysam.Samfile(filepair[1], 'rb')
             idx2int = {}
             for i in range(len(input.header['SQ'])):
@@ -309,33 +371,49 @@ class HiCData(object):
                 if read.tid not in idx2int:
                     continue
                 if read.is_reverse:
-                    strand = 1
-                    end = read.pos + len(read.seq)
+                    start2 = -(read.pos + len(read.seq))
                 else:
-                    strand = 0
-                    end = read.pos
-                if read.qname in unpaired:
-                    data.append(tuple([idx2int[read.tid], end, strand] + unpaired[read.qname]))
+                    start2 = read.pos
+                if read.qname not in unpaired:
+                    continue
+                chr1, start1 = unpaired[read.qname]
+                chr2 = idx2int[read.tid]
+                if chr1 == chr2:
+                    if abs(start1) < abs(start2):
+                        data[chr2][chr1][(start1, start2)] = None
+                    else:
+                        data[chr1][chr2][(start2, start1)] = None
+                elif chr1 < chr2:
+                    data[chr2][chr1][(start1, start2)] = None
+                else:
+                    data[chr1][chr2][(start2, start1)] = None
             input.close()
             del unpaired
-            data = numpy.array(list(set(data)), dtype=numpy.int32)
-            new_pairs = data.shape[0]
+            new_reads = 0
+            for i in range(len(data)):
+                for j in range(len(data[i])):
+                    data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
+                    new_reads += data[i][j].shape[0]
             if not self.silent:
-                print >> sys.stderr, ("Done\nRead %i validly-mapped read pairs.\n") % (new_pairs),
-            total_reads += new_pairs
+                print >> sys.stderr, ("Done\nRead %i validly-mapped read pairs.\n") % (new_reads),
+            total_reads += new_reads
             # map data to fends, filtering as needed
-            if new_pairs > 0:
+            if new_reads > 0:
                 self._find_fend_pairs(data, fend_pairs)
             del data
         self._clean_fend_pairs(fend_pairs)
-        if len(fend_pairs) == 0:
+        total_fend_pairs = 0
+        for i in range(len(fend_pairs)):
+            for j in range(len(fend_pairs[i])):
+                total_fend_pairs += len(fend_pairs[i][j])
+        if total_fend_pairs == 0:
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
             self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
-            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i unique pairs\n") %\
-                                 (total_reads, len(fend_pairs)),
+            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i valid fend pairs\n") %\
+                                 (total_reads, total_fend_pairs),
         self._parse_fend_pairs(fend_pairs)
         self.history += "Success\n"
         return None
@@ -376,7 +454,12 @@ class HiCData(object):
         self.history = self.fends['/'].attrs['history'] + self.history
         # load data from mat file. This assumes that the mat data was mapped
         # using the same fend numbering as in the fend file.
-        fend_pairs = {}
+        chr_indices = self.fends['chr_indices'][...]
+        fend_pairs = []
+        for i in range(chr_indices.shape[0] - 1):
+            fend_pairs.append([])
+            for j in range(i + 1): 
+                fend_pairs[i].append({})
         if not os.path.exists(filename):
             if not self.silent:
                 print >> sys.stderr, ("%s not found... no data loaded.\n") % (filename.split('/')[-1]),
@@ -391,16 +474,26 @@ class HiCData(object):
                 fend1 = int(temp[0]) - 1
             except ValueError:
                 continue
-            fend_pairs[(fend1, int(temp[1]) - 1)] = int(temp[2])
+            fend2 = int(temp[1]) - 1
+            chr1 = numpy.searchsorted(chr_indices, fend1) - 1
+            chr2 = numpy.searchsorted(chr_indices, fend2) - 1
+            if chr2 < chr1:
+                fend_pairs[chr1][chr2][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = int(temp[2])
+            else:
+                fend_pairs[chr2][chr1][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = int(temp[2])
         input.close()
         self._clean_fend_pairs(fend_pairs)
-        if len(fend_pairs) == 0:
+        total_fend_pairs = 0
+        for i in range(len(fend_pairs)):
+            for j in range(len(fend_pairs[i])):
+                total_fend_pairs += len(fend_pairs[i][j])
+        if total_fend_pairs == 0:
             if not self.silent:
                 print >> sys.stderr, ("No valid data was loaded.\n"),
             self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
-            print >> sys.stderr, ("%i valid fend pairs loaded.\n") % (len(fend_pairs)),
+            print >> sys.stderr, ("%i valid fend pairs loaded.\n") % (total_fend_pairs),
         # write fend pairs to h5dict
         self._parse_fend_pairs(fend_pairs)
         self.history += "Success\n"
@@ -408,118 +501,130 @@ class HiCData(object):
 
     def _find_fend_pairs(self, data, fend_pairs):
         """Return array with lower fend, upper fend, and count for pair."""
-        # split data amongst nodes
-        mapped_fends = numpy.empty((data.shape[0], 2), dtype=numpy.int32)
-        mapped_fends.fill(-1)
-        distances = numpy.zeros((data.shape[0], 2), dtype=numpy.int32)
-        # assign fends on a per-chromosome basis
-        for i, chrom in enumerate(self.fends['chromosomes']):
-            if not self.silent:
-                print >> sys.stderr, ("\rMapping first  fend for %s") % (chrom.ljust(10)),
-            cuts = numpy.r_[
-                self.fends['fends']['start'][self.fends['chr_indices'][i]:(self.fends['chr_indices'][i + 1])][::2],
-                self.fends['fends']['stop'][self.fends['chr_indices'][i + 1] - 1]]
-            # determine valid first fends for chromosome
-            temp = numpy.where(data[:, 0] == i)[0]
-            where = temp[numpy.where((data[temp, 1] >= cuts[0]) * (data[temp, 1] < cuts[-1]))]
-            if where.shape[0] > 0:
-                indices = numpy.searchsorted(cuts, data[where, 1], side='right')
-                mapped_fends[where, 0] = (indices * 2 - 1 - data[where, 2]) + self.fends['chr_indices'][i]
-                # find first distance from cutsite to mapped coordinate
-                distances[where, 0] = numpy.abs(data[where, 1] - cuts[indices - data[where, 2]])
-            if not self.silent:
-                print >> sys.stderr, ("\rMapping second fend for %s") % (chrom.ljust(10)),
-            # determine valid second fends for chromosome
-            temp = numpy.where(data[:, 3] == i)[0]
-            where = temp[numpy.where((data[temp, 4] >= cuts[0]) * (data[temp, 4] < cuts[-1]))]
-            if where.shape[0] > 0:
-                indices = numpy.searchsorted(cuts, data[where, 4], side='right')
-                mapped_fends[where, 1] = (indices * 2 - 1 - data[where, 5]) + self.fends['chr_indices'][i]
-                # find second distance from cutsite to mapped coordinate
-                distances[where, 1] = numpy.abs(data[where, 4] - cuts[indices - data[where, 5]])
-        # remove fends with too great an insert distance
-        distances[:, 0] += distances[:, 1]
-        where = numpy.where(distances[:, 0] > self.maxinsert)[0]
-        mapped_fends[where, :] = -1
-        if not self.silent:
-            print >> sys.stderr, ("\r%s\rCounting fend pairs...") % (' ' * 50),
-        # arrange so first fend is always smaller number
-        mapped_fends.sort(axis=1)
-        # remove reads not mapped to fends
-        where = numpy.where((mapped_fends[:, 0] != -1) * (mapped_fends[:, 1] != -1))[0]
-        # count pair occurences
-        for i in where:
-            name = (mapped_fends[i, 0], mapped_fends[i, 1])
-            if name not in fend_pairs:
-                fend_pairs[name] = 1
-            else:
-                fend_pairs[name] += 1
+        if 'cuts' not in self.__dict__.keys():
+            self._find_cut_sites()
+        chroms = self.fends['chromosomes'][...]
+        # assign fends on a per-chromosome pair basis
+        for i in range(len(data)):
+            for j in range(len(data[i])):
+                mapped_fends = numpy.empty((data[i][j].shape[0], 2), dtype=numpy.int32)
+                distances = numpy.zeros(data[i][j].shape[0], dtype=numpy.int32)
+                distances.fill(self.maxinsert + 1)
+                signs = numpy.minimum(0, numpy.sign(data[i][j]))
+                data[i][j] = numpy.abs(data[i][j])
+                if not self.silent:
+                    print >> sys.stderr, ("\rMapping fends for %s by %s") % (chroms[i].ljust(10), chroms[j].ljust(10)),
+                mapped_fends[:, 0] = numpy.searchsorted(self.cuts[j], data[i][j][:, 0])
+                mapped_fends[:, 1] = numpy.searchsorted(self.cuts[i], data[i][j][:, 1])
+                valid = numpy.where((mapped_fends[:, 0] > 0) * (mapped_fends[:, 0] < self.cuts[j].shape[0]) *
+                                    (mapped_fends[:, 1] > 0) * (mapped_fends[:, 1] < self.cuts[i].shape[0]))[0]
+                # find distance from cutsite to mapped coordinate
+                distances[valid] = (numpy.abs(data[i][j][valid, 0] - self.cuts[j][mapped_fends[valid, 0] +
+                                    signs[valid, 0]]) + numpy.abs(data[i][j][valid, 1] -
+                                    self.cuts[i][mapped_fends[valid, 1] + signs[valid, 1]]))
+                # remove fends with too great an insert distance
+                valid = numpy.where(distances <= self.maxinsert)[0]
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rCounting fend pairs...") % (' ' * 50),
+                for k in valid:
+                    key = (mapped_fends[k, 0], mapped_fends[k, 1])
+                    if key not in fend_pairs[i][j]:
+                        fend_pairs[i][j][key] = 1
+                    else:
+                        fend_pairs[i][j][key] += 1
         if not self.silent:
             print >> sys.stderr, ("Done\n"),
         return None
 
     def _clean_fend_pairs(self, fend_pairs):
         # remove fend pairs from same fend or opposite strand adjacents
-        for i in range(self.fends['chromosomes'].shape[0]):
-            for j in range(self.fends['chr_indices'][i], self.fends['chr_indices'][i + 1] - 2, 2):
+        chroms = self.fends['chromosomes'][...]
+        for i in range(len(chroms)):
+            for j in range(self.fends['chr_indices'][i + 1] - self.fends['chr_indices'][i] - 2, 2):
                 # same fend
                 name = (j, j)
-                if name in fend_pairs:
-                    del fend_pairs[name]
+                if name in fend_pairs[i][i]:
+                    del fend_pairs[i][i][name]
                 name = (j + 1, j + 1)
-                if name in fend_pairs:
-                    del fend_pairs[name]
+                if name in fend_pairs[i][i]:
+                    del fend_pairs[i][i][name]
                 # same fend
                 name = (j, j + 1)
-                if name in fend_pairs:
-                    del fend_pairs[name]
+                if name in fend_pairs[i][i]:
+                    del fend_pairs[i][i][name]
                 # adjacent fends, opposite strands
                 name = (j, j + 3)
-                if name in fend_pairs:
-                    del fend_pairs[name]
+                if name in fend_pairs[i][i]:
+                    del fend_pairs[i][i][name]
                 name = (j + 1, j + 2)
-                if name in fend_pairs:
-                    del fend_pairs[name]
-            j = self.fends['chr_indices'][i + 1] - 2
+                if name in fend_pairs[i][i]:
+                    del fend_pairs[i][i][name]
+            j = self.fends['chr_indices'][i + 1] - self.fends['chr_indices'][i] - 2
             # same fend
             name = (j, j)
-            if name in fend_pairs:
-                del fend_pairs[name]
+            if name in fend_pairs[i][i]:
+                del fend_pairs[i][i][name]
             name = (j + 1, j + 1)
-            if name in fend_pairs:
-                del fend_pairs[name]
-            # same fend
+            if name in fend_pairs[i][i]:
+                del fend_pairs[i][i][name]
             name = (j, j + 1)
-            if name in fend_pairs:
-                del fend_pairs[name]
+            if name in fend_pairs[i][i]:
+                del fend_pairs[i][i][name]
         return None
 
     def _parse_fend_pairs(self, fend_pairs):
         """Separate fend pairs into cis and trans interactions index."""
         if not self.silent:
             print >> sys.stderr, ("Parsing fend pairs..."),
-        # convert counts into array
-        fend_array = numpy.empty((len(fend_pairs), 3), dtype=numpy.int32)
-        i = 0
-        for name, count in fend_pairs.iteritems():
-            fend_array[i, 0] = name[0]
-            fend_array[i, 1] = name[1]
-            fend_array[i, 2] = count
-            i += 1
-        del fend_pairs
-        # reorder by first fend, then second fend
-        fend_array = fend_array[numpy.lexsort((fend_array[:, 1], fend_array[:, 0])), :]
-        # find which pairs are from the same chromosome
-        cis = numpy.zeros(fend_array.shape[0], dtype=numpy.bool)
-        for i in range(self.fends['chromosomes'].shape[0]):
-            temp = numpy.where((fend_array[:, 0] >= self.fends['chr_indices'][i]) *
-                               (fend_array[:, 0] < self.fends['chr_indices'][i + 1]))[0]
-            where = temp[numpy.where((fend_array[temp, 1] >= self.fends['chr_indices'][i]) *
-                                     (fend_array[temp, 1] < self.fends['chr_indices'][i + 1]))]
-            cis[where] = True
-        # separate cis from trans data
-        self.cis_data = fend_array[cis, :]
-        self.trans_data = fend_array[numpy.invert(cis), :]
+        chr_indices = self.fends['chr_indices'][...]
+        # determine number of cis pairs
+        cis_count = 0
+        for i in range(len(fend_pairs)):
+            cis_count += len(fend_pairs[i][i])
+        # create cis array
+        self.cis_data = numpy.empty((cis_count, 3), dtype=numpy.int32)
+        pos = 0
+        # fill in each chromosome's cis interactions
+        for i in range(len(fend_pairs)):
+            if len(fend_pairs[i][i]) == 0:
+                continue
+            chr_start = pos
+            for key, count in fend_pairs[i][i].iteritems():
+                self.cis_data[pos, :2] = key
+                self.cis_data[pos, 2] = count
+                pos += 1
+            fend_pairs[i][i] = None
+            # sort interactions
+            order = numpy.lexsort((self.cis_data[chr_start:pos, 1], self.cis_data[chr_start:pos, 0]))
+            self.cis_data[chr_start:pos, :] = self.cis_data[order + chr_start, :]
+            self.cis_data[chr_start:pos, :2] + chr_indices[i]
+            del order
+        # determine number of trans pairs
+        trans_count = 0
+        for i in range(len(fend_pairs)):
+            for j in range(i + 1, len(fend_pairs)):
+                trans_count += len(fend_pairs[j][i])
+        # create cis array
+        self.trans_data = numpy.empty((trans_count, 3), dtype=numpy.int32)
+        pos = 0
+        # fill in each chromosome's trans interactions
+        for i in range(len(fend_pairs) - 1):
+            for j in range(i + 1, len(fend_pairs)):
+                if len(fend_pairs[j][i]) == 0:
+                    continue
+                chr_start = pos
+                for key, count in fend_pairs[j][i].iteritems():
+                    self.trans_data[pos, :2] = key
+                    self.trans_data[pos, 2] = count
+                    pos += 1
+                fend_pairs[j][i] = None
+                # sort interactions
+                order = numpy.lexsort((self.trans_data[chr_start:pos, 1], self.trans_data[chr_start:pos, 0]))
+                self.trans_data[chr_start:pos, :] = self.trans_data[order + chr_start, :]
+                self.trans_data[:, 0] += chr_indices[i]
+                self.trans_data[:, 1] += chr_indices[j]
+                del order
+        # create data indices
         if self.cis_data.shape[0] > 0:
             cis_indices = numpy.r_[0, numpy.bincount(self.cis_data[:, 0],
                                    minlength=self.fends['fends'].shape[0])].astype(numpy.int64)
