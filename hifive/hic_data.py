@@ -507,6 +507,8 @@ class HiCData(object):
         # assign fends on a per-chromosome pair basis
         for i in range(len(data)):
             for j in range(len(data[i])):
+                if data[i][j].shape[0] == 0:
+                    continue
                 mapped_fends = numpy.empty((data[i][j].shape[0], 2), dtype=numpy.int32)
                 distances = numpy.zeros(data[i][j].shape[0], dtype=numpy.int32)
                 distances.fill(self.maxinsert + 1)
@@ -524,6 +526,8 @@ class HiCData(object):
                                     self.cuts[i][mapped_fends[valid, 1] + signs[valid, 1]]))
                 # remove fends with too great an insert distance
                 valid = numpy.where(distances <= self.maxinsert)[0]
+                # convert from fragments to fends
+                mapped_fends[valid, :2] = mapped_fends[valid, :2] * 2 - 1 + signs[valid, :]
                 if not self.silent:
                     print >> sys.stderr, ("\r%s\rCounting fend pairs...") % (' ' * 50),
                 for k in valid:
@@ -541,6 +545,8 @@ class HiCData(object):
         chroms = self.fends['chromosomes'][...]
         for i in range(len(chroms)):
             for j in range(self.fends['chr_indices'][i + 1] - self.fends['chr_indices'][i] - 2, 2):
+                if len(fend_pairs[i][j]) == 0:
+                    continue
                 # same fend
                 name = (j, j)
                 if name in fend_pairs[i][i]:
