@@ -541,10 +541,10 @@ class HiCData(object):
         return None
 
     def _clean_fend_pairs(self, fend_pairs):
+        chr_indices = self.fends['chr_indices'][...]
         # remove fend pairs from same fend or opposite strand adjacents
-        chroms = self.fends['chromosomes'][...]
-        for i in range(len(chroms)):
-            for j in range(0, len(fend_pairs[i][i]) - 2, 2):
+        for i in range(len(fend_pairs)):
+            for j in range(0, chr_indices[i + 1] - chr_indices[i] - 2, 2):
                 # same fend
                 name = (j, j)
                 if name in fend_pairs[i][i]:
@@ -608,7 +608,7 @@ class HiCData(object):
             # sort interactions
             order = numpy.lexsort((self.cis_data[chr_start:pos, 1], self.cis_data[chr_start:pos, 0]))
             self.cis_data[chr_start:pos, :] = self.cis_data[order + chr_start, :]
-            self.cis_data[chr_start:pos, :2] + chr_indices[i]
+            self.cis_data[chr_start:pos, :2] += chr_indices[i]
             del order
         # determine number of trans pairs
         trans_count = 0

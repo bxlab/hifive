@@ -992,14 +992,6 @@ class HiC(object):
                                                                useread_int,
                                                                mindistance,
                                                                maxdistance)
-        if self.rank == 0:
-            for i in range(1, self.num_procs):
-                interactions += self.comm.recv(source=i, tag=11)
-            for i in range(1, self.num_procs):
-                self.comm.Send(interactions, dest=i, tag=13)
-        else:
-            self.comm.send(interactions, dest=0, tag=11)
-            self.comm.Recv(interactions, source=0, tag=13)
         # precalculate interaction distance means for all included interactions
         if not remove_distance or data is None:
             distance_means = None
@@ -1152,8 +1144,8 @@ class HiC(object):
             valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0] + chr_indices[chrint]
             if valid.shape[0] == 0:
                 continue
-            chrom_mean = numpy.sum(corrections[valid])
-            chrom_mean = chrom_mean ** 2.0 - numpy.sum(corrections[valid] ** 2.0)
+            chrom_mean = numpy.sum(corrections[valid]).astype(numpy.float64)
+            chrom_mean = chrom_mean ** 2.0 - numpy.sum(corrections[valid].astype(numpy.float64) ** 2.0)
             chrom_mean /= valid.shape[0] * (valid.shape[0] - 1)
             if remove_distance:
                 self.chromosome_means[chrint] += numpy.log(chrom_mean)
@@ -1966,7 +1958,7 @@ class HiC(object):
             print >> sys.stderr, ("Dynamically binning data..."),
         dynamic = numpy.copy(unbinned)
         hic_binning.dynamically_bin_unbinned_upper(unbinned, mids, dynamic, minobservations)
-        dynamic = numpy.log(dynamic[:, 0], dynamic[:, 1])
+        dynamic = numpy.log(dynamic[:, 0] / dynamic[:, 1])
         data_mat = numpy.zeros((mids.shape[0], mids.shape[0]), dtype=numpy.float32)
         indices = numpy.triu_indices(mids.shape[0], 1)
         data_mat[indices] = dynamic
