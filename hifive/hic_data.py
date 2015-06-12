@@ -653,7 +653,8 @@ class HiCData(object):
         else:
             self.trans_data = None
         if not self.silent:
-            print >> sys.stderr, ("Done\n"),
+            print >> sys.stderr, ("Done  %i cis reads, %i trans reads\n") % (numpy.sum(self.cis_data[:, 2]),
+                                                                             numpy.sum(self.trans_data[:, 2])),
         return None
 
     def export_to_mat(self, outfilename):
