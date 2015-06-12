@@ -544,9 +544,7 @@ class HiCData(object):
         # remove fend pairs from same fend or opposite strand adjacents
         chroms = self.fends['chromosomes'][...]
         for i in range(len(chroms)):
-            for j in range(self.fends['chr_indices'][i + 1] - self.fends['chr_indices'][i] - 2, 2):
-                if len(fend_pairs[i][j]) == 0:
-                    continue
+            for j in range(0, len(fend_pairs[i][i]) - 2, 2):
                 # same fend
                 name = (j, j)
                 if name in fend_pairs[i][i]:
@@ -558,6 +556,10 @@ class HiCData(object):
                 name = (j, j + 1)
                 if name in fend_pairs[i][i]:
                     del fend_pairs[i][i][name]
+                # same fend
+                name = (j + 1, j)
+                if name in fend_pairs[i][i]:
+                    del fend_pairs[i][i][name]
                 # adjacent fends, opposite strands
                 name = (j, j + 3)
                 if name in fend_pairs[i][i]:
@@ -565,7 +567,7 @@ class HiCData(object):
                 name = (j + 1, j + 2)
                 if name in fend_pairs[i][i]:
                     del fend_pairs[i][i][name]
-            j = self.fends['chr_indices'][i + 1] - self.fends['chr_indices'][i] - 2
+            j = len(fend_pairs[i][i]) - 2
             # same fend
             name = (j, j)
             if name in fend_pairs[i][i]:
@@ -574,6 +576,9 @@ class HiCData(object):
             if name in fend_pairs[i][i]:
                 del fend_pairs[i][i][name]
             name = (j, j + 1)
+            if name in fend_pairs[i][i]:
+                del fend_pairs[i][i][name]
+            name = (j + 1, j)
             if name in fend_pairs[i][i]:
                 del fend_pairs[i][i][name]
         return None
