@@ -567,7 +567,7 @@ class HiCData(object):
                 name = (j + 1, j + 2)
                 if name in fend_pairs[i][i]:
                     del fend_pairs[i][i][name]
-            j = len(fend_pairs[i][i]) - 2
+            j = chr_indices[i + 1] - chr_indices[i] - 2
             # same fend
             name = (j, j)
             if name in fend_pairs[i][i]:

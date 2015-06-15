@@ -11,7 +11,7 @@ import numpy
 
 MAJOR = 1
 MINOR = 0
-MICRO = 3
+MICRO = 4
 ISRELEASED = False
 VERSION = '%d.%d' % (MAJOR, MINOR)
 FULLVERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
@@ -89,6 +89,10 @@ def get_extension_modules():
                                 extra_compile_args=[]))
     extensions.append(Extension("hifive.libraries._fivec_optimize", ["hifive/libraries/_fivec_optimize.pyx",
                                 "hifive/libraries/_normal.cpp"],
+                                include_dirs=[numpy.get_include()], language="c++",
+                                extra_compile_args=[]))
+    # Modeling functions
+    extensions.append(Extension("hifive.libraries._modeling", ["hifive/libraries/_modeling.pyx"],
                                 include_dirs=[numpy.get_include()], language="c++",
                                 extra_compile_args=[]))
     return extensions
