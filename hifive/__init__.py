@@ -9,6 +9,7 @@ import hic
 import fivec_binning
 import hic_binning
 import plotting
+#import modeling
 
 from hic import HiC
 from fivec import FiveC

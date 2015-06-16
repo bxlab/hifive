@@ -92,9 +92,9 @@ def get_extension_modules():
                                 include_dirs=[numpy.get_include()], language="c++",
                                 extra_compile_args=[]))
     # Modeling functions
-    extensions.append(Extension("hifive.libraries._modeling", ["hifive/libraries/_modeling.pyx"],
-                                include_dirs=[numpy.get_include()], language="c++",
-                                extra_compile_args=[]))
+    #extensions.append(Extension("hifive.libraries._modeling", ["hifive/libraries/_modeling.pyx"],
+    #                            include_dirs=[numpy.get_include()], language="c++",
+    #                            extra_compile_args=[]))
     return extensions
 
 if __name__ == "__main__":
