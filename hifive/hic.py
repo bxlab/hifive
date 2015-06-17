@@ -1104,6 +1104,8 @@ class HiC(object):
         cont = True
         iteration = 0
         change = numpy.zeros(1, dtype=numpy.float64)
+        valid = numpy.where(filt)[0]
+        mu = 1.0
         while cont:
             iteration += 1
             _optimize.find_fend_means(distance_means,
