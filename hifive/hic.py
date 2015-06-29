@@ -2423,9 +2423,9 @@ class HiC(object):
         for needed in node_needed:
             chrom1 = needed[0]
             chrint1 = chr2int[chrom1]
-            start1 = cis_chrom_bounds[chrint1, 0]
-            stop1 = cis_chrom_bounds[chrint1, 1]
             if len(needed) == 1:
+                start1 = cis_chrom_bounds[chrint1, 0]
+                stop1 = cis_chrom_bounds[chrint1, 1]
                 chrom2 = None
                 start2 = None
                 stop2 = None
@@ -2435,8 +2435,10 @@ class HiC(object):
             else:
                 chrom2 = needed[1]
                 chrint2 = chr2int[chrom2]
-                start2 = cis_chrom_bounds[chrint2, 0]
-                stop2 = cis_chrom_bounds[chrint2, 1]
+                start1 = trans_chrom_bounds[chrint1, 0]
+                stop1 = trans_chrom_bounds[chrint1, 1]
+                start2 = trans_chrom_bounds[chrint2, 0]
+                stop2 = trans_chrom_bounds[chrint2, 1]
                 minbin = trans_minbinsize
                 maxbin = trans_maxbinsize
                 z = trans_zoom
