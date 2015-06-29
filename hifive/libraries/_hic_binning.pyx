@@ -1537,9 +1537,9 @@ def binning_bin_trans_expected(
     return None
 
 
-#@cython.boundscheck(False)
-#@cython.wraparound(False)
-#@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
 def remap_mrh_data(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int64_t, ndim=1] indices,
