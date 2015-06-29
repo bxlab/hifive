@@ -4,6 +4,8 @@
 
 import os
 import sys
+import binascii
+import struct
 
 import numpy
 import h5py
@@ -2265,4 +2267,290 @@ class HiC(object):
                                        minobservations=minobservations, searchdistance=searchdistance,
                                        expansion_binsize=expansion_binsize, removefailed=removefailed,
                                        silent=self.silent, history=history)
+        return None
+
+    def write_multiresolution_heatmap(self, filename, datatype='fend', maxbinsize=1280000, minbinsize=5000, zoom=2,
+                                      trans_maxbinsize=None, trans_minbinsize=None, trans_zoom=None, minobservations=5,
+                                      chroms=None, includetrans=True, midbinsize=40000):
+        """
+        Create a multi-resolution heatmap file containing data for each requested chromosome. This function is MPI-compatible.
+
+        :param filename: Location to write the multi-resolution heamtap to.
+        :type filename: str.
+        :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', and 'enrichment'. Observed values are always in the first index along the last axis. If 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and 'enrichment' uses both correction and distance mean values.
+        :type datatype: str.
+        :param maxbinsize: The maximum sized bin (lowest resolution) heatmap to be produced for each chromosome.
+        :type maxbinsize: int.
+        :param minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for each chromosome.
+        :type minbinsize: int.
+        :param zoom: The size ratio between resolution steps (e.g. a zoom of 2 results in halving the binsize for each step). The maxbinsize and minbinsize must differ by an exponent of zoom (e.g. minbinsize * zoom^N = maxbinsize for some integer N).
+        :type zoom: int.
+        :param trans_maxbinsize: The maximum sized bin (lowest resolution) heatmap to be produced for inter-chromosomal interactions. If trans_maxbinsize is None, the value maxbinsize is used for inter-chromosomal interactions.
+        :type trans_maxbinsize: int.
+        :param trans_minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for inter-chromosomal interactions. If trans_minbinsize is None, the value minbinsize is used for inter-chromosomal interactions.
+        :type trans_minbinsize: int.
+        :param trans_zoom: The size ratio between inter-chromosomal resolution steps (e.g. a trans_zoom of 2 results in halving the binsize for each step). The trans_maxbinsize and trans_minbinsize must differ by an exponent of trans_zoom (e.g. trans_minbinsize * trans_zoom^N = trans_maxbinsize for some integer N). If trans_zoom is None, zoom is used for inter-chromosomal interactions.
+        :type trans_zoom: int.
+        :param minobservations: The minimum number of reads needed for a bin to be considered valid and be included in the heatmap.
+        :type minobservations: int.
+        :param chroms: A list of chromosomes to include in the multi-resolution heatmap. If chroms is None, all chromosomes will be included.
+        :type chroms: list
+        :param includetrans: Indicates whether to calculate all of the inter-chromosomal interaction multi-resolution heatmaps.
+        :type includetrans: bool.
+        :param midbinsize: This is used to determine the smallest bin size (highest resolution) complete heatmap to generate in producing the multi-resolution heatmap. It does not affect the resulting output but can be used to limit the total memory usage, with higher values using less memory but more time.
+        :type midbinsize: int.
+
+        The multi-resolution heatmap file has the following structure -
+        header:
+        magic number "42054205" - 4 bytes (8 2-bit hexadecimals)
+        number of chromosomes "N" - 4 bytes (1 int32)
+        chromosome names - N * 10 bytes (N * 10 chars)
+        chrom index bounds - (N * (N + 1) / 2 + 1) * 4 bytes (N * (N + 1) / 2 + 1 int32)
+        intra-chrom top layer number of paritions - N * 4 bytes (N int32)
+        inter-chrom top layer number of paritions - N * 4 bytes (N int32)
+        chrom total data bins - (N * (N + 1) / 2) * 4 bytes (N int32)
+        intra-chrom start coordinates - N * 4 bytes (N int32)
+        intra-chrom stop coordinates - N * 4 bytes (N int32)
+        inter-chrom start coordinates - N * 4 bytes (N int32)
+        inter-chrom stop coordinates - N * 4 bytes (N int32)
+        chrom min scores - (N * (N + 1) / 2) * 4 bytes (N * (N + 1) / 2 float32)
+        chrom max scores - (N * (N + 1) / 2) * 4 bytes (N * (N + 1) / 2 float32)
+        intra-chromosome largest bin size - 4 bytes (1 int32)
+        intra-chromosome smallest bin size - 4 bytes (1 int32)
+        intra-chromosome zoom factor - 4 bytes (1 int32)
+        inter-chromosome largest bin size - 4 bytes (1 int32)
+        inter-chromosome smallest bin size - 4 bytes (1 int32)
+        inter-chromosome zoom factor - 4 bytes (1 int32)
+        minimum number of observed reads - 4 bytes (1 int32)
+
+        interaction and index arrays:
+        data_array_1_by_1 float32
+        index_array_1_by_1 int32
+        data_array_1_by_2 float32
+        index_array_1_by_2 int32
+        ...
+        data_array_1_by_N float32
+        index_array_1_by_N int32
+        data_array_2_by_2 float32
+        index_array_2_by_2 int32
+        data_array_2_by_3 float32
+        index_array_2_by_3 int32
+        data_array_2_by_N float32
+        index_array_2_by_N int32
+        ...
+        data_array_N_by_N float32
+        index_array_N_by_N int32
+
+        Each data array starts with a flattened array of the complete heatmap with the largest bin size. Intra-chromosomal heatmaps are upper-triangle arrays including the diagonal while inter-chromosomal arrays are rectangles. For each bin, there is a corresponding position in the index array pointing to the start index in the data array for the interactions contained within the data bin, partitioned into smaller bin sizes. If none of the partitioned bins pass the minimum observatioj threshold, the index is -1. For each bin, if it lies on the diagonal is points to a flattened upper-triangle array of zoom * (zoom + 1) / 2 bins; otherwise it points to a zoom^2 flattened array. The smallest binsize data does not have corresponding positions in the index array as there are no further sub-partitionings. Indices in the index array are relative to the data array start position, given in the 'chrom index bounds' portion of the header.
+        """
+        # check trans data parameters
+        if trans_maxbinsize is None:
+            trans_maxbinsize = maxbinsize
+        if trans_minbinsize is None:
+            trans_minbinsize = minbinsize
+        if trans_zoom is None:
+            trans_zoom = zoom
+        # check that all values are acceptable
+        if datatype not in ['raw', 'fend', 'distance', 'enrichment']:
+            if not self.silent:
+                print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+            return None
+        n_levels = numpy.round(numpy.log(maxbinsize / minbinsize) / numpy.log(zoom)).astype(numpy.int32)
+        if maxbinsize != minbinsize * zoom ** n_levels:
+            if not self.silent:
+                print >> sys.stderr, ("Maxbinsize must be a multiple of zoom^N and minbinsize for an integer N. No data returned\n"),
+            return None
+        n_levels = numpy.round(numpy.log(trans_maxbinsize / trans_minbinsize) /
+                               numpy.log(trans_zoom)).astype(numpy.int32)
+        if trans_maxbinsize != trans_minbinsize * trans_zoom ** n_levels:
+            if not self.silent:
+                print >> sys.stderr, ("Trans_maxbinsize must be a multiple of trans_zoom^N and trans_minbinsize for an integer N. No data returned\n"),
+            return None
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\rFinding multi-resolution heatmap...") % (' ' * 80),
+        # determine which chromosomes to use
+        if (chroms is None or
+                (isinstance(chroms, list) and
+                (len(chroms) == 0 or
+                (len(chroms) == 1 and chroms[0] == ''))) or
+                chroms == ''):
+            chroms = list(self.fends['chromosomes'][...])
+        n_chroms = len(chroms)
+        chr2int = {}
+        for i, chrom in enumerate(chroms):
+            chr2int[chrom] = i
+        # find the first and last valid fend positions for each chromosome
+        chrom_bounds = numpy.zeros((n_chroms, 2), dtype=numpy.int32)
+        chr_indices = self.fends['chr_indices'][...]
+        for i, chrom in enumerate(chroms):
+            chrint = self.chr2int[chrom]
+            valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0]
+            if valid.shape[0] > 0:
+                chrom_bounds[i, 0] = self.fends['fends']['mid'][valid[0] + chr_indices[chrint]]
+                chrom_bounds[i, 1] = self.fends['fends']['mid'][valid[-1] + chr_indices[chrint]] + 1
+        # determine largest bin bounds for intra-chromosomal heatmaps
+        cis_chrom_bounds = numpy.zeros(chrom_bounds.shape, dtype=numpy.int32)
+        valid = numpy.where(chrom_bounds[:, 1] > chrom_bounds[:, 0])[0]
+        num_cis_bins = (numpy.ceil((chrom_bounds[:, 1] - chrom_bounds[:, 0]) / float(maxbinsize)).astype(numpy.int32))
+        cis_chrom_bounds[valid, 0] = ((chrom_bounds[valid, 0] + chrom_bounds[valid, 1]) / 2 -
+                                      numpy.round(maxbinsize * num_cis_bins[valid] / 2.0).astype(numpy.int32))
+        cis_chrom_bounds[valid, 1] = cis_chrom_bounds[valid, 0] + num_cis_bins[valid] * maxbinsize
+        # if including trans interactions, calculate largest bin bounds for inter-chromosomal heatmaps
+        if includetrans:
+            trans_chrom_bounds = numpy.zeros(cis_chrom_bounds.shape, dtype=numpy.int32)
+            num_trans_bins = (numpy.ceil((chrom_bounds[:, 1] - chrom_bounds[:, 0]) /
+                              float(trans_maxbinsize)).astype(numpy.int32))
+            trans_chrom_bounds[valid, 0] = ((chrom_bounds[valid, 0] + chrom_bounds[valid, 1]) / 2 -
+                                            numpy.round(trans_maxbinsize * num_trans_bins[valid] /
+                                            2.0).astype(numpy.int32))
+            trans_chrom_bounds[valid, 1] = trans_chrom_bounds[valid, 0] + num_trans_bins[valid] * trans_maxbinsize
+        else:
+            trans_chrom_bounds = cis_chrom_bounds
+            num_trans_bins = numpy.zeros(chrom_bounds.shape[0], dtype=numpy.int32)
+        # determine which chromosome multi-resolution heatmaps need to be calculated and assign to workers
+        all_needed = []
+        for i, chrom in enumerate(chroms):
+            if num_cis_bins[i] > 0:
+                all_needed.append((chrom,))
+            if includetrans and num_trans_bins[i] > 0:
+                for j, chrom2 in enumerate(chroms[(i + 1):]):
+                    if num_trans_bins[i + j + 1] > 0:
+                        all_needed.append((chrom, chrom2))
+        node_ranges = numpy.round(numpy.linspace(0, len(all_needed), self.num_procs + 1)).astype(numpy.int32)
+        node_needed = all_needed[node_ranges[self.rank]:node_ranges[self.rank + 1]]
+        # produce multi-resolution heatmaps for each chromosome or pair of chromosomes
+        results = {}
+        for needed in node_needed:
+            chrom1 = needed[0]
+            chrint1 = chr2int[chrom1]
+            start1 = cis_chrom_bounds[chrint1, 0]
+            stop1 = cis_chrom_bounds[chrint1, 1]
+            if len(needed) == 1:
+                chrom2 = None
+                start2 = None
+                stop2 = None
+                minbin = minbinsize
+                maxbin = maxbinsize
+                z = zoom
+            else:
+                chrom2 = needed[1]
+                chrint2 = chr2int[chrom2]
+                start2 = cis_chrom_bounds[chrint2, 0]
+                stop2 = cis_chrom_bounds[chrint2, 1]
+                minbin = trans_minbinsize
+                maxbin = trans_maxbinsize
+                z = trans_zoom
+            # results are returned as a list containing the flattened data array and the flattened index array
+            results[needed] = hic_binning.find_multiresolution_heatmap(self, chrom=chrom1, chrom2=chrom2, start=start1,
+                              stop=stop1, start2=start2, stop2=stop2, minbinsize=minbin, maxbinsize=maxbin, zoom=z,
+                              minobservations=minobservations, datatype=datatype, midbinsize=midbinsize, silent=False)
+        # pass all results to the root node for writing to file
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                for j in range(node_ranges[i], node_ranges[i + 1]):
+                    results[all_needed[j]] = self.comm.recv(source=i, tag=11)
+        else:
+            for i in range(node_ranges[self.rank], node_ranges[self.rank + 1]):
+                self.comm.send(results[all_needed[i]], dest=0, tag=11)
+                del results[all_needed[i]]
+            return None
+        # calculate header size
+        magic_number_size = 4 # 8 4-bit hexadecimals = 4 bytes
+        name_sizes = numpy.zeros(n_chroms, dtype=numpy.int32)
+        for i, chrom in enumerate(chroms):
+            name_sizes[i] = len(chrom)
+        int_float_size = 4 # size of int32 and float32
+        if includetrans:
+            num_chrom_pairings = (n_chroms * (n_chroms + 1)) / 2
+            repeated = 2
+        else:
+            num_chrom_pairings = n_chroms
+            repeated = 1
+        header_size = (magic_number_size +                         # magic number
+                       int_float_size +                            # include trans flag
+                       int_float_size +                            # number of chroms
+                       n_chroms * int_float_size +                 # index of chrom name sizes
+                       numpy.sum(name_sizes) +                     # chrom names
+                       (num_chrom_pairings + 1) * int_float_size + # index of chrom data start positions
+                       (n_chroms * int_float_size) * repeated +    # number of cis (and trans) paritions
+                       num_chrom_pairings * int_float_size +       # data array sizes for each chrom pairing
+                       (n_chroms * int_float_size) * repeated +    # cis (and trans) start coordinates
+                       (n_chroms * int_float_size) * repeated +    # cis (and trans) stop coordinates
+                       num_chrom_pairings * int_float_size +       # minimum scores for each chrom pairing
+                       num_chrom_pairings * int_float_size +       # maximum scores for each chrom pairing
+                       int_float_size * repeated +                 # largest cis (and trans) binsize(s)
+                       int_float_size * repeated +                 # smallest cis (and trans) binsize(s)
+                       int_float_size * repeated +                 # cis (and trans) zoom factor(s)
+                       int_float_size)                             # minimum observation cutoff
+        # calculate score ranges, data array and total array sizes
+        min_scores = numpy.zeros(num_chrom_pairings, dtype=numpy.float32)
+        max_scores = numpy.zeros(num_chrom_pairings, dtype=numpy.float32)
+        data_sizes = numpy.zeros(num_chrom_pairings, dtype=numpy.int32)
+        data_indices = numpy.zeros(num_chrom_pairings + 1, dtype=numpy.int32)
+        data_indices[0] = header_size
+        pos = 0
+        for i, chrom in enumerate(chroms):
+            key = (chrom,)
+            if key in results:
+                valid = numpy.where(numpy.logical_not(numpy.isnan(results[key][0])))
+                min_scores[pos] = numpy.amin(results[key][0][valid])
+                max_scores[pos] = numpy.amax(results[key][0][valid])
+                data_sizes[pos] = results[key][0].shape[0]
+                data_indices[pos + 1] = ((results[key][1].shape[0] + data_sizes[pos]) * int_float_size +
+                                         data_indices[pos])
+            else:
+                data_indices[pos + 1] = data_indices[pos]
+            pos += 1
+            if includetrans:
+                for chrom2 in chroms[i + 1:]:
+                    key = (chrom, chrom2)
+                    if key in results:
+                        valid = numpy.where(numpy.logical_not(numpy.isnan(results[key][0])))
+                        min_scores[pos] = numpy.amin(results[key][0][valid])
+                        max_scores[pos] = numpy.amax(results[key][0][valid])
+                        data_sizes[pos] = results[key][0].shape[0]
+                        data_indices[pos + 1] = ((results[key][1].shape[0] + data_sizes[pos]) * int_float_size +
+                                                 data_indices[pos])
+                    else:
+                        data_indices[pos + 1] = data_indices[pos]
+                    pos += 1
+        # write header
+        output = open(filename, 'wb')
+        output.write(binascii.a2b_hex('42054205'))
+        output.write(struct.pack('ii', int(includetrans), n_chroms))
+        output.write(name_sizes.tostring())
+        for i, chrom in enumerate(chroms):
+            output.write(struct.pack('c' * name_sizes[i], *list(chrom)))
+        output.write(data_indices.tostring())
+        output.write(num_cis_bins.tostring())
+        if includetrans:
+            output.write(num_trans_bins.tostring())
+        output.write(data_sizes.tostring())
+        output.write(cis_chrom_bounds[:, 0].tostring())
+        if includetrans:
+            output.write(trans_chrom_bounds[:, 0].tostring())
+        output.write(cis_chrom_bounds[:, 1].tostring())
+        if includetrans:
+            output.write(trans_chrom_bounds[:, 1].tostring())
+        output.write(min_scores.tostring())
+        output.write(max_scores.tostring())
+        if includetrans:
+            output.write(struct.pack('iiiiii', maxbinsize, trans_maxbinsize, minbinsize,
+                                     trans_minbinsize, zoom, trans_zoom))
+        else:
+            output.write(struct.pack('iii', maxbinsize, minbinsize, zoom))
+        output.write(struct.pack('i', minobservations))
+        # write data and indices for each chrom pairing
+        for i, chrom in enumerate(chroms):
+            for chrom2 in chroms[i:]:
+                if chrom == chrom2:
+                    key = (chrom,)
+                else:
+                    key = (chrom, chrom2)
+                if key in results:
+                    output.write(results[key][0].astype(numpy.float32).tostring())
+                    output.write(results[key][1].astype(numpy.int32).tostring())
+        output.close()
+        if not self.silent:
+            print >> sys.stderr, ("Done\n"),
         return None
