@@ -632,8 +632,8 @@ class HiCData(object):
                 # sort interactions
                 order = numpy.lexsort((self.trans_data[chr_start:pos, 1], self.trans_data[chr_start:pos, 0]))
                 self.trans_data[chr_start:pos, :] = self.trans_data[order + chr_start, :]
-                self.trans_data[:, 0] += chr_indices[i]
-                self.trans_data[:, 1] += chr_indices[j]
+                self.trans_data[chr_start:pos, 0] += chr_indices[i]
+                self.trans_data[chr_start:pos, 1] += chr_indices[j]
                 del order
         # create data indices
         if self.cis_data.shape[0] > 0:

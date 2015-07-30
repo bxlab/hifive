@@ -92,7 +92,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         start = binbounds[0, 0]
         stop = binbounds[-1, 1]
         startfend = _find_fend_from_coord(hic, chrint, start)
-        stopfend = _find_fend_from_coord(hic, chrint, stop)
+        stopfend = _find_fend_from_coord(hic, chrint, stop) + 1
     else:
         if start is None and startfend is None:
             startfend = hic.fends['chr_indices'][chrint]
@@ -125,7 +125,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         else:
             if binsize > 0:
                 stop = ((stop - 1 - start) / binsize + 1) * binsize + start
-            stopfend = _find_fend_from_coord(hic, chrint, stop)
+            stopfend = _find_fend_from_coord(hic, chrint, stop) + 1
     if not silent:
         print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
     # If datatype is not 'expected', pull the needed slice of data
@@ -547,7 +547,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         start1 = binbounds1[0, 0]
         stop1 = binbounds1[-1, 1]
         startfend1 = _find_fend_from_coord(hic, chrint1, start1)
-        stopfend1 = _find_fend_from_coord(hic, chrint1, stop1)
+        stopfend1 = _find_fend_from_coord(hic, chrint1, stop1) + 1
     else:
         if start1 is None and startfend1 is None:
             startfend1 = hic.fends['chr_indices'][chrint1]
@@ -580,12 +580,12 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         else:
             if binsize > 0:
                 stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
-            stopfend1 = _find_fend_from_coord(hic, chrint1, stop1)
+            stopfend1 = _find_fend_from_coord(hic, chrint1, stop1) + 1
     if not binbounds1 is None:
         start2 = binbounds1[0, 0]
         stop2 = binbounds1[-1, 1]
         startfend2 = _find_fend_from_coord(hic, chrint2, start2)
-        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
+        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2) + 1
     else:
         if start2 is None and startfend2 is None:
             startfend2 = hic.fends['chr_indices'][chrint2]
@@ -618,7 +618,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         else:
             if binsize > 0:
                 stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
-            stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
+            stopfend2 = _find_fend_from_coord(hic, chrint2, stop2) + 1
     if not silent:
         print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") % (datatype,  chrom1,
                                                                                  start1, stop1, chrom2, start2,
@@ -825,7 +825,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     else:
         if not silent:
             print >> sys.stderr, ("Done\n"),
-        return data_array
+        return data_array, correction_sums1, correction_sums2
 
 def bin_trans_array(data_array, data_mapping1, data_mapping2, binsize=10000, binbounds1=None, start1=None, stop1=None,
                     binbounds2=None, start2=None, stop2=None, returnmapping=False, **kwargs):
@@ -1150,7 +1150,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
 
 
 def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=None, stop2=None, minbinsize=5000,
-                                 maxbinsize=12800000, zoom=2, minobservations=5, datatype='fend', midbinsize=40000,
+                                 maxbinsize=12800000, minobservations=5, datatype='fend', midbinsize=40000,
                                  silent=True):
     """
     Create a multi-resolution data and index heatmap array for a chromosome or chromosome pair.
@@ -1173,8 +1173,6 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     :type maxbinsize: int.
     :param minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for each chromosome.
     :type minbinsize: int.
-    :param zoom: The size ratio between resolution steps (e.g. a zoom of 2 results in halving the binsize for each step). The maxbinsize and minbinsize must differ by an exponent of zoom (e.g. minbinsize * zoom^N = maxbinsize for some integer N).
-    :type zoom: int.
     :param minobservations: The minimum number of reads needed for a bin to be considered valid and be included in the heatmap.
     :type minobservations: int.
     :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', and 'enrichment'. Observed values are always in the first index along the last axis. If 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and 'enrichment' uses both correction and distance mean values.
@@ -1197,10 +1195,10 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
         if not silent:
             print >> sys.stderr, ("Genomic intervals must be multiples of maxbinsize. No data returned\n"),
         return None
-    res_levels = numpy.round(numpy.log(maxbinsize / minbinsize) / numpy.log(zoom)).astype(numpy.int32)
-    if maxbinsize != minbinsize * zoom ** res_levels:
+    res_levels = numpy.round(numpy.log(maxbinsize / minbinsize) / numpy.log(2.0)).astype(numpy.int32)
+    if maxbinsize != minbinsize * 2 ** res_levels:
         if not silent:
-            print >> sys.stderr, ("Maxbinsize must be a multiple of zoom^N and minbinsize for an integer N. No data returned\n"),
+            print >> sys.stderr, ("Maxbinsize must be a multiple of 2^N and minbinsize for an integer N. No data returned\n"),
         return None
     if not silent:
         if chrom2 is None:
@@ -1213,7 +1211,7 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     chrint2 = None
     span = stop - start
     startfend = _find_fend_from_coord(hic, chrint, start)
-    stopfend = _find_fend_from_coord(hic, chrint, stop)
+    stopfend = _find_fend_from_coord(hic, chrint, stop) + 1
     if chrom2 is None:
         trans = False
     else:
@@ -1221,25 +1219,27 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
         chrint2 = hic.chr2int[chrom2]
         trans = True
         startfend2 = _find_fend_from_coord(hic, chrint2, start2)
-        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
+        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2) + 1
     # determine actual midresolution limit
     temp = maxbinsize
-    while temp / zoom >= max(midbinsize, minbinsize):
-        temp /= zoom
+    while temp / 2 >= max(midbinsize, minbinsize):
+        temp /= 2
     midbinsize = temp
     # pull relevant data
     n = span / midbinsize
     valid = numpy.where(hic.filter[startfend:stopfend])[0].astype(numpy.int32)
-    mids = hic.fends['fends']['mid'][startfend:stopfend][valid] - start
     fend_nums = valid + startfend
+    mids = hic.fends['fends']['mid'][fend_nums] - start
     binbounds = numpy.round(numpy.linspace(0, span, n + 1)).astype(numpy.int32)
     bin_mids = (binbounds[:-1] + binbounds[1:]) / 2
+    mapping = numpy.empty(stopfend - startfend, dtype=numpy.int32)
+    mapping.fill(-1)
+    mapping[valid] = numpy.arange(valid.shape[0])
+    binmapping = mids / midbinsize
     obs_indices = numpy.searchsorted(mids, binbounds).astype(numpy.int32)
     if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
         corrections = hic.corrections[fend_nums]
-        correction_sums = numpy.zeros(n, dtype=numpy.float32)
-        for i in range(n):
-            correction_sums[i] = numpy.sum(corrections[obs_indices[i]:obs_indices[i + 1]])
+        correction_sums = numpy.bincount(binmapping, weights=corrections, minlength=n).astype(numpy.float32)
     else:
         corrections = None
         correction_sums = None
@@ -1255,23 +1255,21 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     else:
         distance_parameters = None
         chrom_mean = 0.0
-    mapping = numpy.empty(stopfend - startfend, dtype=numpy.int32)
-    mapping.fill(-1)
-    mapping[valid] = numpy.arange(valid.shape[0])
-    binmapping = mids / midbinsize
     if trans:
         m = span2 / midbinsize
         valid2 = numpy.where(hic.filter[startfend2:stopfend2])[0]
-        mids2 = hic.fends['fends']['mid'][startfend2:stopfend2][valid2] - start2
         fend_nums2 = valid2 + startfend2
+        mids2 = hic.fends['fends']['mid'][fend_nums2] - start2
         binbounds2 = numpy.round(numpy.linspace(0, span2, m + 1)).astype(numpy.int32)
         bin_mids2 = (binbounds2[:-1] + binbounds2[1:]) / 2
         obs_indices2 = numpy.searchsorted(mids2, binbounds2).astype(numpy.int32)
+        mapping2 = numpy.empty(stopfend2 - startfend2, dtype=numpy.int32)
+        mapping2.fill(-1)
+        mapping2[valid2] = numpy.arange(valid2.shape[0])
+        binmapping2 = mids2 / midbinsize
         if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections2 = hic.corrections[fend_nums2]
-            correction_sums2 = numpy.zeros(m, dtype=numpy.float32)
-            for i in range(m):
-                correction_sums2[i] = numpy.sum(corrections2[obs_indices2[i]:obs_indices2[i + 1]])
+            correction_sums2 = numpy.bincount(binmapping2, weights=corrections2, minlength=m).astype(numpy.float32)
         else:
             corrections2 = None
             correction_sums2 = None
@@ -1287,10 +1285,6 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
             else:
                 index = chrint2 * (hic.fends['chromosomes'].shape[0] - 1) - chrint2 * (chrint2 + 1) / 2 - 1 + chrint
             chrom_mean = hic.trans_means[index]
-        mapping2 = numpy.empty(stopfend2 - startfend2, dtype=numpy.int32)
-        mapping2.fill(-1)
-        mapping2[valid2] = numpy.arange(valid2.shape[0])
-        binmapping2 = mids2 / midbinsize
         # pull relevant trans observations and remap
         if chrint2 < chrint:
             start_index = hic.data['trans_indices'][startfend2]
@@ -1342,7 +1336,7 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                     stopfend - startfend,
                     0)
     if trans and chrint2 < chrint:
-        data = data[numpy.lexsort(data[:, 1], data[:, 0])]
+        data = data[numpy.lexsort((data[:, 1], data[:, 0])), :]
     data_indices = numpy.r_[0, numpy.bincount(data[:num_data, 0], minlength=valid.shape[0])].astype(numpy.int64)
     for i in range(1, data_indices.shape[0]):
         data_indices[i] += data_indices[i - 1]
@@ -1383,6 +1377,7 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
             expected,
             fend_nums,
             binmapping,
+            mapping,
             mids,
             obs_indices,
             corrections,
@@ -1408,13 +1403,11 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     # make data arrays to hold output
     if trans:
         current_level_data = numpy.zeros(n_bins * m_bins, dtype=numpy.float32)
-        temp_diag = None
     else:
         current_level_data = numpy.zeros((n_bins * (n_bins + 1)) / 2, dtype=numpy.float32)
-        temp_diag = numpy.zeros((zoom * (zoom + 1)) / 2, dtype=numpy.float32)
-    temp_data = numpy.zeros(zoom ** 2, dtype=numpy.float32)
     current_level_indices = numpy.empty(current_level_data.shape, dtype=numpy.int32)
     current_level_indices.fill(-1)
+    current_level_shapes = numpy.zeros(current_level_data.shape, dtype=numpy.int32)
     bin_position = numpy.empty(current_level_data.shape, dtype=numpy.int32)
     bin_position.fill(-1)
     # find largest binned data array
@@ -1435,8 +1428,9 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                                            minobservations)
     all_data = [current_level_data]
     all_indices = [current_level_indices]
+    all_shapes = [current_level_shapes]
     # find subpartitioning for all valid bins for each resolution level
-    resolution = maxbinsize / zoom
+    resolution = maxbinsize / 2
     if trans:
         pos = n_bins * m_bins
     else:
@@ -1444,12 +1438,13 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     # find levels below the first but above or equal to midbinsize
     while resolution >= midbinsize:
         prev_bin_position = bin_position
-        bin_position = numpy.empty(prev_bin_position.shape[0] * (zoom ** 2), dtype=numpy.int32)
+        bin_position = numpy.empty(prev_bin_position.shape[0] * 4, dtype=numpy.int32)
         bin_position.fill(-1)
         prev_level_data = all_data[-1]
-        current_level_data = numpy.empty(prev_level_data.shape[0] * (zoom ** 2), dtype=numpy.float32)
+        current_level_data = numpy.empty(prev_level_data.shape[0] * 4, dtype=numpy.float32)
         current_level_data.fill(numpy.nan)
         prev_level_indices = all_indices[-1]
+        prev_level_shapes = all_shapes[-1]
         prev_n_bins = n_bins
         prev_m_bins = 0
         n_bins = span / resolution
@@ -1466,15 +1461,14 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                                                  current_level_data,
                                                  prev_level_data,
                                                  prev_level_indices,
+                                                 prev_level_shapes,
                                                  obs_indices,
                                                  obs_indices2,
                                                  prev_bin_position,
                                                  bin_position,
-                                                 temp_data,
                                                  prev_m_bins,
                                                  m_bins,
                                                  minobservations,
-                                                 zoom,
                                                  pos)
         else:
             _hic_binning.make_cis_mrh_midlevel(observed,
@@ -1482,15 +1476,13 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                                                current_level_data,
                                                prev_level_data,
                                                prev_level_indices,
+                                               prev_level_shapes,
                                                obs_indices,
                                                prev_bin_position,
                                                bin_position,
-                                               temp_data,
-                                               temp_diag,
                                                prev_n_bins,
                                                n_bins,
                                                minobservations,
-                                               zoom,
                                                pos)
         where = numpy.where(bin_position >= 0)[0]
         pos += where.shape[0]
@@ -1499,17 +1491,19 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
         if resolution > minbinsize:
             all_indices.append(numpy.empty(all_data[-1].shape[0], dtype=numpy.int32))
             all_indices[-1].fill(-1)
-        resolution /= zoom
+            all_shapes.append(numpy.zeros(all_data[-1].shape[0], dtype=numpy.int32))
+        resolution /= 2
     # find levels below midbinsize
     if midbinsize > minbinsize:
         while resolution >= minbinsize:
             prev_bin_position = bin_position
-            bin_position = numpy.empty(prev_bin_position.shape[0] * (zoom ** 2), dtype=numpy.int32)
+            bin_position = numpy.empty(prev_bin_position.shape[0] * 4, dtype=numpy.int32)
             bin_position.fill(-1)
             prev_level_data = all_data[-1]
-            current_level_data = numpy.empty(prev_level_data.shape[0] * (zoom ** 2), dtype=numpy.float32)
+            current_level_data = numpy.empty(prev_level_data.shape[0] * 4, dtype=numpy.float32)
             current_level_data.fill(numpy.nan)
             prev_level_indices = all_indices[-1]
+            prev_level_shapes = all_shapes[-1]
             prev_n_bins = n_bins
             prev_m_bins = 0
             n_bins = span / resolution
@@ -1534,15 +1528,14 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                                                        current_level_data,
                                                        prev_level_data,
                                                        prev_level_indices,
+                                                       prev_level_shapes,
                                                        obs_indices,
                                                        obs_indices2,
                                                        prev_bin_position,
                                                        bin_position,
-                                                       temp_data,
                                                        prev_m_bins,
                                                        m_bins,
                                                        minobservations,
-                                                       zoom,
                                                        pos)
             else:
                 _hic_binning.make_cis_mrh_lowerlevel(data,
@@ -1553,15 +1546,13 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                                                      current_level_data,
                                                      prev_level_data,
                                                      prev_level_indices,
+                                                     prev_level_shapes,
                                                      obs_indices,
                                                      prev_bin_position,
                                                      bin_position,
-                                                     temp_data,
-                                                     temp_diag,
                                                      prev_n_bins,
                                                      n_bins,
                                                      minobservations,
-                                                     zoom,
                                                      pos)
             where = numpy.where(bin_position >= 0)[0]
             pos += where.shape[0]
@@ -1570,7 +1561,8 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
             if resolution > minbinsize:
                 all_indices.append(numpy.empty(all_data[-1].shape[0], dtype=numpy.int32))
                 all_indices[-1].fill(-1)
-            resolution /= zoom
+                all_shapes.append(numpy.zeros(all_data[-1].shape[0], dtype=numpy.int32))
+            resolution /= 2
     data = all_data[0]
     for i in range(1, len(all_data)):
         where = numpy.where(numpy.logical_not(numpy.isnan(all_data[i])))
@@ -1580,6 +1572,10 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     for i in range(1, len(all_indices)):
         indices = numpy.hstack((indices, all_indices[i]))
         all_indices[i] = None
+    shapes = all_shapes[0]
+    for i in range(1, len(all_shapes)):
+        shapes = numpy.hstack((shapes, all_shapes[i]))
+        all_shapes[i] = None
     if not silent:
         print >> sys.stderr, ("Done\n"),
-    return [data, indices]
+    return [data, indices, shapes]

@@ -7,6 +7,9 @@ import sys
 
 import numpy
 import h5py
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.charts.lineplots import LinePlot
+from reportlab.lib.colors import Color
 
 
 class Fend(object):
@@ -141,6 +144,13 @@ class Fend(object):
         self.genome_name = genome_name
         self.chr_indices = chr_indices
         self.chromosomes = chromosomes
+        # calculate statistics
+        self.fend_sizes = numpy.zeros((40, self.chromosomes.shape[0] + 1), dtype=numpy.float32)
+        sizes = numpy.log(self.fends['stop'] - self.fends['start'])
+        splits = numpy.linspace(numpy.amin(sizes), numpy.amax(sizes) + 1, 41)
+        for i in range(self.chr_indices.shape[0] - 1):
+            self.fend_sizes[:, i] = numpy.histogram(sizes[chr_indices[i]:chr_indices[i + 1]], bins=splits)[0]
+        self.fend_sizes[:, -1] = (splits[1:] + splits[:-1]) / 2.0
         self.history += "Success\n"
         return None
 
@@ -266,6 +276,50 @@ class Fend(object):
                 pos += data_len
         fends['mid'][:] = (fends['start'][:] + fends['stop'][:]) / 2
         return [fends, chromosomes]
+
+    def plot_statistics(self):
+        width, height = 800, 400
+        c = Drawing(width + 5, height + 5)
+        data = []
+        where = numpy.where(numpy.sum(self.fend_sizes[:, :-1], axis=0))[0]
+        for i in where:
+            data.append(tuple(zip(self.fend_sizes[:, -1],
+                        self.fend_sizes[:, i] / float(numpy.sum(self.fend_sizes[:, i])))))
+        data.append(tuple(zip(self.fend_sizes[:, -1], numpy.sum(self.fend_sizes[:, :-1], axis=1) /
+                    float(numpy.sum(self.fend_sizes[:, :-1])))))
+        lp = LinePlot()
+        lp.x = 40
+        lp.y = 20
+        lp.height = height - 20
+        lp.width = width - 40
+        lp.data = data
+        lp.joinedLines = 1
+        def findcolor(i, n):
+            H = i * 6.0 / float(n)
+            X = 1.0 - abs(H % 2 - 1.0)
+            if H < 1.0:
+                return (1.0, X, 0., 1.0)
+            elif H < 2.0:
+                return (X, 1.0, 0., 1.0)
+            elif H < 3.0:
+                return (0., 1.0, X, 1.0)
+            elif H < 4.0:
+                return (0., X, 1.0, 1.0)
+            elif H < 5.0:
+                return (X, 0., 1.0, 1.0)
+            else:
+                return (1.0, 0., X, 1.0)
+
+        def axisstring(i):
+            return "%0.1E" % numpy.exp(i)
+
+        lp.xValueAxis.labelTextFormat = axisstring
+        for i in range(where.shape[0]):
+            lp.lines[i].strokeColor = Color(*findcolor(i, where.shape[0]))
+        c.add(lp)
+        #c.drawString(220, 0, "Length of fend (bp)")
+        #c.drawString(0, 110, "Percent of fends")
+        return c
 
 
 if __name__ == '__main__':

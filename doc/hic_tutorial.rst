@@ -110,9 +110,9 @@ Find HiC distance function
 
 :mod:`HiFive` approximates the distance-signal relationship using a series of linear transitions between bin means of mean log interaction counts. Spanning from a user-defined minimum interaction distance up to the genome maximum interaction distance, the range is divided into equal-sized log distance bins. Values falling between bin midpoints are interpolated based on a linear transition between bins. To estimate this function, you can use the following command::
 
-  hic.find_distance_means(numbins=90,
-                          minsize=200, 
-                          maxsize=0)
+  hic.find_distance_parameters(numbins=90,
+                               minsize=200, 
+                               maxsize=0)
 
 In this function call, the range of interaction sizes is being broken into 90 bins, 1 bin covering interactions <= 200 bp, and the other 89 spanning up to the maximum interaction distance with breaks evenly spaced in log space. The maximum of this range is set by 'maxsize', which can either be zero, as in this call, setting the maximum size equal to the longest interaction distance, or a positive integer value which would exclude any interaction distances greater than 'maxsize'.
 

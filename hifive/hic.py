@@ -2269,8 +2269,8 @@ class HiC(object):
                                        silent=self.silent, history=history)
         return None
 
-    def write_multiresolution_heatmap(self, filename, datatype='fend', maxbinsize=1280000, minbinsize=5000, zoom=2,
-                                      trans_maxbinsize=None, trans_minbinsize=None, trans_zoom=None, minobservations=5,
+    def write_multiresolution_heatmap(self, filename, datatype='fend', maxbinsize=1280000, minbinsize=5000,
+                                      trans_maxbinsize=None, trans_minbinsize=None, minobservations=5,
                                       chroms=None, includetrans=True, midbinsize=40000):
         """
         Create a multi-resolution heatmap file containing data for each requested chromosome. This function is MPI-compatible.
@@ -2281,16 +2281,12 @@ class HiC(object):
         :type datatype: str.
         :param maxbinsize: The maximum sized bin (lowest resolution) heatmap to be produced for each chromosome.
         :type maxbinsize: int.
-        :param minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for each chromosome.
+        :param minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for each chromosome. The maxbinsize and minbinsize must differ by an exponent of 2 (e.g. minbinsize * 2^N = maxbinsize for some integer N).
         :type minbinsize: int.
-        :param zoom: The size ratio between resolution steps (e.g. a zoom of 2 results in halving the binsize for each step). The maxbinsize and minbinsize must differ by an exponent of zoom (e.g. minbinsize * zoom^N = maxbinsize for some integer N).
-        :type zoom: int.
         :param trans_maxbinsize: The maximum sized bin (lowest resolution) heatmap to be produced for inter-chromosomal interactions. If trans_maxbinsize is None, the value maxbinsize is used for inter-chromosomal interactions.
         :type trans_maxbinsize: int.
-        :param trans_minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for inter-chromosomal interactions. If trans_minbinsize is None, the value minbinsize is used for inter-chromosomal interactions.
+        :param trans_minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for inter-chromosomal interactions. If trans_minbinsize is None, the value minbinsize is used for inter-chromosomal interactions. The trans_maxbinsize and trans_minbinsize must differ by an exponent of 2 (e.g. trans_minbinsize * 2^N = trans_maxbinsize for some integer N).
         :type trans_minbinsize: int.
-        :param trans_zoom: The size ratio between inter-chromosomal resolution steps (e.g. a trans_zoom of 2 results in halving the binsize for each step). The trans_maxbinsize and trans_minbinsize must differ by an exponent of trans_zoom (e.g. trans_minbinsize * trans_zoom^N = trans_maxbinsize for some integer N). If trans_zoom is None, zoom is used for inter-chromosomal interactions.
-        :type trans_zoom: int.
         :param minobservations: The minimum number of reads needed for a bin to be considered valid and be included in the heatmap.
         :type minobservations: int.
         :param chroms: A list of chromosomes to include in the multi-resolution heatmap. If chroms is None, all chromosomes will be included.
@@ -2303,12 +2299,14 @@ class HiC(object):
         The multi-resolution heatmap file has the following structure -
         header:
         magic number "42054205" - 4 bytes (8 2-bit hexadecimals)
+        flag indicating if trans are included - 4 bytes (1 int32)
         number of chromosomes "N" - 4 bytes (1 int32)
         chromosome names - N * 10 bytes (N * 10 chars)
         chrom index bounds - (N * (N + 1) / 2 + 1) * 4 bytes (N * (N + 1) / 2 + 1 int32)
         intra-chrom top layer number of paritions - N * 4 bytes (N int32)
         inter-chrom top layer number of paritions - N * 4 bytes (N int32)
         chrom total data bins - (N * (N + 1) / 2) * 4 bytes (N int32)
+        chrom total index bins - (N * (N + 1) / 2) * 4 bytes (N int32)
         intra-chrom start coordinates - N * 4 bytes (N int32)
         intra-chrom stop coordinates - N * 4 bytes (N int32)
         inter-chrom start coordinates - N * 4 bytes (N int32)
@@ -2317,54 +2315,57 @@ class HiC(object):
         chrom max scores - (N * (N + 1) / 2) * 4 bytes (N * (N + 1) / 2 float32)
         intra-chromosome largest bin size - 4 bytes (1 int32)
         intra-chromosome smallest bin size - 4 bytes (1 int32)
-        intra-chromosome zoom factor - 4 bytes (1 int32)
         inter-chromosome largest bin size - 4 bytes (1 int32)
         inter-chromosome smallest bin size - 4 bytes (1 int32)
-        inter-chromosome zoom factor - 4 bytes (1 int32)
         minimum number of observed reads - 4 bytes (1 int32)
 
         interaction and index arrays:
         data_array_1_by_1 float32
         index_array_1_by_1 int32
+        shape_array_1_by_1 int32
         data_array_1_by_2 float32
         index_array_1_by_2 int32
+        shape_array_1_by_2 int32
         ...
         data_array_1_by_N float32
         index_array_1_by_N int32
+        shape_array_1_by_N int32
         data_array_2_by_2 float32
         index_array_2_by_2 int32
+        shape_array_2_by_2 int32
         data_array_2_by_3 float32
         index_array_2_by_3 int32
+        shape_array_2_by_3 int32
         data_array_2_by_N float32
         index_array_2_by_N int32
+        shape_array_2_by_N int32
         ...
         data_array_N_by_N float32
         index_array_N_by_N int32
+        shape_array_N_by_N int32
 
-        Each data array starts with a flattened array of the complete heatmap with the largest bin size. Intra-chromosomal heatmaps are upper-triangle arrays including the diagonal while inter-chromosomal arrays are rectangles. For each bin, there is a corresponding position in the index array pointing to the start index in the data array for the interactions contained within the data bin, partitioned into smaller bin sizes. If none of the partitioned bins pass the minimum observatioj threshold, the index is -1. For each bin, if it lies on the diagonal is points to a flattened upper-triangle array of zoom * (zoom + 1) / 2 bins; otherwise it points to a zoom^2 flattened array. The smallest binsize data does not have corresponding positions in the index array as there are no further sub-partitionings. Indices in the index array are relative to the data array start position, given in the 'chrom index bounds' portion of the header.
+        Each data array starts with a flattened array of the complete heatmap with the largest bin size. Intra-chromosomal heatmaps are upper-triangle arrays including the diagonal while inter-chromosomal arrays are rectangles. For each bin, there is a corresponding position in the index array pointing to the start index in the data array for the interactions contained within the data bin, partitioned into smaller bin sizes. Bins are always partitioned by a factor of 2. If none of the partitioned bins pass the minimum observation threshold, the index is -1. The shape array contains an interger indicating the number and position of valid bins (and therefore the number of bins, starting with the index number, containing data underneath the higher-level bin). Shape values are converted from a binary number with each bit representing whether or not each subpartition contains valid data, going left to right for the top row and then the bottom row. So a subdivision containing only data in the top-left bin would have a value of 2, whereas a completely full set of subpartitions would have a value of 15. The smallest binsize data does not have corresponding positions in the index array or shape array as there are no further sub-partitionings. Indices in the index array are relative to the data array start position, given in the 'chrom index bounds' portion of the header.
         """
         # check trans data parameters
         if trans_maxbinsize is None:
             trans_maxbinsize = maxbinsize
         if trans_minbinsize is None:
             trans_minbinsize = minbinsize
-        if trans_zoom is None:
-            trans_zoom = zoom
         # check that all values are acceptable
         if datatype not in ['raw', 'fend', 'distance', 'enrichment']:
             if not self.silent:
                 print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
             return None
-        n_levels = numpy.round(numpy.log(maxbinsize / minbinsize) / numpy.log(zoom)).astype(numpy.int32)
-        if maxbinsize != minbinsize * zoom ** n_levels:
+        n_levels = numpy.round(numpy.log(maxbinsize / minbinsize) / numpy.log(2.0)).astype(numpy.int32)
+        if maxbinsize != minbinsize * 2 ** n_levels:
             if not self.silent:
-                print >> sys.stderr, ("Maxbinsize must be a multiple of zoom^N and minbinsize for an integer N. No data returned\n"),
+                print >> sys.stderr, ("Maxbinsize must be a multiple of 2^N and minbinsize for an integer N. No data returned\n"),
             return None
         n_levels = numpy.round(numpy.log(trans_maxbinsize / trans_minbinsize) /
-                               numpy.log(trans_zoom)).astype(numpy.int32)
-        if trans_maxbinsize != trans_minbinsize * trans_zoom ** n_levels:
+                               numpy.log(2.0)).astype(numpy.int32)
+        if trans_maxbinsize != trans_minbinsize * 2 ** n_levels:
             if not self.silent:
-                print >> sys.stderr, ("Trans_maxbinsize must be a multiple of trans_zoom^N and trans_minbinsize for an integer N. No data returned\n"),
+                print >> sys.stderr, ("Trans_maxbinsize must be a multiple of 2^N and trans_minbinsize for an integer N. No data returned\n"),
             return None
         if not self.silent:
             print >> sys.stderr, ("\r%s\rFinding multi-resolution heatmap...") % (' ' * 80),
@@ -2431,7 +2432,6 @@ class HiC(object):
                 stop2 = None
                 minbin = minbinsize
                 maxbin = maxbinsize
-                z = zoom
             else:
                 chrom2 = needed[1]
                 chrint2 = chr2int[chrom2]
@@ -2441,10 +2441,9 @@ class HiC(object):
                 stop2 = trans_chrom_bounds[chrint2, 1]
                 minbin = trans_minbinsize
                 maxbin = trans_maxbinsize
-                z = trans_zoom
             # results are returned as a list containing the flattened data array and the flattened index array
             results[needed] = hic_binning.find_multiresolution_heatmap(self, chrom=chrom1, chrom2=chrom2, start=start1,
-                              stop=stop1, start2=start2, stop2=stop2, minbinsize=minbin, maxbinsize=maxbin, zoom=z,
+                              stop=stop1, start2=start2, stop2=stop2, minbinsize=minbin, maxbinsize=maxbin,
                               minobservations=minobservations, datatype=datatype, midbinsize=midbinsize, silent=False)
         # pass all results to the root node for writing to file
         if self.rank == 0:
@@ -2462,6 +2461,7 @@ class HiC(object):
         for i, chrom in enumerate(chroms):
             name_sizes[i] = len(chrom)
         int_float_size = 4 # size of int32 and float32
+        short_size = 2 # size of int32 and float32
         if includetrans:
             num_chrom_pairings = (n_chroms * (n_chroms + 1)) / 2
             repeated = 2
@@ -2476,18 +2476,19 @@ class HiC(object):
                        (num_chrom_pairings + 1) * int_float_size + # index of chrom data start positions
                        (n_chroms * int_float_size) * repeated +    # number of cis (and trans) paritions
                        num_chrom_pairings * int_float_size +       # data array sizes for each chrom pairing
+                       num_chrom_pairings * int_float_size +       # index array sizes for each chrom pairing
                        (n_chroms * int_float_size) * repeated +    # cis (and trans) start coordinates
                        (n_chroms * int_float_size) * repeated +    # cis (and trans) stop coordinates
                        num_chrom_pairings * int_float_size +       # minimum scores for each chrom pairing
                        num_chrom_pairings * int_float_size +       # maximum scores for each chrom pairing
                        int_float_size * repeated +                 # largest cis (and trans) binsize(s)
                        int_float_size * repeated +                 # smallest cis (and trans) binsize(s)
-                       int_float_size * repeated +                 # cis (and trans) zoom factor(s)
                        int_float_size)                             # minimum observation cutoff
         # calculate score ranges, data array and total array sizes
         min_scores = numpy.zeros(num_chrom_pairings, dtype=numpy.float32)
         max_scores = numpy.zeros(num_chrom_pairings, dtype=numpy.float32)
         data_sizes = numpy.zeros(num_chrom_pairings, dtype=numpy.int32)
+        index_sizes = numpy.zeros(num_chrom_pairings, dtype=numpy.int32)
         data_indices = numpy.zeros(num_chrom_pairings + 1, dtype=numpy.int32)
         data_indices[0] = header_size
         pos = 0
@@ -2498,8 +2499,9 @@ class HiC(object):
                 min_scores[pos] = numpy.amin(results[key][0][valid])
                 max_scores[pos] = numpy.amax(results[key][0][valid])
                 data_sizes[pos] = results[key][0].shape[0]
-                data_indices[pos + 1] = ((results[key][1].shape[0] + data_sizes[pos]) * int_float_size +
-                                         data_indices[pos])
+                index_sizes[pos] = results[key][1].shape[0]
+                data_indices[pos + 1] = ((index_sizes[pos] + data_sizes[pos]) * int_float_size +
+                                         results[key][2].shape[0] * short_size + data_indices[pos])
             else:
                 data_indices[pos + 1] = data_indices[pos]
             pos += 1
@@ -2511,8 +2513,9 @@ class HiC(object):
                         min_scores[pos] = numpy.amin(results[key][0][valid])
                         max_scores[pos] = numpy.amax(results[key][0][valid])
                         data_sizes[pos] = results[key][0].shape[0]
-                        data_indices[pos + 1] = ((results[key][1].shape[0] + data_sizes[pos]) * int_float_size +
-                                                 data_indices[pos])
+                        index_sizes[pos] = results[key][1].shape[0]
+                        data_indices[pos + 1] = ((index_sizes[pos] + data_sizes[pos]) * int_float_size +
+                                                 results[key][2].shape[0] * short_size + data_indices[pos])
                     else:
                         data_indices[pos + 1] = data_indices[pos]
                     pos += 1
@@ -2528,6 +2531,7 @@ class HiC(object):
         if includetrans:
             output.write(num_trans_bins.tostring())
         output.write(data_sizes.tostring())
+        output.write(index_sizes.tostring())
         output.write(cis_chrom_bounds[:, 0].tostring())
         if includetrans:
             output.write(trans_chrom_bounds[:, 0].tostring())
@@ -2537,10 +2541,9 @@ class HiC(object):
         output.write(min_scores.tostring())
         output.write(max_scores.tostring())
         if includetrans:
-            output.write(struct.pack('iiiiii', maxbinsize, trans_maxbinsize, minbinsize,
-                                     trans_minbinsize, zoom, trans_zoom))
+            output.write(struct.pack('iiii', maxbinsize, trans_maxbinsize, minbinsize, trans_minbinsize))
         else:
-            output.write(struct.pack('iii', maxbinsize, minbinsize, zoom))
+            output.write(struct.pack('ii', maxbinsize, minbinsize))
         output.write(struct.pack('i', minobservations))
         # write data and indices for each chrom pairing
         for i, chrom in enumerate(chroms):
@@ -2552,6 +2555,7 @@ class HiC(object):
                 if key in results:
                     output.write(results[key][0].astype(numpy.float32).tostring())
                     output.write(results[key][1].astype(numpy.int32).tostring())
+                    output.write(results[key][2].astype(numpy.int16).tostring())
         output.close()
         if not self.silent:
             print >> sys.stderr, ("Done\n"),

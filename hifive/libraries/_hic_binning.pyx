@@ -1614,7 +1614,6 @@ def find_mrh_observed(
                 for j in range(indices[i], indices[i + 1]):
                     bin2 = mapping[data[j, 0]]
                     observed[bin1, bin2] += data[j, 1]
-                    observed[bin2, bin1] += data[j, 1]
         else:
             for i in range(num_fends):
                 bin1 = mapping[i]
@@ -1631,6 +1630,7 @@ def find_mrh_cis_expected(
         np.ndarray[DTYPE_t, ndim=2] expected not None,
         np.ndarray[DTYPE_int_t, ndim=1] fend_nums not None,
         np.ndarray[DTYPE_int_t, ndim=1] binmapping not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] obs_indices not None,
         np.ndarray[DTYPE_t, ndim=1] corrections,
@@ -1640,10 +1640,11 @@ def find_mrh_cis_expected(
         np.ndarray[DTYPE_t, ndim=2] distance_parameters,
         double chrom_mean,
         int dt_int):
-    cdef long long int i, j, k, l, bin1, bin2, num, num_parameters
+    cdef long long int i, j, k, l, bin1, bin2, num, num_parameters, map1, map2
     cdef double value, corr, distance
     cdef long long int n = expected.shape[0]
-    cdef long long int num_fends = binmapping.shape[0]
+    cdef long long int valid_fends = binmapping.shape[0]
+    cdef long long int num_fends = mapping.shape[0]
     if not fend_indices is None:
         num_parameters = fend_indices.shape[1]
     with nogil:
@@ -1653,7 +1654,7 @@ def find_mrh_cis_expected(
                 for j in range(i, n):
                     expected[i, j] = (obs_indices[i + 1] - obs_indices[i]) * (obs_indices[j + 1] - obs_indices[j])
                     expected[j, i] += expected[i, j]
-            for i in range(num_fends - 1):
+            for i in range(valid_fends - 1):
                 bin1 = binmapping[i]
                 num = fend_nums[i]
                 if fend_nums[i + 1] - num == 1:
@@ -1665,11 +1666,11 @@ def find_mrh_cis_expected(
                         bin2 = binmapping[i + 1]
                         expected[bin1, bin2] -= 1
                         expected[bin2, bin1] -= 1
-                    elif i < num_fends - 2 and fend_nums[i + 2] - num == 3:
+                    elif i < valid_fends - 2 and fend_nums[i + 2] - num == 3:
                         bin2 = binmapping[i + 2]
                         expected[bin1, bin2] -= 1
                         expected[bin2, bin1] -= 1
-                    elif i < num_fends - 3 and fend_nums[i + 3] - num == 3:
+                    elif i < valid_fends - 3 and fend_nums[i + 3] - num == 3:
                         bin2 = binmapping[i + 3]
                         expected[bin1, bin2] -= 1
                         expected[bin2, bin1] -= 1
@@ -1678,38 +1679,29 @@ def find_mrh_cis_expected(
             for i in range(n):
                 for j in range(i, n):
                     expected[i, j] = correction_sums[i] * correction_sums[j]
-            for i in range(num_fends - 1):
-                bin1 = binmapping[i]
-                num = fend_nums[i]
-                corr = corrections[i]
-                if fend_nums[i + 1] - num == 1:
-                    bin2 = binmapping[i + 1]
-                    value = corr * corrections[i + 1]
-                    expected[bin1, bin2] -= value
-                    expected[bin2, bin1] -= value
-                if num % 2 == 0:
-                    if fend_nums[i + 1] - num == 3:
-                        bin2 = binmapping[i + 1]
-                        value = corr * corrections[i + 1]
-                        expected[bin1, bin2] -= value
-                        expected[bin2, bin1] -= value
-                    elif i < num_fends - 2 and fend_nums[i + 2] - num == 3:
-                        bin2 = binmapping[i + 2]
-                        value = corr * corrections[i + 2]
-                        expected[bin1, bin2] -= value
-                        expected[bin2, bin1] -= value
-                    elif i < num_fends - 3 and fend_nums[i + 3] - num == 3:
-                        bin2 = binmapping[i + 3]
-                        value = corr * corrections[i + 3]
-                        expected[bin1, bin2] -= value
-                        expected[bin2, bin1] -= value
+                expected[i, i] /= 2.0
+            for i in range(num_fends):
+                map1 = mapping[i]
+                if map1 == -1:
+                    continue
+                bin1 = binmapping[map1]
+                corr = corrections[map1]
+                expected[bin1, bin1] -= corr * corr / 2.0
+                if i < num_fends - 1:
+                    map2 = mapping[i + 1]
+                    if map2 > map1:
+                        expected[bin1, binmapping[map2]] -= corr * corrections[map2]
+                    if i < num_fends - 3 and fend_nums[map1] % 2 == 0:
+                        map2 = mapping[i + 3]
+                        if map2 > map1:
+                            expected[bin1, binmapping[map2]] -= corr * corrections[map2]
         else:
             # if distance correction is requested, use chrom mean, else 1.0
-            for i in range(num_fends - 1):
+            for i in range(valid_fends - 1):
                 bin1 = binmapping[i]
                 num = fend_nums[i]
                 l = 0
-                for j in range(i + 1, min(num_fends, i + 4)):
+                for j in range(i + 1, min(valid_fends, i + 4)):
                     if fend_nums[i + 1] - num == 1:
                         continue
                     if num % 2 == 0 and fend_nums[j] - num == 3:
@@ -1730,7 +1722,7 @@ def find_mrh_cis_expected(
                             else:
                                 value *= binning_corrections[fend_indices[i, k, 0] + fend_indices[j, k, 1]]
                     expected[bin1, binmapping[j]] += value
-                for j in range(i + 4, num_fends):
+                for j in range(i + 4, valid_fends):
                     if dt_int < 2:
                         value = 1.0
                     else:                            
@@ -1787,7 +1779,7 @@ def find_mrh_trans_expected(
             if dt_int == 1 and fend_indices is None:
                 for i in range(n):
                     for j in range(m):
-                        expected[i, j] = correction_sums[i] * correction_sums[j]
+                        expected[i, j] += correction_sums[i] * correction_sums2[j]
             else:
                 # if distance correction is requested, use chrom mean, else 1.0
                 for i in range(num_fends):
@@ -1890,19 +1882,17 @@ def make_trans_mrh_midlevel(
         np.ndarray[DTYPE_t, ndim=1] current_level_data,
         np.ndarray[DTYPE_t, ndim=1] prev_level_data,
         np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
         np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
         np.ndarray[DTYPE_int_t, ndim=1] obs_indices2,
         np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
         np.ndarray[DTYPE_int_t, ndim=1] bin_position,
-        np.ndarray[DTYPE_t, ndim=1] temp_data,
         int prev_m_bins,
         int m_bins,
         int minobservations,
-        int zoom,
         int pos):
-    cdef long long int i, j, k, l, m, valid, pos2, index, start1, stop1, start2, stop2
-    cdef double value
-    cdef long long int zoom2 = temp_data.shape[0]
+    cdef long long int i, j, k, l, m, valid, shape, pos2, index, start1, stop1, start2, stop2, value1
+    cdef double value2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
@@ -1913,38 +1903,32 @@ def make_trans_mrh_midlevel(
             else:
                 valid = 0
                 # find position of previous resolution bin
-                start1 = (prev_bin_position[i] / prev_m_bins) * zoom
-                stop1 = start1 + zoom
-                start2 = (prev_bin_position[i] % prev_m_bins) * zoom
-                stop2 = start2 + zoom
+                start1 = (prev_bin_position[i] / prev_m_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_m_bins) * 2
+                stop2 = start2 + 2
                 # find new resolution data for this set of bins
-                index = 0
+                index = 1
+                shape = 0
                 for j in range(start1, stop1):
                     for k in range(start2, stop2):
-                        temp_data[index] = 0.0
-                        value = 0.0
+                        value1 = 0
+                        value2 = 0.0
                         for l in range(obs_indices[j], obs_indices[j + 1]):
                             for m in range(obs_indices2[k], obs_indices2[k + 1]):
-                                temp_data[index] += observed[l, m]
-                                value += expected[l, m]
-                        if temp_data[index] >= minobservations:
-                            temp_data[index] = log2(temp_data[index] / value)
+                                value1 += observed[l, m]
+                                value2 += expected[l, m]
+                        if value1 >= minobservations:
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * m_bins + k
+                            shape += index
                             valid += 1
-                        else:
-                            temp_data[index] = nan
-                        index += 1
+                            pos2 += 1
+                        index *= 2
                 # if there are valid values at this new resolution, add the values to the new data set
                 if valid > 0:
-                    index = 0
-                    for j in range(zoom):
-                        for k in range(zoom):
-                            current_level_data[pos2] = temp_data[index]
-                            bin_position[pos2] = (start1 + j) * m_bins + start2 + k
-                            pos2 += 1
-                            index += 1
-                    # fill in previous resolution index corresponding to new data
-                    prev_level_indices[i] = pos
-                    pos += zoom2
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
                 else:
                     prev_level_indices[i] = -1
     return None
@@ -1959,20 +1943,16 @@ def make_cis_mrh_midlevel(
         np.ndarray[DTYPE_t, ndim=1] current_level_data,
         np.ndarray[DTYPE_t, ndim=1] prev_level_data,
         np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
         np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
         np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
         np.ndarray[DTYPE_int_t, ndim=1] bin_position,
-        np.ndarray[DTYPE_t, ndim=1] temp_data,
-        np.ndarray[DTYPE_t, ndim=1] temp_diag,
         int prev_n_bins,
         int n_bins,
         int minobservations,
-        int zoom,
         int pos):
-    cdef long long int i, j, k, l, m, valid, pos2, index, start1, stop1, start2, stop2
-    cdef double value
-    cdef long long int zoom2 = temp_data.shape[0]
-    cdef long long int zoom_d = temp_diag.shape[0]
+    cdef long long int i, j, k, l, m, valid, pos2, shape, index, start1, stop1, start2, stop2, value1
+    cdef double value2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
@@ -1981,75 +1961,40 @@ def make_cis_mrh_midlevel(
             if prev_level_data[i] == nan:
                 prev_level_indices[i] = -1
             else:
-                valid = 0
                 # find position of previous resolution bin
-                start1 = (prev_bin_position[i] / prev_n_bins) * zoom
-                stop1 = start1 + zoom
-                start2 = (prev_bin_position[i] % prev_n_bins) * zoom
-                stop2 = start2 + zoom
-                # if on the diagonal, use upper triangle instead of full square
-                if start1 == start2:
-                    # find new resolution data for this set of bins
-                    index = 0
-                    for j in range(start1, stop1):
-                        for k in range(j, stop1):
-                            temp_diag[index] = 0
-                            value = 0.0
-                            for l in range(obs_indices[j], obs_indices[j + 1]):
-                                for m in range(obs_indices[k], obs_indices[k + 1]):
-                                    temp_diag[index] += observed[l, m]
-                                    value += expected[l, m]
-                            if temp_diag[index] >= minobservations:
-                                temp_diag[index] = log2(temp_diag[index] / value)
-                                valid += 1
-                            else:
-                                temp_data[index] = nan
-                            index += 1
-                    # if there are valid values at this new resolution, add the values to the new data set
-                    if valid > 0:
-                        index = 0
-                        for j in range(zoom):
-                            for k in range(j, zoom):
-                                current_level_data[pos2] = temp_diag[index]
-                                bin_position[pos2] = (start1 + j) * n_bins + start2 + k
-                                pos2 += 1
-                                index += 1
-                        # fill in previous resolution index corresponding to new data
-                        prev_level_indices[i] = pos
-                        pos += zoom_d
-                    else:
-                        prev_level_indices[i] = -1
+                start1 = (prev_bin_position[i] / prev_n_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_n_bins) * 2
+                stop2 = start2 + 2
+                # find new resolution data for this set of bins
+                valid = 0
+                index = 1
+                shape = 0
+                for j in range(start1, stop1):
+                    for k in range(start2, stop2):
+                        # since it's possible to be below the diagonal, check and skip if necessary
+                        if j > k:
+                            index *= 2
+                            continue
+                        value1 = 0
+                        value2 = 0.0
+                        for l in range(obs_indices[j], obs_indices[j + 1]):
+                            for m in range(obs_indices[k], obs_indices[k + 1]):
+                                value1 += observed[l, m]
+                                value2 += expected[l, m]
+                        if value1 >= minobservations:
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * n_bins + k
+                            shape += index
+                            valid += 1
+                            pos2 += 1
+                        index *= 2
+                # if there are valid values at this new resolution, add the values to the new data set
+                if valid > 0:
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
                 else:
-                    # find new resolution data for this set of bins
-                    index = 0
-                    for j in range(start1, stop1):
-                        for k in range(start2, stop2):
-                            temp_data[index] = 0
-                            value = 0.0
-                            for l in range(obs_indices[j], obs_indices[j + 1]):
-                                for m in range(obs_indices[k], obs_indices[k + 1]):
-                                    temp_data[index] += observed[l, m]
-                                    value += expected[l, m]
-                            if temp_data[index] >= minobservations:
-                                temp_data[index] = log2(temp_data[index] / value)
-                                valid += 1
-                            else:
-                                temp_data[index] = nan
-                            index += 1
-                    # if there are valid values at this new resolution, add the values to the new data set
-                    if valid > 0:
-                        index = 0
-                        for j in range(zoom):
-                            for k in range(zoom):
-                                current_level_data[pos2] = temp_data[index]
-                                bin_position[pos2] = (start1 + j) * n_bins + start2 + k
-                                pos2 += 1
-                                index += 1
-                        # fill in previous resolution index corresponding to new data
-                        prev_level_indices[i] = pos
-                        pos += zoom2
-                    else:
-                        prev_level_indices[i] = -1
+                    prev_level_indices[i] = -1
     return None
 
 
@@ -2064,19 +2009,18 @@ def make_trans_mrh_lowerlevel(
         np.ndarray[DTYPE_t, ndim=1] current_level_data,
         np.ndarray[DTYPE_t, ndim=1] prev_level_data,
         np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
         np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
         np.ndarray[DTYPE_int_t, ndim=1] obs_indices2,
         np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
         np.ndarray[DTYPE_int_t, ndim=1] bin_position,
-        np.ndarray[DTYPE_t, ndim=1] temp_data,
         int prev_m_bins,
         int m_bins,
         int minobservations,
-        int zoom,
         int pos):
-    cdef long long int i, j, k, l, m, valid, pos2, index, start1, stop1, start2, stop2, start, mid, stop, index1, index2
-    cdef double value
-    cdef long long int zoom2 = temp_data.shape[0]
+    cdef long long int i, j, k, l, m, valid, pos2, shape, index, index1, index2
+    cdef long long int start1, stop1, start2, stop2, start, mid, stop, value1
+    cdef double value2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
@@ -2085,17 +2029,19 @@ def make_trans_mrh_lowerlevel(
             if prev_level_data[i] == nan:
                 prev_level_indices[i] = -1
             else:
-                valid = 0
                 # find position of previous resolution bin
-                start1 = (prev_bin_position[i] / prev_m_bins) * zoom
-                stop1 = start1 + zoom
-                start2 = (prev_bin_position[i] % prev_m_bins) * zoom
-                stop2 = start2 + zoom
+                start1 = (prev_bin_position[i] / prev_m_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_m_bins) * 2
+                stop2 = start2 + 2
                 # find new resolution data for this set of bins
-                index = 0
+                valid = 0
+                index = 1
+                shape = 0
                 m = 0
                 for j in range(start1, stop1):
                     for k in range(start2, stop2):
+                        value1 = 0
                         mid = 0
                         for l in range(obs_indices[j], obs_indices[j + 1]):
                             start = data_indices[l]
@@ -2109,28 +2055,21 @@ def make_trans_mrh_lowerlevel(
                                 m += 1
                             mid = m - start
                             while m < stop and data[m, 0] < index2:
-                                temp_data[index] += data[m, 1]
+                                value1 += data[m, 1]
                                 m += 1
-                        if temp_data[index] >= minobservations:
+                        if value1 >= minobservations:
                             # find expected value
-                            value = correction_sums[j] * correction_sums2[k]
-                            temp_data[index] = log2(temp_data[index] / value)
+                            value2 = correction_sums[j] * correction_sums2[k]
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * m_bins + k
+                            shape += index
                             valid += 1
-                        else:
-                            temp_data[index] = nan
-                        index += 1
+                            pos2 += 1
+                        index *= 2
                 # if there are valid values at this new resolution, add the values to the new data set
                 if valid > 0:
-                    index = 0
-                    for j in range(zoom):
-                        for k in range(zoom):
-                            current_level_data[pos2] = temp_data[index]
-                            bin_position[pos2] = (start1 + j) * m_bins + start2 + k
-                            pos2 += 1
-                            index += 1
-                    # fill in previous resolution index corresponding to new data
-                    prev_level_indices[i] = pos
-                    pos += zoom2
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
                 else:
                     prev_level_indices[i] = -1
     return None
@@ -2148,20 +2087,17 @@ def make_cis_mrh_lowerlevel(
         np.ndarray[DTYPE_t, ndim=1] current_level_data,
         np.ndarray[DTYPE_t, ndim=1] prev_level_data,
         np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
         np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
         np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
         np.ndarray[DTYPE_int_t, ndim=1] bin_position,
-        np.ndarray[DTYPE_t, ndim=1] temp_data,
-        np.ndarray[DTYPE_t, ndim=1] temp_diag,
         int prev_n_bins,
         int n_bins,
         int minobservations,
-        int zoom,
         int pos):
-    cdef long long int i, j, k, l, m, valid, pos2, index, start1, stop1, start2, stop2, start, mid, stop, index1, index2
-    cdef double value
-    cdef long long int zoom2 = temp_data.shape[0]
-    cdef long long int zoom_d = temp_diag.shape[0]
+    cdef long long int i, j, k, l, m, valid, pos2, shape, index, index1, index2
+    cdef long long int start1, stop1, start2, stop2, start, mid, stop, value1
+    cdef double value2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
@@ -2170,158 +2106,73 @@ def make_cis_mrh_lowerlevel(
             if prev_level_data[i] == nan:
                 prev_level_indices[i] = -1
             else:
-                valid = 0
                 # find position of previous resolution bin
-                start1 = (prev_bin_position[i] / prev_n_bins) * zoom
-                stop1 = start1 + zoom
-                start2 = (prev_bin_position[i] % prev_n_bins) * zoom
-                stop2 = start2 + zoom
-                # if on the diagonal, use upper triangle instead of full square
-                if start1 == start2:
-                    # find new resolution data for this set of bins
-                    index = 0
-                    for j in range(start1, stop1):
-                        for k in range(j, stop1):
-                            temp_diag[index] = 0
-                            mid = 0
-                            for l in range(obs_indices[j], obs_indices[j + 1]):
-                                start = data_indices[l]
-                                stop = data_indices[l + 1]
-                                index1 = obs_indices[k]
-                                index2 = obs_indices[k + 1]
-                                m = min(mid + start, stop  - 1)
-                                while m > start and data[m, 0] > index1:
-                                    m -= 1
-                                while m < stop and data[m, 0] < index1:
-                                    m += 1
-                                mid = m - start
-                                while m < stop and data[m, 0] < index2:
-                                    temp_diag[index] += data[m, 1]
-                                    m += 1
-                            if temp_diag[index] >= minobservations:
-                                # find expected value
-                                value = correction_sums[j] * correction_sums[k]
-                                if j == k:
-                                    value /= 2.0
-                                    for l in range(obs_indices[j], obs_indices[j + 1]):
-                                        value -= corrections[l] * corrections[l] / 2.0
-                                        stop = obs_indices[j + 1]
-                                        if l + 1 < stop and fend_nums[l + 1] - fend_nums[l] == 1:
-                                            value -= 2 * corrections[l] * corrections[l + 1]
-                                            if fend_nums[l] % 2 == 0:
-                                                if fend_nums[l + 1] - fend_nums[l] == 3:
-                                                    value -= 2 * corrections[l] * corrections[l + 1]
-                                                elif l + 2 < stop and fend_nums[l + 2] - fend_nums[l] == 3:
-                                                    value -= 2 * corrections[l] * corrections[l + 2]
-                                                elif l + 3 < stop and fend_nums[l + 3] - fend_nums[l] == 3:
-                                                    value -= 2 * corrections[l] * corrections[l + 3]
-                                else:
-                                    l = obs_indices[j + 1] - 1
-                                    m = obs_indices[k]
-                                    start = obs_indices[j]
-                                    stop = obs_indices[k + 1]
-                                    if fend_nums[l] + 1 == fend_nums[m]:
-                                        value -= corrections[l] * corrections[m]
-                                    if fend_nums[l] % 2 == 0:
-                                        if fend_nums[l] + 3 == fend_nums[m]:
-                                            value -= corrections[l] * corrections[m]
-                                        elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
-                                            value -= corrections[l] * corrections[m + 1]
-                                        elif m + 2 < stop and fend_nums[l] + 3 == fend_nums[m + 2]:
-                                            value -= corrections[l] * corrections[m + 2]
-                                    l -= 1
-                                    if l >= start and fend_nums[l] % 2 == 0:
-                                        if fend_nums[l] + 3 == fend_nums[m]:
-                                            value -= corrections[l] * corrections[m]
-                                        elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
-                                            value -= corrections[l] * corrections[m + 1]
-                                    l -= 1
-                                    if l >= start and fend_nums[l] % 2 == 0:
-                                        if fend_nums[l] + 3 == fend_nums[m]:
-                                            value -= corrections[l] * corrections[m]
-                                temp_diag[index] = log2(temp_diag[index] / value)
-                                valid += 1
-                            else:
-                                temp_data[index] = nan
-                            index += 1
-                    # if there are valid values at this new resolution, add the values to the new data set
-                    if valid > 0:
-                        index = 0
-                        for j in range(zoom):
-                            for k in range(j, zoom):
-                                current_level_data[pos2] = temp_diag[index]
-                                bin_position[pos2] = (start1 + j) * n_bins + start2 + k
-                                pos2 += 1
-                                index += 1
-                        # fill in previous resolution index corresponding to new data
-                        prev_level_indices[i] = pos
-                        pos += zoom_d
-                    else:
-                        prev_level_indices[i] = -1
+                start1 = (prev_bin_position[i] / prev_n_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_n_bins) * 2
+                stop2 = start2 + 2
+                # find new resolution data for this set of bins
+                valid = 0
+                index = 1
+                shape = 0
+                for j in range(start1, stop1):
+                    for k in range(start2, stop2):
+                        # since it's possible to be below the diagonal, check and skip if necessary
+                        if j > k:
+                            index *= 2
+                            continue
+                        value1 = 0
+                        mid = 0
+                        for l in range(obs_indices[j], obs_indices[j + 1]):
+                            start = data_indices[l]
+                            stop = data_indices[l + 1]
+                            index1 = obs_indices[k]
+                            index2 = obs_indices[k + 1]
+                            m = min(mid + start, stop - 1)
+                            while m > start and data[m, 0] > index1:
+                                m -= 1
+                            while m < stop and data[m, 0] < index1:
+                                m += 1
+                            mid = m - start
+                            while m < stop and data[m, 0] < index2:
+                                value1 += data[m, 1]
+                                m += 1
+                        if value1 >= minobservations:
+                            # find expected value
+                            value2 = correction_sums[j] * correction_sums[k]
+                            l = obs_indices[j + 1] - 1
+                            m = obs_indices[k]
+                            start = obs_indices[j]
+                            stop = obs_indices[k + 1]
+                            if fend_nums[l] + 1 == fend_nums[m]:
+                                value2 -= corrections[l] * corrections[m]
+                            if fend_nums[l] % 2 == 0:
+                                if fend_nums[l] + 3 == fend_nums[m]:
+                                    value2 -= corrections[l] * corrections[m]
+                                elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
+                                    value2 -= corrections[l] * corrections[m + 1]
+                                elif m + 2 < stop and fend_nums[l] + 3 == fend_nums[m + 2]:
+                                    value2 -= corrections[l] * corrections[m + 2]
+                            l -= 1
+                            if l >= start and fend_nums[l] % 2 == 0:
+                                if fend_nums[l] + 3 == fend_nums[m]:
+                                    value2 -= corrections[l] * corrections[m]
+                                elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
+                                    value2 -= corrections[l] * corrections[m + 1]
+                            l -= 1
+                            if l >= start and fend_nums[l] % 2 == 0:
+                                if fend_nums[l] + 3 == fend_nums[m]:
+                                    value2 -= corrections[l] * corrections[m]
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * n_bins + k
+                            shape += index
+                            valid += 1
+                            pos2 += 1
+                        index *= 2
+                # if there are valid values at this new resolution, add the values to the new data set
+                if valid > 0:
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
                 else:
-                    # find new resolution data for this set of bins
-                    index = 0
-                    for j in range(start1, stop1):
-                        for k in range(start2, stop2):
-                            temp_data[index] = 0
-                            mid = 0
-                            for l in range(obs_indices[j], obs_indices[j + 1]):
-                                start = data_indices[l]
-                                stop = data_indices[l + 1]
-                                index1 = obs_indices[k]
-                                index2 = obs_indices[k + 1]
-                                m = min(mid + start, stop - 1)
-                                while m > start and data[m, 0] > index1:
-                                    m -= 1
-                                while m < stop and data[m, 0] < index1:
-                                    m += 1
-                                mid = m - start
-                                while m < stop and data[m, 0] < index2:
-                                    temp_data[index] += data[m, 1]
-                                    m += 1
-                            if temp_data[index] >= minobservations:
-                                # find expected value
-                                value = correction_sums[j] * correction_sums[k]
-                                l = obs_indices[j + 1] - 1
-                                m = obs_indices[k]
-                                start = obs_indices[j]
-                                stop = obs_indices[k + 1]
-                                if fend_nums[l] + 1 == fend_nums[m]:
-                                    value -= corrections[l] * corrections[m]
-                                if fend_nums[l] % 2 == 0:
-                                    if fend_nums[l] + 3 == fend_nums[m]:
-                                        value -= corrections[l] * corrections[m]
-                                    elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
-                                        value -= corrections[l] * corrections[m + 1]
-                                    elif m + 2 < stop and fend_nums[l] + 3 == fend_nums[m + 2]:
-                                        value -= corrections[l] * corrections[m + 2]
-                                l -= 1
-                                if l >= start and fend_nums[l] % 2 == 0:
-                                    if fend_nums[l] + 3 == fend_nums[m]:
-                                        value -= corrections[l] * corrections[m]
-                                    elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
-                                        value -= corrections[l] * corrections[m + 1]
-                                l -= 1
-                                if l >= start and fend_nums[l] % 2 == 0:
-                                    if fend_nums[l] + 3 == fend_nums[m]:
-                                        value -= corrections[l] * corrections[m]
-                                temp_data[index] = log2(temp_data[index] / value)
-                                valid += 1
-                            else:
-                                temp_data[index] = nan
-                            index += 1
-                    # if there are valid values at this new resolution, add the values to the new data set
-                    if valid > 0:
-                        index = 0
-                        for j in range(zoom):
-                            for k in range(zoom):
-                                current_level_data[pos2] = temp_data[index]
-                                bin_position[pos2] = (start1 + j) * n_bins + start2 + k
-                                pos2 += 1
-                                index += 1
-                        # fill in previous resolution index corresponding to new data
-                        prev_level_indices[i] = pos
-                        pos += zoom2
-                    else:
-                        prev_level_indices[i] = -1
+                    prev_level_indices[i] = -1
     return None
