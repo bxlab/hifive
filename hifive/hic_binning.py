@@ -825,7 +825,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     else:
         if not silent:
             print >> sys.stderr, ("Done\n"),
-        return data_array, correction_sums1, correction_sums2
+        return data_array
 
 def bin_trans_array(data_array, data_mapping1, data_mapping2, binsize=10000, binbounds1=None, start1=None, stop1=None,
                     binbounds2=None, start2=None, stop2=None, returnmapping=False, **kwargs):
