@@ -7,9 +7,9 @@ import sys
 
 import numpy
 import h5py
-from reportlab.graphics.shapes import Drawing
-from reportlab.graphics.charts.lineplots import LinePlot
-from reportlab.lib.colors import Color
+#from reportlab.graphics.shapes import Drawing
+#from reportlab.graphics.charts.lineplots import LinePlot
+#from reportlab.lib.colors import Color
 
 
 class Fend(object):
