@@ -16,11 +16,13 @@ class HiCProject(unittest.TestCase):
     def setUp(self):
         self.data_fname = 'test/data/test.hcd'
         self.project_fname = 'test/data/test.hcp'
-        self.probability_fname = 'test/data/test_probability.hcp'
+        self.probbin_fname = 'test/data/test_probbin.hcp'
+        self.probpois_fname = 'test/data/test_probpois.hcp'
         self.express_fname = 'test/data/test_express.hcp'
         self.binning_fname = 'test/data/test_binning.hcp'
         self.data = h5py.File(self.project_fname, 'r')
-        self.probability = hic.HiC(self.probability_fname, 'r')
+        self.probbin = hic.HiC(self.probbin_fname, 'r')
+        self.probpois = hic.HiC(self.probpois_fname, 'r')
         self.express = hic.HiC(self.express_fname, 'r')
         self.binning = hic.HiC(self.binning_fname, 'r')
 
@@ -30,13 +32,22 @@ class HiCProject(unittest.TestCase):
         project = h5py.File('test/data/test_temp.hcp', 'r')
         self.compare_hdf5_dicts(self.data, project, 'project')
 
-    def test_hic_project_probability(self):
-        subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 10 -l 0.4 -g 0.0015 -p %s" %
+    def test_hic_project_probability_binomial(self):
+        subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 15 -l 0.4 -g 0.0015 -p %s" %
                         (self.project_fname), shell=True)
         project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
-        self.assertTrue(numpy.allclose(self.probability.corrections, project.corrections),
+        self.assertTrue(numpy.allclose(self.probbin.corrections, project.corrections),
             "learned correction values don't match target values")
-        self.assertTrue(numpy.allclose(self.probability.chromosome_means, project.chromosome_means),
+        self.assertTrue(numpy.allclose(self.probbin.chromosome_means, project.chromosome_means),
+            "chromosome means don't match target values")
+
+    def test_hic_project_probability_poisson(self):
+        subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 15 -l 0.4 -g 0.0015 -p -a poisson %s" %
+                        (self.project_fname), shell=True)
+        project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
+        self.assertTrue(numpy.allclose(self.probpois.corrections, project.corrections),
+            "learned correction values don't match target values")
+        self.assertTrue(numpy.allclose(self.probpois.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
 
     def test_hic_project_express(self):

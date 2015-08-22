@@ -52,7 +52,8 @@ def run(args):
         hic.find_probability_fend_corrections(mindistance=args.mindist, maxdistance=args.maxdist,
                                               minchange=args.change, max_iterations=args.probiter,
                                               learningstep=args.step, chroms=chroms,
-                                              precalculate=args.precalc, precorrect=precorrect)
+                                              precalculate=args.precalc, precorrect=precorrect,
+                                              model=args.probmodel)
     elif args.algorithm in ['express', 'binning-express']:
         hic.find_express_fend_corrections(iterations=args.expiter, mindistance=args.mindist,
                                           maxdistance=args.maxdist, remove_distance=args.nodist,

@@ -581,6 +581,8 @@ def add_hic_probability_group(subparser):
         action='store_true', help="Precalculate correction values from fend means for the probability algorithm. [default: %(default)s]")
     subparser.add_argument("-l", "--learning-step", dest="step", required=False, type=float, default=0.4,
         action='store', help="The scaling factor for decreasing learning rate by if step doesn't meet armijo criterion. [default: %(default)s]")
+    subparser.add_argument("-a", "--probability-model", dest="probmodel", required=False, type=str, default='binomial',
+        choices=['binomial', 'poisson'], help="Which probability model to use for normalization. [default: %(default)s]")
     return
 
 def add_hic_express_group(subparser):

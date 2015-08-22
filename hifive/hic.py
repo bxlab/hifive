@@ -485,9 +485,9 @@ class HiC(object):
 
     def find_probability_fend_corrections(self, mindistance=0, maxdistance=0, minchange=0.0001,
                                           max_iterations=1000, learningstep=0.5, chroms=[], precalculate=True,
-                                          precorrect=False):
+                                          precorrect=False, model='binomial'):
         """
-        Using gradient descent, learn correction values for each valid fend based on a Poisson distribution of observations. This function is MPI compatible.
+        Using gradient descent, learn correction values for each valid fend based on a binomial or Poisson distribution of observations. This function is MPI compatible.
 
         :param mindistance: The minimum inter-fend distance to be included in modeling.
         :type mindistance: int.
@@ -505,13 +505,15 @@ class HiC(object):
         :type precalculate: bool.
         :param precorrect: Use binning-based corrections in expected value calculations, resulting in a chained normalization approach.
         :type precorrect: bool.
+        :param model: Which probability model to use, either 'poisson' or 'binomial'. If 'poisson' is chosen, read counts are used. If 'binomial' is chosen, reads are converted to a 0/1 indicator of observed/unobserved status.
+        :type model: str.
         :returns: None
 
         :Attributes: * **corrections** (*ndarray*) - A numpy array of type float32 and length equal to the number of fends. All invalid fends have an associated correction value of zero.
 
         The 'normalization' attribute is updated to 'probability' or 'binning-probability', depending on if the 'precorrect' option is selected. In addition, the 'chromosome_means' attribute is updated such that the mean correction (sum of all valid chromosomal correction value pairs) is adjusted to zero and the corresponding chromosome mean is adjusted the same amount but the opposite sign. 
         """
-        self.history += "HiC.find_probability_fend_corrections(mindistance=%i, maxdistance=%s, minchange=%f, max_iterations=%i, learningstep=%f, chroms=%s, precalculate=%s, precorrect=%s) - " % (mindistance, str(maxdistance), minchange, max_iterations, learningstep, str(chroms), precalculate, precorrect)
+        self.history += "HiC.find_probability_fend_corrections(mindistance=%i, maxdistance=%s, minchange=%f, max_iterations=%i, learningstep=%f, chroms=%s, precalculate=%s, precorrect=%s, model=%s) - " % (mindistance, str(maxdistance), minchange, max_iterations, learningstep, str(chroms), precalculate, precorrect, model)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
                 print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fend_corrections'.\n"),
@@ -521,6 +523,12 @@ class HiC(object):
         if self.distance_parameters is None:
             if not self.silent:
                 print >> sys.stderr, ("This normalization requires a project that has already had 'find_distance_parameters' run.\n"),
+            self.history += "Error: 'find_distance_parameters()' not run yet\n"
+            return None
+        # make sure model parameter has an appropriate value
+        if model not in ['poisson', 'binomial']:
+            if not self.silent:
+                print >> sys.stderr, ("The model parameter must be either 'poisson' or 'binomial'.\n")
             self.history += "Error: 'find_distance_parameters()' not run yet\n"
             return None
         if self.corrections is None:
@@ -601,7 +609,10 @@ class HiC(object):
             # allocate nonzero index and count arrays and fill and find number of interactions
             nonzero_indices0 = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
             nonzero_indices1 = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
-            counts = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
+            if model == 'poisson':
+                counts = numpy.zeros(nonzero_pairs, dtype=numpy.int32)
+            else:
+                counts = None
             interactions = numpy.zeros(rev_mapping.shape[0], dtype=numpy.int32)
             _interactions.find_nonzero_node_indices(fend_ranges,
                                                     nonzero_indices0,
@@ -623,20 +634,24 @@ class HiC(object):
                                                  start,
                                                  stop,
                                                  start_fend)
-            # find priors based on binary distance depedence function
+            # find priors based on distance depedence function
             nonzero_means = numpy.zeros(nonzero_indices0.shape[0], dtype=numpy.float32)
+            if model == 'binomial':
+                distance_parameters = self.bin_distance_parameters
+            else:
+                distance_parameters = self.distance_parameters
             _distance.find_remapped_distance_means(nonzero_indices0,
                                                    nonzero_indices1,
                                                    mids,
                                                    nonzero_means,
-                                                   self.bin_distance_parameters,
+                                                   distance_parameters,
                                                    0.0)
             zero_means = numpy.zeros(zero_indices0.shape[0], dtype=numpy.float32)
             _distance.find_remapped_distance_means(zero_indices0,
                                                    zero_indices1,
                                                    mids,
                                                    zero_means,
-                                                   self.bin_distance_parameters,
+                                                   distance_parameters,
                                                    0.0)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
@@ -670,9 +685,9 @@ class HiC(object):
                         (' ' * 80, chrom),
                 expected = numpy.zeros(rev_mapping.shape[0], dtype=numpy.float64)
                 observed = numpy.zeros(rev_mapping.shape[0], dtype=numpy.float64)
-                _interactions.sum_weighted_indices(nonzero_indices0, nonzero_indices1, nonzero_means, expected)
-                _interactions.sum_weighted_indices(zero_indices0, zero_indices1, zero_means, expected)
-                _interactions.sum_weighted_indices(nonzero_indices0, nonzero_indices1, None, observed)
+                _interactions.sum_weighted_indices(nonzero_indices0, nonzero_indices1, nonzero_means, None, expected)
+                _interactions.sum_weighted_indices(zero_indices0, zero_indices1, zero_means, None, expected)
+                _interactions.sum_weighted_indices(nonzero_indices0, nonzero_indices1, None, counts, observed)
                 corrections = numpy.zeros(rev_mapping.shape[0], dtype=numpy.float32)
                 if self.rank == 0:
                     temp1 = numpy.empty(expected.shape, dtype=expected.dtype)
@@ -696,16 +711,23 @@ class HiC(object):
             cont = True
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),            
-            nonzero_means = numpy.log(nonzero_means)
             log_corrections = numpy.log(corrections).astype(numpy.float32)
-            start_cost = _optimize.calculate_binom_cost(zero_indices0,
-                                                        zero_indices1,
-                                                        nonzero_indices0,
-                                                        nonzero_indices1,
-                                                        nonzero_means,
-                                                        zero_means,
-                                                        corrections,
-                                                        log_corrections)
+            if model == 'binomial':
+                cost_function = _optimize.calculate_binom_cost
+                gradient_function = _optimize.calculate_binom_gradients
+                nonzero_means = numpy.log(nonzero_means)
+            else:
+                cost_function = _optimize.calculate_poisson_cost
+                gradient_function = _optimize.calculate_poisson_gradients
+            start_cost = cost_function(counts,
+                                       zero_indices0,
+                                       zero_indices1,
+                                       nonzero_indices0,
+                                       nonzero_indices1,
+                                       nonzero_means,
+                                       zero_means,
+                                       corrections,
+                                       log_corrections)
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     start_cost += self.comm.recv(source=i, tag=11)
@@ -718,14 +740,16 @@ class HiC(object):
             while cont:
                 gradients.fill(0.0)
                 inv_corrections = (1.0 / corrections).astype(numpy.float32)
-                _optimize.calculate_binom_gradients(zero_indices0,
-                                                   zero_indices1,
-                                                   nonzero_indices0,
-                                                   nonzero_indices1,
-                                                   zero_means,
-                                                   corrections,
-                                                   inv_corrections,
-                                                   gradients)
+                gradient_function(counts,
+                                  zero_indices0,
+                                  zero_indices1,
+                                  nonzero_indices0,
+                                  nonzero_indices1,
+                                  nonzero_means,
+                                  zero_means,
+                                  corrections,
+                                  inv_corrections,
+                                  gradients)
                 self._exchange_gradients(gradients, temp)
                 if self.rank == 0:
                     gradients /= interactions
@@ -743,14 +767,15 @@ class HiC(object):
                     else:
                         self.comm.Recv(new_corrections, source=0, tag=13)
                     log_corrections = numpy.log(new_corrections)
-                    cost = _optimize.calculate_binom_cost(zero_indices0,
-                                                          zero_indices1,
-                                                          nonzero_indices0,
-                                                          nonzero_indices1,
-                                                          nonzero_means,
-                                                          zero_means,
-                                                          new_corrections,
-                                                          log_corrections)
+                    cost = cost_function(counts,
+                                         zero_indices0,
+                                         zero_indices1,
+                                         nonzero_indices0,
+                                         nonzero_indices1,
+                                         nonzero_means,
+                                         zero_means,
+                                         new_corrections,
+                                         log_corrections)
                     if self.rank == 0:
                         for i in range(1, self.num_procs):
                             cost += self.comm.recv(source=i, tag=11)
@@ -790,14 +815,15 @@ class HiC(object):
             chrom_mean /= corrections.shape[0] * (corrections.shape[0] - 1)
             self.chromosome_means[self.chr2int[chrom]] += numpy.log(chrom_mean)
             log_corrections = numpy.log(corrections).astype(numpy.float32)
-            cost = _optimize.calculate_binom_cost(zero_indices0,
-                                                 zero_indices1,
-                                                 nonzero_indices0,
-                                                 nonzero_indices1,
-                                                 nonzero_means,
-                                                 zero_means,
-                                                 corrections,
-                                                 log_corrections)
+            cost = cost_function(counts,
+                                 zero_indices0,
+                                 zero_indices1,
+                                 nonzero_indices0,
+                                 nonzero_indices1,
+                                 nonzero_means,
+                                 zero_means,
+                                 corrections,
+                                 log_corrections)
             self.corrections[rev_mapping + start_fend] = corrections / (chrom_mean ** 0.5)
             if self.rank == 0:
                 for i in range(1, self.num_procs):

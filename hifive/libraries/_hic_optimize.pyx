@@ -57,10 +57,12 @@ def find_binning_correction_adjustment(
 @cython.wraparound(False)
 @cython.cdivision(True)
 def calculate_binom_gradients(
+        np.ndarray[DTYPE_int_t, ndim=1] counts,
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices1 not None,
+        np.ndarray[DTYPE_t, ndim=1] nonzero_means,
         np.ndarray[DTYPE_t, ndim=1] zero_means not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_t, ndim=1] inv_corrections not None,
@@ -91,11 +93,12 @@ def calculate_binom_gradients(
 @cython.wraparound(False)
 @cython.cdivision(True)
 def calculate_binom_cost(
+        np.ndarray[DTYPE_int_t, ndim=1] counts,
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] zero_indices1 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices0 not None,
         np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices1 not None,
-        np.ndarray[DTYPE_t, ndim=1] log_nonzero_means not None,
+        np.ndarray[DTYPE_t, ndim=1] nonzero_means not None,
         np.ndarray[DTYPE_t, ndim=1] zero_means not None,
         np.ndarray[DTYPE_t, ndim=1] corrections not None,
         np.ndarray[DTYPE_t, ndim=1] log_corrections not None):
@@ -106,9 +109,66 @@ def calculate_binom_cost(
     with nogil:
         cost = 0.0
         for i in range(num_nonzero_pairs):
-            cost -= log_nonzero_means[i] + log_corrections[nonzero_indices0[i]] + log_corrections[nonzero_indices1[i]]
+            cost -= nonzero_means[i] + log_corrections[nonzero_indices0[i]] + log_corrections[nonzero_indices1[i]]
         for i in range(num_zero_pairs):
             cost -= log(max(0.0000001, 1.0 - zero_means[i] * corrections[zero_indices0[i]] * corrections[zero_indices1[i]]))
+    return cost
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_poisson_gradients(
+        np.ndarray[DTYPE_int_t, ndim=1] counts not None,
+        np.ndarray[DTYPE_int_t, ndim=1] zero_indices0 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] zero_indices1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices0 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices1 not None,
+        np.ndarray[DTYPE_t, ndim=1] nonzero_means not None,
+        np.ndarray[DTYPE_t, ndim=1] zero_means not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections not None,
+        np.ndarray[DTYPE_t, ndim=1] inv_corrections not None,
+        np.ndarray[DTYPE_64_t, ndim=1] gradients not None):
+    cdef long long int i, index0, index1
+    cdef long long int num_zero_pairs = zero_indices0.shape[0]
+    cdef long long int num_nonzero_pairs = nonzero_indices0.shape[0]
+    with nogil:
+        for i in range(num_nonzero_pairs):
+            index0 = nonzero_indices0[i]
+            index1 = nonzero_indices1[i]
+            gradients[index0] += nonzero_means[i] * corrections[index0] - counts[i] * inv_corrections[index0]
+            gradients[index1] += nonzero_means[i] * corrections[index1] - counts[i] * inv_corrections[index1]
+        for i in range(num_zero_pairs):
+            index0 = zero_indices0[i]
+            index1 = zero_indices1[i]
+            gradients[index0] += zero_means[i] * corrections[index0]
+            gradients[index1] += zero_means[i] * corrections[index1]
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def calculate_poisson_cost(
+        np.ndarray[DTYPE_int_t, ndim=1] counts not None,
+        np.ndarray[DTYPE_int_t, ndim=1] zero_indices0 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] zero_indices1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices0 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] nonzero_indices1 not None,
+        np.ndarray[DTYPE_t, ndim=1] nonzero_means not None,
+        np.ndarray[DTYPE_t, ndim=1] zero_means not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections not None,
+        np.ndarray[DTYPE_t, ndim=1] log_corrections not None):
+    cdef long long int i
+    cdef double cost
+    cdef long long int num_zero_pairs = zero_indices0.shape[0]
+    cdef long long int num_nonzero_pairs = nonzero_indices0.shape[0]
+    with nogil:
+        cost = 0.0
+        for i in range(num_nonzero_pairs):
+            cost += corrections[nonzero_indices0[i]] * corrections[nonzero_indices1[i]] * nonzero_means[i] - counts[i] * ( log(nonzero_means[i]) + log_corrections[nonzero_indices0[i]] + log_corrections[nonzero_indices1[i]] )
+        for i in range(num_zero_pairs):
+            cost += corrections[zero_indices0[i]] * corrections[zero_indices1[i]] * zero_means[i]
     return cost
 
 

@@ -475,12 +475,16 @@ class HiCData(object):
             except ValueError:
                 continue
             fend2 = int(temp[1]) - 1
-            chr1 = numpy.searchsorted(chr_indices, fend1) - 1
-            chr2 = numpy.searchsorted(chr_indices, fend2) - 1
+            chr1 = numpy.searchsorted(chr_indices, fend1, side='right') - 1
+            chr2 = numpy.searchsorted(chr_indices, fend2, side='right') - 1
             if chr2 < chr1:
-                fend_pairs[chr1][chr2][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = int(temp[2])
-            else:
+                fend_pairs[chr1][chr2][(fend2 - chr_indices[chr2], fend1 - chr_indices[chr1])] = int(temp[2])
+            elif chr1 < chr2:
                 fend_pairs[chr2][chr1][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = int(temp[2])
+            elif fend1 < fend2:
+                fend_pairs[chr2][chr1][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = int(temp[2])
+            else:
+                fend_pairs[chr1][chr2][(fend2 - chr_indices[chr2], fend1 - chr_indices[chr1])] = int(temp[2])
         input.close()
         self._clean_fend_pairs(fend_pairs)
         total_fend_pairs = 0

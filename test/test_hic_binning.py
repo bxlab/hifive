@@ -14,7 +14,7 @@ import h5py
 
 class HiCBinning(unittest.TestCase):
     def setUp(self):
-        self.project_fname = 'test/data/test_probability.hcp'
+        self.project_fname = 'test/data/test_probbin.hcp'
         self.binned_fname = 'test/data/test_binned.hdf5'
         self.heatmap_fname = 'test/data/test.hch'
         self.data = h5py.File(self.binned_fname, 'r')
