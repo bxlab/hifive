@@ -145,12 +145,12 @@ class Fend(object):
         self.chr_indices = chr_indices
         self.chromosomes = chromosomes
         # calculate statistics
-        self.fend_sizes = numpy.zeros((40, self.chromosomes.shape[0] + 1), dtype=numpy.float32)
-        sizes = numpy.log(self.fends['stop'] - self.fends['start'])
-        splits = numpy.linspace(numpy.amin(sizes), numpy.amax(sizes) + 1, 41)
-        for i in range(self.chr_indices.shape[0] - 1):
-            self.fend_sizes[:, i] = numpy.histogram(sizes[chr_indices[i]:chr_indices[i + 1]], bins=splits)[0]
-        self.fend_sizes[:, -1] = (splits[1:] + splits[:-1]) / 2.0
+        #self.fend_sizes = numpy.zeros((40, self.chromosomes.shape[0] + 1), dtype=numpy.float32)
+        #sizes = numpy.log(self.fends['stop'] - self.fends['start'])
+        #splits = numpy.linspace(numpy.amin(sizes), numpy.amax(sizes) + 1, 41)
+        #for i in range(self.chr_indices.shape[0] - 1):
+        #    self.fend_sizes[:, i] = numpy.histogram(sizes[chr_indices[i]:chr_indices[i + 1]], bins=splits)[0]
+        #self.fend_sizes[:, -1] = (splits[1:] + splits[:-1]) / 2.0
         self.history += "Success\n"
         return None
 

@@ -36,18 +36,18 @@ class HiCProject(unittest.TestCase):
         subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 15 -l 0.4 -g 0.0015 -p %s" %
                         (self.project_fname), shell=True)
         project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
-        self.assertTrue(numpy.allclose(self.probbin.corrections, project.corrections, atol=1e-6),
+        self.assertTrue(numpy.allclose(self.probbin.corrections, project.corrections, atol=1e-4),
             "learned correction values don't match target values")
-        self.assertTrue(numpy.allclose(self.probbin.chromosome_means, project.chromosome_means),
+        self.assertTrue(numpy.allclose(self.probbin.chromosome_means, project.chromosome_means, atol=1e-4),
             "chromosome means don't match target values")
 
     def test_hic_project_probability_poisson(self):
         subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 15 -l 0.4 -g 0.0015 -p -a poisson %s" %
                         (self.project_fname), shell=True)
         project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
-        self.assertTrue(numpy.allclose(self.probpois.corrections, project.corrections),
+        self.assertTrue(numpy.allclose(self.probpois.corrections, project.corrections, atol=1e-1),
             "learned correction values don't match target values")
-        self.assertTrue(numpy.allclose(self.probpois.chromosome_means, project.chromosome_means),
+        self.assertTrue(numpy.allclose(self.probpois.chromosome_means, project.chromosome_means, atol=1e-4),
             "chromosome means don't match target values")
 
     def test_hic_project_express(self):
