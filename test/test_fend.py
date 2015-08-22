@@ -59,7 +59,7 @@ class Fends(unittest.TestCase):
                 self.assertTrue(value1 == value2, "%s in %s doesn't match target value" % (key, name))
         for key in dict1.keys():
             self.assertTrue(key in dict2,
-                "%s missing from fend arrays" % name)
+                "%s missing from fend arrays" % key)
             self.compare_arrays(dict1[key][...], dict2[key][...], name)
         return None
 
