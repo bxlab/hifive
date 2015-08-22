@@ -36,7 +36,7 @@ class HiCProject(unittest.TestCase):
         subprocess.call("./bin/hifive hic-normalize probability -q -m 20000 -o test/data/test_temp.hcp -b 15 -l 0.4 -g 0.0015 -p %s" %
                         (self.project_fname), shell=True)
         project = hic.HiC("test/data/test_temp.hcp", 'r', silent=True)
-        self.assertTrue(numpy.allclose(self.probbin.corrections, project.corrections),
+        self.assertTrue(numpy.allclose(self.probbin.corrections, project.corrections, atol=1e-6),
             "learned correction values don't match target values")
         self.assertTrue(numpy.allclose(self.probbin.chromosome_means, project.chromosome_means),
             "chromosome means don't match target values")
