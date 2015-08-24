@@ -758,7 +758,7 @@ class HiC(object):
                 armijo = numpy.inf
                 t = 1.0
                 n = 0
-                while armijo > 0.0 and n < 20:
+                while armijo > 0.0 and n < 10:
                     # if using multiple cores, pass gradients to root
                     if self.rank == 0:
                         new_corrections = numpy.minimum(100.0, numpy.maximum(0.01,
