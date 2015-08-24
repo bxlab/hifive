@@ -4,7 +4,6 @@
 
 import os
 import sys
-import binascii
 import struct
 
 import numpy
@@ -2549,30 +2548,30 @@ class HiC(object):
                     pos += 1
         # write header
         output = open(filename, 'wb')
-        output.write(binascii.a2b_hex('42054205'))
-        output.write(struct.pack('ii', int(includetrans), n_chroms))
-        output.write(name_sizes.tostring())
+        output.write(bytearray([int('42', 16), int('05', 16), int('42', 16), int('05', 16)]))
+        output.write(struct.pack('>ii', int(includetrans), n_chroms))
+        output.write(name_sizes.astype('>i4').tostring())
         for i, chrom in enumerate(chroms):
-            output.write(struct.pack('c' * name_sizes[i], *list(chrom)))
-        output.write(data_indices.tostring())
-        output.write(num_cis_bins.tostring())
+            output.write(struct.pack('>' + 'c' * name_sizes[i], *list(chrom)))
+        output.write(data_indices.astype('>i4').tostring())
+        output.write(num_cis_bins.astype('>i4').tostring())
         if includetrans:
-            output.write(num_trans_bins.tostring())
-        output.write(data_sizes.tostring())
-        output.write(index_sizes.tostring())
-        output.write(cis_chrom_bounds[:, 0].tostring())
+            output.write(num_trans_bins.astype('>i4').tostring())
+        output.write(data_sizes.astype('>i4').tostring())
+        output.write(index_sizes.astype('>i4').tostring())
+        output.write(cis_chrom_bounds[:, 0].astype('>i4').tostring())
         if includetrans:
-            output.write(trans_chrom_bounds[:, 0].tostring())
-        output.write(cis_chrom_bounds[:, 1].tostring())
+            output.write(trans_chrom_bounds[:, 0].astype('>i4').tostring())
+        output.write(cis_chrom_bounds[:, 1].astype('>i4').tostring())
         if includetrans:
-            output.write(trans_chrom_bounds[:, 1].tostring())
-        output.write(min_scores.tostring())
-        output.write(max_scores.tostring())
+            output.write(trans_chrom_bounds[:, 1].astype('>i4').tostring())
+        output.write(min_scores.astype('>f4').tostring())
+        output.write(max_scores.astype('>f4').tostring())
         if includetrans:
-            output.write(struct.pack('iiii', maxbinsize, trans_maxbinsize, minbinsize, trans_minbinsize))
+            output.write(struct.pack('>iiii', maxbinsize, trans_maxbinsize, minbinsize, trans_minbinsize))
         else:
-            output.write(struct.pack('ii', maxbinsize, minbinsize))
-        output.write(struct.pack('i', minobservations))
+            output.write(struct.pack('>ii', maxbinsize, minbinsize))
+        output.write(struct.pack('>i', minobservations))
         # write data and indices for each chrom pairing
         for i, chrom in enumerate(chroms):
             for chrom2 in chroms[i:]:
@@ -2581,9 +2580,9 @@ class HiC(object):
                 else:
                     key = (chrom, chrom2)
                 if key in results:
-                    output.write(results[key][0].astype(numpy.float32).tostring())
-                    output.write(results[key][1].astype(numpy.int32).tostring())
-                    output.write(results[key][2].astype(numpy.int16).tostring())
+                    output.write(results[key][0].astype('>f4').tostring())
+                    output.write(results[key][1].astype('>i4').tostring())
+                    output.write(results[key][2].astype('>i2').tostring())
         output.close()
         if not self.silent:
             print >> sys.stderr, ("Done\n"),
