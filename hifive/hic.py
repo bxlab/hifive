@@ -757,7 +757,8 @@ class HiC(object):
                 # find best step size
                 armijo = numpy.inf
                 t = 1.0
-                while armijo > 0.0:
+                n = 0
+                while armijo > 0.0 and n < 20:
                     # if using multiple cores, pass gradients to root
                     if self.rank == 0:
                         new_corrections = numpy.minimum(100.0, numpy.maximum(0.01,
@@ -794,6 +795,7 @@ class HiC(object):
                         self.comm.send(cost, dest=0, tag=11)
                         armijo = self.comm.recv(source=0, tag=11)
                     t *= learningstep
+                    n += 1
                 previous_cost = cost
                 corrections = new_corrections
                 # find change
