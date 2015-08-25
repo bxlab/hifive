@@ -697,7 +697,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
             print >> sys.stderr, ("Insufficient data\n"),
         return None
     # If correction is required, determine what type and get appropriate data
-    if hic.normalization != 'binning' or datatype != 'raw':
+    if hic.normalization != 'binning' and datatype != 'raw':
         corrections1 = hic.corrections[startfend1:stopfend1]
         corrections2 = hic.corrections[startfend2:stopfend2]
     elif datatype == 'raw':

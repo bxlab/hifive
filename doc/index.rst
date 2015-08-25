@@ -19,6 +19,7 @@ Contents:
    distance_dependence.rst
    normalization.rst
    binning.rst
+   mrheatmap.rst
    hifive.rst
    fivec_tutorial.rst
    hic_tutorial.rst

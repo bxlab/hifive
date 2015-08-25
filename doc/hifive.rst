@@ -26,6 +26,7 @@ The available subcommands are:
 :hic-heatmap:             Using an already created HiC project, generate an HDF5-formatted heatmap file and optional image.
 :hic-interval:            Using an already created HiC project, generate a tabular genomic-interval file for a specified region and optional image.
 :hic-combine-replicates:  Combine multiple HiC data files into a single file without needing to reload the data.
+:hic-mrheatmap:           Create a multi-resolution heatmap file from a HiFive HiC project file.
 
 .. _5c_subcommands:
 
@@ -487,6 +488,26 @@ Options:
 
 -h/--help, -q/--quiet
 
+.. _hic_mrheatmap:
+
+hic-mrheatmap
+++++++++++++++
+
+::
+
+ > hifive hic-mrheatmap [-h] [-t] [-c CHROMS] [-f MINOBS] [-B MAXBIN]
+       [-b MINBIN] [-R MAXTRANSBIN] [-r MINTRANSBIN] [-m MIDBIN]
+       [-d {raw,fend,distance,enrichment}] [-q] project output
+
+Arguments:
+
+:project: The HiFive HiC project to create a multi-resolution heatmap for.
+:output: The filename to write the multi-resolution heatmap to.
+
+Options:
+
+-h/--help, -q/--qiuet, -t/--trans, -c/--chromosomes, -f/--minobservations, -B/--maximum-binsize, -b/--minimum-binsize, -R/--maximum-trans-binsize, -r/--minimum-trans-binsize, -m/--mid-binsize, -d/--datatype, 
+
 .. _hic_options:
 
 HiC Options
@@ -538,6 +559,7 @@ HiC Probability Options:
 -g, --min-change dec            The minimum allowable absolute gradient size to coninute learning process. [0.0005]
 -p, --precalculate              Prior to beginning learning, set initial guesses for each correction value to be learned to the fragment's mean difference between its log-counts and predicted distance-dependence signal.
 -l, --learning-step dec         The scaling factor for decreasing learning rate by if step doesn't meet Armijo criterion. [0.5]
+-a, --probability-model         Which probability model to use for normalization (binomial or poisson).
 
 HiC Express Options:
 
@@ -576,7 +598,7 @@ HiC Heatmap Options:
 
 HiC Interval Options:
 
--c, --chromosome int    The index of the region to pull data from.
+-c, --chromosome str    The chromosome to pull data from.
 -b, --binsize int       The width of bins (in basepairs) to partition data into. A value of zero indicates that each bin is to correspond with a single fend.
 -s, --start int         The first coordinate of the chromosome to pull data from. None indicates the beginning of the chromosome. [None]
 -e, --stop int          The last coordinate + 1 of the chromosome to pull data from. None indicates the end of the chromosome. [None]
@@ -597,3 +619,15 @@ HiC Plotting Options:
 -l, --legend        Add a color scale bar corresponding to interaction strength. This option can only be used if a pdf is requested.
 -n, --names         Add chromosome names to the plot. This option can only be used if a pdf is requested.
 -k, --keyword str   Pass additional plotting options accepted by the :mod:`plotting <hifive.plotting>` module. Arguments should be of the format KEYWORD=VALUE. This option can be passed multiple times. [None]
+
+HiC Multi-Resolution Heatmap Options:
+
+-t, --trans                      Calculate and include trans interactions in heatmaps.
+-c, --chromosomes str            A comma-separated list if chromosome names to include in the heatmaps. [all chromosomes]
+-f, --minobservations int        The minimum number of observed reads in a bin for it to be considered valid. [20]
+-B, --maximum-binsize int        The largest sized bin to use (minimum resolution) in, base pairs. [1280000]
+-b, --minimum-binsize int        The smallest sized bin to use (maximum resolution) in, base pairs. [10000]
+-R, --maximum-trans-binsize int  The largest sized bin to use (minimum resolution) for inter-chromosomal interactions, in base pairs. If not specified, this defaults to the value of the -B option. [use -B value]
+-r, --minimum-trans-binsize int  The smallest sized bin to use (maximum resolution) for inter-chromosomal interactions, in base pairs. If not specified, this defaults to the value of the -b option. [use -b value]
+-m, --mid-binsize                The smalled sized bin to use for binning the entire chromosome, in base pairs. This is used to balance memory usage vs. speed and does not affect the output. [40000]
+-d, --datatype str               Type of data to produce for the heatmaps. Valid options are raw, fend (only fend corrections applied), distance (only distance-dependence signal removed), enrichment (both fend correction and distance-dependence signal removed), and expected (only predicted signal). [fend]

@@ -41,7 +41,7 @@ if not release:
 def main():
     write_version_py()
 
-    build_requires = ['setuptools_cython']
+    build_requires = ['setuptools_cython', 'numpy']
 
     metadata = dict(
         name = "hifive",
@@ -54,7 +54,7 @@ def main():
         install_requires = ['numpy', 'scipy', 'h5py'],
         setup_requires = build_requires,
         ext_modules = get_extension_modules(),
-        scripts = ['bin/hifive',],
+        scripts = ['bin/hifive', 'bin/fetch_mrh_data'],
         test_suite = 'nose.collector',
         tests_require = 'nose',
         #extras_require = {'pyx':[], 'PIL':[], 'mlpy':[]},
