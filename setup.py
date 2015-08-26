@@ -11,6 +11,7 @@ if sys.version_info[0] < 3:
     import __builtin__ as builtins
 else:
     import builtins
+from setuptools import setup, find_packages
 import ez_setup
 ez_setup.use_setuptools()
 from distutils.extension import Extension
@@ -47,19 +48,6 @@ def git_version():
         GIT_REVISION = "Unknown"
 
     return GIT_REVISION
-
-
-# BEFORE importing distutils, remove MANIFEST. distutils doesn't properly
-# update it when the contents of directories change.
-if os.path.exists('MANIFEST'):
-    os.remove('MANIFEST')
-
-# This is a bit hackish: we are setting a global variable so that the main
-# scipy __init__ can detect if it is being loaded by the setup routine, to
-# avoid attempting to load components that aren't built yet.  While ugly, it's
-# a lot more robust than what was previously being used.
-builtins.__HIFIVE_SETUP__ = True
-
 
 def get_version_info():
     # Adding the git rev number needs to be done inside
@@ -130,6 +118,8 @@ def setup_package():
         scripts = ['bin/hifive', 'bin/fetch_mrh_data'],
         test_suite = 'nose.collector',
         tests_require = 'nose',
+        packages = [],
+        ext_modules = [],
         #extras_require = {'pyx':[], 'PIL':[], 'mlpy':[]},
         author = "Michael Sauria",
         author_email = "mike.sauria@jhu.edu",
@@ -144,15 +134,12 @@ def setup_package():
         # They are required to succeed without Numpy for example when
         # pip is used to install HiFive when Numpy is not yet present in
         # the system.
-        try:
-            from setuptools import setup
-        except ImportError:
-            from distutils.core import setup
+        pass
     else:
-        from setuptools import setup, find_packages
         include_dirs = [numpy.get_include()]
         metadata['packages'] = find_packages(exclude=['examples', 'test', 'ez_setup.py'], where='./')
         metadata['ext_modules'] = get_extension_modules(include_dirs)
+        print metadata['ext_modules']
 
 
     setup(**metadata)
