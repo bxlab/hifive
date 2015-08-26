@@ -51,7 +51,7 @@ def main():
         include_package_data = True,
         package_dir = {'':'./'},
         packages = find_packages(exclude=['examples', 'test', 'ez_setup.py'], where='./'),
-        install_requires = ['numpy', 'scipy', 'h5py'],
+        install_requires = ['numpy', 'scipy', 'h5py', 'reportlab', 'pysam'],
         setup_requires = build_requires,
         ext_modules = get_extension_modules(),
         scripts = ['bin/hifive',],

@@ -3,3 +3,5 @@ numpy
 scipy
 h5py
 mock
+reportlab
+pysam
