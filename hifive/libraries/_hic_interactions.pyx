@@ -190,9 +190,10 @@ def find_nonzero_node_indices(
             if data[j, 1] >= ranges[data[j, 0], 1] and data[j, 1] < ranges[data[j, 0], 2]:
                 indices0[i] = data[j, 0]
                 indices1[i] = data[j, 1]
-                counts[i] = data[j, 2]
                 interactions[data[j, 0]] += 1
                 interactions[data[j, 1]] += 1
+                if not counts is None:
+                    counts[i] = data[j, 2]
                 i += 1
     return None
 
@@ -336,6 +337,7 @@ def sum_weighted_indices(
         np.ndarray[DTYPE_int_t, ndim=1] indices0,
         np.ndarray[DTYPE_int_t, ndim=1] indices1,
         np.ndarray[DTYPE_t, ndim=1] weights,
+        np.ndarray[DTYPE_int_t, ndim=1] int_weights,
         np.ndarray[DTYPE_64_t, ndim=1] sums):
     cdef long long int i
     cdef long long int num_indices = indices0.shape[0]
@@ -344,6 +346,10 @@ def sum_weighted_indices(
             for i in range(num_indices):
                 sums[indices0[i]] += weights[i]
                 sums[indices1[i]] += weights[i]
+        elif not int_weights is None:
+            for i in range(num_indices):
+                sums[indices0[i]] += int_weights[i]
+                sums[indices1[i]] += int_weights[i]
         else:
             for i in range(num_indices):
                 sums[indices0[i]] += 1

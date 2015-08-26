@@ -110,9 +110,9 @@ Find HiC distance function
 
 :mod:`HiFive` approximates the distance-signal relationship using a series of linear transitions between bin means of mean log interaction counts. Spanning from a user-defined minimum interaction distance up to the genome maximum interaction distance, the range is divided into equal-sized log distance bins. Values falling between bin midpoints are interpolated based on a linear transition between bins. To estimate this function, you can use the following command::
 
-  hic.find_distance_means(numbins=90,
-                          minsize=200, 
-                          maxsize=0)
+  hic.find_distance_parameters(numbins=90,
+                               minsize=200, 
+                               maxsize=0)
 
 In this function call, the range of interaction sizes is being broken into 90 bins, 1 bin covering interactions <= 200 bp, and the other 89 spanning up to the maximum interaction distance with breaks evenly spaced in log space. The maximum of this range is set by 'maxsize', which can either be zero, as in this call, setting the maximum size equal to the longest interaction distance, or a positive integer value which would exclude any interaction distances greater than 'maxsize'.
 
@@ -290,3 +290,21 @@ In order to visualize the heatmap we just produced, :mod:`HiFive` has several pl
   img.save(out_fname)
 
 In calling the function, we pass the heatmap and that would be sufficient. There are, however, additional options. For example, 'symmetric_scaling' specifies whether the color scale should be expanded to run from the minimum value to the maximum (False) or so that the maximum absolute value determine both upper and lower color bounds. The image returned is a :mod:`PIL` image of type 'png'.
+
+.. _making_an_mrh_file:
+
+Creating a multi-resolution heatmap
+====================================
+
+An Alternative to the standard heatmap is a HiFive-specific filetype called a :ref:`multiresolution heatmap` or MRH. In order to create this compact heatmap file, we can use the built-in :class:`HiC <hifive.hic.HiC>` function as follows::
+
+  hic.load( project_filename )
+  hic.write_multiresolution_heatmap(out_fname, datatype='fend', maxbinsize=1280000, minbinsize=5000, includetrans=True, minobservations=5)
+
+This call would create an MRH file under the name specified in 'out_fname'. Data would cover all intra-chromosomal interactions and, because we passed 'True' to the 'includetrans' argument, all of the inter-chromosomal interactions as well. Only bins with at least 5 reads would be included in the heatmaps because of the value passed to 'minobservations'. All resolutions from binsizes of 1.28Mb to 5Kb would be heatmapped in steps of 2X (i.e. 5Kb, 10Kb, 20Kb, etc). This imposes a limitation such that minbinsize and maxbinsize must differ from each other by an integer power of two.
+
+In order to make use of this MRH file, we could either visualize it in `Galaxy <https://usegalaxy.org/>`_ or use the stand-alone program 'fetch_mrh_data' included with HiFive. For example if we wanted to get data from chromosome 1 between 10Mb and 20Mb including all resolution data down to 10Kb, we could call the program as follows::
+
+  > fetch_mrh_data -c 1 -s 10000000 -e 20000000 -R 10000 mrh_fname img_fname
+
+This would pull data from the MRH file 'mrh_fname' and plot it as an image in the file 'img_fname'. For specifics of the 'fetch_mrh_data' options, see :ref:`mrh_program`.

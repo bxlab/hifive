@@ -15,7 +15,7 @@ RUN apt-get install -y libhdf5-dev libatlas-base-dev
 
 # Load mpi and supporting library
 
-RUN apt-get install openmpi-bin openmpi-common openssh-client openssh-server libopenmpi1.6 libopenmpi-dev -y
+# RUN apt-get install openmpi-bin openmpi-common openssh-client openssh-server libopenmpi1.6 libopenmpi-dev -y
 
 # Get pip
 
@@ -25,12 +25,13 @@ RUN pip install -U setuptools
 
 # Get python packages: numpy, scipy, pysam, cython, mpi4py, and h5py
 
-RUN pip install numpy scipy pysam cython mpi4py
+# RUN pip install numpy scipy pysam cython mpi4py
+RUN pip install numpy scipy pysam cython
 RUN pip install h5py
 
 # Get hifive
 
-RUN apt-get install unzip
-RUN cd tmp && wget https://github.com/bxlab/hifive/archive/master.zip && unzip master.zip && cd hifive-master && python setup.py install
+RUN apt-get install -y unzip wget
+RUN mkdir -p tmp && cd tmp && wget https://github.com/bxlab/hifive/archive/master.zip && unzip master.zip && cd hifive-master && python setup.py install
 
 MAINTAINER Michael Sauria <mike.sauria@jhu.edu>

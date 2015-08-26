@@ -14,6 +14,7 @@ import create_hic_project
 import normalize_hic_project
 import complete_hic_project
 import create_hic_heatmap
+import create_hic_mrheatmap
 import combine_hic_replicates
 import get_hic_interval
 

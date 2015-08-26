@@ -65,8 +65,8 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     :type proportional: bool.
     :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
     """
-    if 'silent' in kwargs and kwargs['silent']:
-        silent = True
+    if 'silent' in kwargs:
+        silent = kwargs['silent']
     else:
         silent = False
     # check that all values are acceptable
@@ -92,7 +92,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         start = binbounds[0, 0]
         stop = binbounds[-1, 1]
         startfend = _find_fend_from_coord(hic, chrint, start)
-        stopfend = _find_fend_from_coord(hic, chrint, stop)
+        stopfend = _find_fend_from_coord(hic, chrint, stop) + 1
     else:
         if start is None and startfend is None:
             startfend = hic.fends['chr_indices'][chrint]
@@ -125,7 +125,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         else:
             if binsize > 0:
                 stop = ((stop - 1 - start) / binsize + 1) * binsize + start
-            stopfend = _find_fend_from_coord(hic, chrint, stop)
+            stopfend = _find_fend_from_coord(hic, chrint, stop) + 1
     if not silent:
         print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
     # If datatype is not 'expected', pull the needed slice of data
@@ -185,21 +185,29 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         else:
             max_bin = maxdistance / binsize
     # If correction is required, determine what type and get appropriate data
-    corrections = None
-    binning_corrections = None
-    binning_num_bins = None
-    fend_indices = None
-    if datatype in ['fend', 'enrichment', 'expected']:
-        if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
-            corrections = hic.corrections[startfend:stopfend]
-        if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
-            binning_corrections = hic.binning_corrections
-            binning_num_bins = hic.binning_num_bins
-            fend_indices = hic.binning_fend_indices
-        if hic.normalization in ['express', 'probability'] and datatype == 'fend':
-            correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid]).astype(numpy.float64)
+    if 'binning' not in hic.normalization and datatype != 'raw':
+        corrections = hic.corrections[startfend:stopfend]
+    elif datatype == 'raw':
+        corrections = numpy.ones(stopfend - startfend, dtype=numpy.float32)
+    else:
+        corrections = None
+    if ((hic.normalization in ['express', 'probability'] and
+            datatype == 'fend') or datatype == 'raw') and maxdistance == 0:
+        if datatype == 'fend':
+            correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid],
+                                             minlength=num_bins).astype(numpy.float64)
         else:
-            correction_sums = None
+            correction_sums = numpy.bincount(mapping[valid], minlength=num_bins).astype(numpy.float64)
+    else:
+        correction_sums = None
+    if 'binning' in hic.normalization and datatype not in ['raw', 'distance']:
+        binning_corrections = hic.binning_corrections
+        binning_num_bins = hic.binning_num_bins
+        fend_indices = hic.binning_fend_indices
+    else:
+        binning_corrections = None
+        binning_num_bins = None
+        fend_indices = None
     if datatype in ['distance', 'enrichment', 'expected']:
         distance_parameters = hic.distance_parameters
         chrom_mean = hic.chromosome_means[chrint]
@@ -231,33 +239,37 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
     # Fill in data values
     if arraytype == 'compact':
-        if datatype != 'raw':
-            _hic_binning.find_cis_compact_expected(mapping, corrections, binning_corrections,
-                                                   binning_num_bins, fend_indices, mids, distance_parameters,
-                                                   max_fend, data_array, correction_sums, ranges, overlap,
-                                                   chrom_mean, startfend)
+        _hic_binning.find_cis_compact_expected(mapping, corrections, binning_corrections,
+                                               binning_num_bins, fend_indices, mids, distance_parameters,
+                                               max_fend, data_array, correction_sums, ranges, overlap,
+                                               chrom_mean, startfend)
         if datatype != 'expected':
             _hic_binning.find_cis_compact_observed(data, data_indices, mapping, max_fend, data_array, ranges, overlap)
         else:
-            where = numpy.where(data_array[:, :, 1] > 0.0)
-            data_array[where[0], where[1], 0] = 1.0
-        if datatype == 'raw':
-            where = numpy.where(data_array[:, :, 0] > 0.0)
-            data_array[where[0], where[1], 1] = 1.0
+            data_array[:, :, 0] = data_array[:, :, 1]
+            data_array[:, :, 1].fill(0)
+            correction_sums = numpy.bincount(mapping[valid], minlength=num_bins).astype(numpy.float64)
+            corrections.fill(1)
+            _hic_binning.find_cis_compact_expected(mapping, corrections, None, None, None, mids, None,
+                                                   max_fend, data_array, correction_sums, ranges, overlap,
+                                                   chrom_mean, startfend)
+            data_array = data_array[:, :, ::-1]
     else:
-        if datatype != 'raw':
-            _hic_binning.find_cis_upper_expected(mapping, corrections, binning_corrections,
-                                                 binning_num_bins, fend_indices, mids, distance_parameters,
-                                                 max_fend, data_array, correction_sums, ranges, overlap,
-                                                 chrom_mean, startfend)
+        _hic_binning.find_cis_upper_expected(mapping, corrections, binning_corrections,
+                                             binning_num_bins, fend_indices, mids, distance_parameters,
+                                             max_fend, data_array, correction_sums, ranges, overlap,
+                                             chrom_mean, startfend)
         if datatype != 'expected':
             _hic_binning.find_cis_upper_observed(data, data_indices, mapping, max_fend, data_array, ranges, overlap)
         else:
-            where = numpy.where(data_array[:, 1] > 0.0)[0]
-            data_array[where, 0] = 1.0
-        if datatype == 'raw':
-            where = numpy.where(data_array[:, 0] > 0.0)[0]
-            data_array[where, 1] = 1.0
+            data_array[:, 0] = data_array[:, 1]
+            data_array[:, 1].fill(0)
+            correction_sums = numpy.bincount(mapping[valid], minlength=num_bins).astype(numpy.float64)
+            corrections.fill(1)
+            _hic_binning.find_cis_upper_expected(mapping, corrections, None, None, None, mids, None,
+                                                 max_fend, data_array, correction_sums, ranges, overlap,
+                                                 chrom_mean, startfend)
+            data_array = data_array[:, ::-1]
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
         indices = numpy.triu_indices(num_bins, 1)
@@ -535,7 +547,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         start1 = binbounds1[0, 0]
         stop1 = binbounds1[-1, 1]
         startfend1 = _find_fend_from_coord(hic, chrint1, start1)
-        stopfend1 = _find_fend_from_coord(hic, chrint1, stop1)
+        stopfend1 = _find_fend_from_coord(hic, chrint1, stop1) + 1
     else:
         if start1 is None and startfend1 is None:
             startfend1 = hic.fends['chr_indices'][chrint1]
@@ -568,12 +580,12 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         else:
             if binsize > 0:
                 stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
-            stopfend1 = _find_fend_from_coord(hic, chrint1, stop1)
+            stopfend1 = _find_fend_from_coord(hic, chrint1, stop1) + 1
     if not binbounds1 is None:
         start2 = binbounds1[0, 0]
         stop2 = binbounds1[-1, 1]
         startfend2 = _find_fend_from_coord(hic, chrint2, start2)
-        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
+        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2) + 1
     else:
         if start2 is None and startfend2 is None:
             startfend2 = hic.fends['chr_indices'][chrint2]
@@ -606,7 +618,7 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         else:
             if binsize > 0:
                 stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
-            stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
+            stopfend2 = _find_fend_from_coord(hic, chrint2, stop2) + 1
     if not silent:
         print >> sys.stderr, ("Finding %s array for %s:%i-%i by %s:%i-%i...") % (datatype,  chrom1,
                                                                                  start1, stop1, chrom2, start2,
@@ -641,8 +653,8 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     # Determine mapping of valid fends to bins
     mapping1 = numpy.zeros(stopfend1 - startfend1, dtype=numpy.int32) - 1
     mapping2 = numpy.zeros(stopfend2 - startfend2, dtype=numpy.int32) - 1
-    valid1 = numpy.where(hic.filter[startfend1:stopfend1] > 0)[0]
-    valid2 = numpy.where(hic.filter[startfend2:stopfend2] > 0)[0]
+    valid1 = numpy.where(hic.filter[startfend1:stopfend1] > 0)[0].astype(numpy.int32)
+    valid2 = numpy.where(hic.filter[startfend2:stopfend2] > 0)[0].astype(numpy.int32)
     mids1 = hic.fends['fends']['mid'][startfend1:stopfend1]
     mids2 = hic.fends['fends']['mid'][startfend2:stopfend2]
     if binsize == 0 and binbounds1 is None:
@@ -685,25 +697,37 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
             print >> sys.stderr, ("Insufficient data\n"),
         return None
     # If correction is required, determine what type and get appropriate data
-    corrections1 = None
-    corrections2 = None
-    binning_corrections = None
-    binning_num_bins = None
-    fend_indices = None
-    if datatype in ['fend', 'enrichment', 'expected']:
-        if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
-            corrections1 = hic.corrections[startfend1:stopfend1]
-            corrections2 = hic.corrections[startfend2:stopfend2]
-        if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
-            binning_corrections = hic.binning_corrections
-            binning_num_bins = hic.binning_num_bins
-            fend_indices = hic.binning_fend_indices
-        if hic.normalization in ['express', 'probability'] and datatype == 'fend':
-            correction_sums1 = numpy.bincount(mapping1[valid1], weights=corrections1[valid1]).astype(numpy.float64)
-            correction_sums2 = numpy.bincount(mapping2[valid2], weights=corrections2[valid2]).astype(numpy.float64)
+    if hic.normalization != 'binning' and datatype != 'raw':
+        corrections1 = hic.corrections[startfend1:stopfend1]
+        corrections2 = hic.corrections[startfend2:stopfend2]
+    elif datatype == 'raw':
+        corrections1 = numpy.ones(stopfend1 - startfend1, dtype=numpy.float32)
+        corrections2 = numpy.ones(stopfend2 - startfend2, dtype=numpy.float32)
+    else:
+        corrections1 = None
+        corrections2 = None
+    if ((hic.normalization in ['express', 'probability'] and
+            datatype == 'fend') or datatype == 'raw'):
+        correction_sums1 = numpy.zeros(num_bins1, dtype=numpy.float64)
+        correction_sums2 = numpy.zeros(num_bins2, dtype=numpy.float64)
+        if datatype == 'fend':
+            correction_sums1[:] = numpy.bincount(mapping1[valid1], weights=corrections1[valid1], minlength=num_bins1)
+            correction_sums2[:] = numpy.bincount(mapping2[valid2], weights=corrections2[valid2], minlength=num_bins2)
         else:
-            correction_sums1 = None
-            correction_sums2 = None
+            correction_sums1[:] = numpy.bincount(mapping1[valid1], minlength=num_bins1)
+            correction_sums2[:] = numpy.bincount(mapping2[valid2], minlength=num_bins2)
+    else:
+        correction_sums1 = None
+        correction_sums2 = None
+    if (hic.normalization in ['binning', 'binning-express', 'binning-probability'] and
+            datatype not in ['raw', 'distance']):
+        binning_corrections = hic.binning_corrections
+        binning_num_bins = hic.binning_num_bins
+        fend_indices = hic.binning_fend_indices
+    else:
+        binning_corrections = None
+        binning_num_bins = None
+        fend_indices = None
     if datatype in ['distance', 'enrichment', 'expected']:
         if 'trans_means' not in hic.__dict__.keys():
             hic.find_trans_means()
@@ -721,27 +745,45 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         data_array = numpy.zeros((num_bins2, num_bins1, 2), dtype=numpy.float32)
     # Fill in data values
     if chrint1 < chrint2:
-        if datatype != 'raw':
-            _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, binning_corrections,
-                                             binning_num_bins, fend_indices, data_array,
-                                             correction_sums1, correction_sums2, trans_mean, startfend1, startfend2)
+        _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, binning_corrections,
+                                         binning_num_bins, fend_indices, data_array,
+                                         correction_sums1, correction_sums2, trans_mean, startfend1, startfend2)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping1, mapping2, data_array)
+        else:
+            data_array[:, :, 0] = data_array[:, :, 1]
+            data_array[:, :, 1].fill(0)
+            corrections1.fill(1.0)
+            corrections2.fill(1.0)
+            correction_sums1 = numpy.bincount(mapping1[valid1], minlength=num_bins1).astype(numpy.float64)
+            correction_sums2 = numpy.bincount(mapping2[valid2], minlength=num_bins2).astype(numpy.float64)
+            _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, None, None, None,
+                                             data_array, correction_sums1, correction_sums2, 1.0, startfend1,
+                                             startfend2)
+            temp = data_array[:, :, 0]
+            data_array[:, :, 0] = data_array[:, :, 1]
+            data_array[:, :, 1] = temp
     else:
-        if datatype != 'raw':
-            _hic_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, binning_corrections,
-                                             binning_num_bins, fend_indices, data_array,
-                                             correction_sums2, correction_sums1, trans_mean, startfend2, startfend1)
+        _hic_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, binning_corrections,
+                                         binning_num_bins, fend_indices, data_array,
+                                         correction_sums2, correction_sums1, trans_mean, startfend2, startfend1)
         if datatype != 'expected':
             _hic_binning.find_trans_observed(data, data_indices, mapping2, mapping1, data_array)
+        else:
+            data_array[:, :, 0] = data_array[:, :, 1]
+            data_array[:, :, 1].fill(0)
+            corrections1.fill(1.0)
+            corrections2.fill(1.0)
+            correction_sums1 = numpy.bincount(mapping1[valid1], minlength=num_bins1).astype(numpy.float64)
+            correction_sums2 = numpy.bincount(mapping2[valid2], minlength=num_bins2).astype(numpy.float64)
+            _hic_binning.find_trans_expected(mapping2, mapping1, corrections2, corrections1, None, None, None,
+                                             data_array, correction_sums2, correction_sums1, 1.0, startfend2,
+                                             startfend1)
+            temp = data_array[:, :, 0]
+            data_array[:, :, 0] = data_array[:, :, 1]
+            data_array[:, :, 1] = temp
     if chrint2 < chrint1:
         data_array = numpy.transpose(data_array, (1, 0, 2))
-    if datatype == 'expected':
-        where = numpy.where(data_array[:, :, 1] > 0.0)
-        data_array[where[0], where[1], 0] = 1.0
-    if datatype == 'raw':
-        where = numpy.where(data_array[:, :, 0] > 0.0)
-        data_array[where[0], where[1], 1] = 1.0
     if returnmapping:
         bin_mapping1 = numpy.zeros((num_bins1, 4), dtype=numpy.int32)
         if binsize == 0 and binbounds1 is None:
@@ -1105,3 +1147,435 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
             comm.send(heatmaps, dest=0, tag=11)
         del heatmaps
     return None
+
+
+def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=None, stop2=None, minbinsize=5000,
+                                 maxbinsize=12800000, minobservations=5, datatype='fend', midbinsize=40000,
+                                 silent=True):
+    """
+    Create a multi-resolution data and index heatmap array for a chromosome or chromosome pair.
+
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
+    :param chrom: The first (or only) chromosome to find the multi-resolution heatmap for.
+    :type chrom: str.
+    :param start: The first bin start coordinate.
+    :type start: int.
+    :param stop: The last bin stop coordinate. The difference between start and stop must be a multiple of maxbinsize.
+    :type stop: int.
+    :param chrom2: The second chromosome to find the multi-resolution heatmap for. If None, an intra-chromosomal multi-resolution heatmap is returned for chrom.
+    :type chrom2: str.
+    :param start2: The first bin start coordinate for the second chromosome.
+    :type start2: int.
+    :param stop2: The last bin stop coordinate for the second chromosome. The difference between start and stop must be a multiple of maxbinsize.
+    :type stop2: int.
+    :param maxbinsize: The maximum sized bin (lowest resolution) heatmap to be produced for each chromosome.
+    :type maxbinsize: int.
+    :param minbinsize: The minimum sized bin (highest resolution) heatmap to be produced for each chromosome.
+    :type minbinsize: int.
+    :param minobservations: The minimum number of reads needed for a bin to be considered valid and be included in the heatmap.
+    :type minobservations: int.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', and 'enrichment'. Observed values are always in the first index along the last axis. If 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and 'enrichment' uses both correction and distance mean values.
+    :type datatype: str.
+    :param midbinsize: This is used to determine the smallest bin size (highest resolution) complete heatmap to generate in producing the multi-resolution heatmap. It does not affect the resulting output but can be used to limit the total memory usage, with higher values using less memory but more time.
+    :type midbinsize: int.
+    :param silent: Indicates whether to display messages or not.
+    :type silent: bool.
+    """
+    # check that all values are acceptable
+    if datatype not in ['raw', 'fend', 'distance', 'enrichment']:
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        return None
+    if not chrom2 is None and (start2 is None or stop2 is None):
+        if not silent:
+            print >> sys.stderr, ("Need values for start2 and stop2. No data returned\n"),
+        return None
+    if (stop - start) % maxbinsize != 0 or (not chrom2 is None and (stop2 - start2) % maxbinsize != 0):
+        if not silent:
+            print >> sys.stderr, ("Genomic intervals must be multiples of maxbinsize. No data returned\n"),
+        return None
+    res_levels = numpy.round(numpy.log(maxbinsize / minbinsize) / numpy.log(2.0)).astype(numpy.int32)
+    if maxbinsize != minbinsize * 2 ** res_levels:
+        if not silent:
+            print >> sys.stderr, ("Maxbinsize must be a multiple of 2^N and minbinsize for an integer N. No data returned\n"),
+        return None
+    if not silent:
+        if chrom2 is None:
+            target = chrom
+        else:
+            target = '%s by %s' % (chrom, chrom2)
+        print >> sys.stderr, ("\r%s\rFinding multi-resolution heatmap for %s...") % (' ' * 80, target),
+    # determine if finding cis or trans multi-resolution heatmap
+    chrint = hic.chr2int[chrom]
+    chrint2 = None
+    span = stop - start
+    startfend = _find_fend_from_coord(hic, chrint, start)
+    stopfend = _find_fend_from_coord(hic, chrint, stop) + 1
+    if chrom2 is None:
+        trans = False
+    else:
+        span2 = stop2 - start2
+        chrint2 = hic.chr2int[chrom2]
+        trans = True
+        startfend2 = _find_fend_from_coord(hic, chrint2, start2)
+        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2) + 1
+    # determine actual midresolution limit
+    temp = maxbinsize
+    while temp / 2 >= max(midbinsize, minbinsize):
+        temp /= 2
+    midbinsize = temp
+    # pull relevant data
+    n = span / midbinsize
+    valid = numpy.where(hic.filter[startfend:stopfend])[0].astype(numpy.int32)
+    fend_nums = valid + startfend
+    mids = hic.fends['fends']['mid'][fend_nums] - start
+    binbounds = numpy.round(numpy.linspace(0, span, n + 1)).astype(numpy.int32)
+    bin_mids = (binbounds[:-1] + binbounds[1:]) / 2
+    mapping = numpy.empty(stopfend - startfend, dtype=numpy.int32)
+    mapping.fill(-1)
+    mapping[valid] = numpy.arange(valid.shape[0])
+    binmapping = mids / midbinsize
+    obs_indices = numpy.searchsorted(mids, binbounds).astype(numpy.int32)
+    if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
+        corrections = hic.corrections[fend_nums]
+        correction_sums = numpy.bincount(binmapping, weights=corrections, minlength=n).astype(numpy.float32)
+    else:
+        corrections = None
+        correction_sums = None
+    if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
+        binning_corrections = hic.binning_corrections
+        fend_indices = hic.binning_fend_indices[fend_nums, :, :]
+    else:
+        binning_corrections = None
+        fend_indices = None
+    if datatype in ['distance', 'enrichment']:
+        distance_parameters = hic.distance_parameters
+        chrom_mean = hic.chromosome_means[chrint]
+    else:
+        distance_parameters = None
+        chrom_mean = 0.0
+    if trans:
+        m = span2 / midbinsize
+        valid2 = numpy.where(hic.filter[startfend2:stopfend2])[0]
+        fend_nums2 = valid2 + startfend2
+        mids2 = hic.fends['fends']['mid'][fend_nums2] - start2
+        binbounds2 = numpy.round(numpy.linspace(0, span2, m + 1)).astype(numpy.int32)
+        bin_mids2 = (binbounds2[:-1] + binbounds2[1:]) / 2
+        obs_indices2 = numpy.searchsorted(mids2, binbounds2).astype(numpy.int32)
+        mapping2 = numpy.empty(stopfend2 - startfend2, dtype=numpy.int32)
+        mapping2.fill(-1)
+        mapping2[valid2] = numpy.arange(valid2.shape[0])
+        binmapping2 = mids2 / midbinsize
+        if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
+            corrections2 = hic.corrections[fend_nums2]
+            correction_sums2 = numpy.bincount(binmapping2, weights=corrections2, minlength=m).astype(numpy.float32)
+        else:
+            corrections2 = None
+            correction_sums2 = None
+        if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
+            fend_indices2 = hic.binning_fend_indices[fend_nums2, :, :]
+        else:
+            fend_indices2 = None
+        if datatype in ['distance', 'enrichment']:
+            if 'trans_means' not in hic.__dict__.keys():
+                hic.find_trans_means()
+            if chrint < chrint2:
+                index = chrint * (hic.fends['chromosomes'].shape[0] - 1) - chrint * (chrint + 1) / 2 - 1 + chrint2
+            else:
+                index = chrint2 * (hic.fends['chromosomes'].shape[0] - 1) - chrint2 * (chrint2 + 1) / 2 - 1 + chrint
+            chrom_mean = hic.trans_means[index]
+        # pull relevant trans observations and remap
+        if chrint2 < chrint:
+            start_index = hic.data['trans_indices'][startfend2]
+            stop_index = hic.data['trans_indices'][stopfend2]
+            data = hic.data['trans_data'][start_index:stop_index, :]
+            data_indices = hic.data['trans_indices'][startfend2:(stopfend2 + 1)]
+            data_indices -= data_indices[0]
+            num_data = _hic_binning.remap_mrh_data(
+                        data,
+                        data_indices,
+                        mapping2,
+                        mapping,
+                        startfend,
+                        stopfend,
+                        startfend2,
+                        stopfend2 - startfend2,
+                        1)
+        else:
+            start_index = hic.data['trans_indices'][startfend]
+            stop_index = hic.data['trans_indices'][stopfend]
+            data = hic.data['trans_data'][start_index:stop_index, :]
+            data_indices = hic.data['trans_indices'][startfend:(stopfend + 1)]
+            data_indices -= data_indices[0]
+            num_data = _hic_binning.remap_mrh_data(
+                        data,
+                        data_indices,
+                        mapping,
+                        mapping2,
+                        startfend2,
+                        stopfend2,
+                        startfend,
+                        stopfend - startfend,
+                        0)
+    else:
+        # pull relevant cis observations
+        start_index = hic.data['cis_indices'][startfend]
+        stop_index = hic.data['cis_indices'][stopfend]
+        data = hic.data['cis_data'][start_index:stop_index, :]
+        data_indices = hic.data['cis_indices'][startfend:(stopfend + 1)]
+        data_indices -= data_indices[0]
+        num_data = _hic_binning.remap_mrh_data(
+                    data,
+                    data_indices,
+                    mapping,
+                    None,
+                    startfend,
+                    stopfend,
+                    startfend,
+                    stopfend - startfend,
+                    0)
+    if trans and chrint2 < chrint:
+        data = data[numpy.lexsort((data[:, 1], data[:, 0])), :]
+    data_indices = numpy.r_[0, numpy.bincount(data[:num_data, 0], minlength=valid.shape[0])].astype(numpy.int64)
+    for i in range(1, data_indices.shape[0]):
+        data_indices[i] += data_indices[i - 1]
+    data = data[:data_indices[-1], 1:]
+    # convert observations into binned matrix
+    if trans:
+        observed = numpy.zeros((n, m), dtype=numpy.int32)
+    else:
+        observed = numpy.zeros((n, n), dtype=numpy.int32)
+        binmapping2 = None
+    _hic_binning.find_mrh_observed(
+        data,
+        data_indices,
+        observed,
+        binmapping,
+        binmapping2)
+    expected = numpy.zeros(observed.shape, dtype=numpy.float32)
+    datatype_int = {'raw':0, 'fend':1, 'distance':2, 'enrichment':3}
+    dt_int = datatype_int[datatype]
+    if trans:
+        _hic_binning.find_mrh_trans_expected(
+            expected,
+            binmapping,
+            binmapping2,
+            obs_indices,
+            obs_indices2,
+            corrections,
+            corrections2,
+            correction_sums,
+            correction_sums2,
+            binning_corrections,
+            fend_indices,
+            fend_indices2,
+            chrom_mean,
+            dt_int)
+    else:
+        _hic_binning.find_mrh_cis_expected(
+            expected,
+            fend_nums,
+            binmapping,
+            mapping,
+            mids,
+            obs_indices,
+            corrections,
+            correction_sums,
+            binning_corrections,
+            fend_indices,
+            distance_parameters,
+            chrom_mean,
+            dt_int)
+    # find features for largest binned data array
+    n_bins = span / maxbinsize
+    m_bins = 0
+    binbounds = numpy.linspace(0, span, n_bins + 1)
+    if trans:
+        m_bins = span2 / maxbinsize
+        binbounds2 = numpy.linspace(0, span2, m_bins + 1)
+    # find fend assignments for largest bin sizes
+    obs_indices = numpy.searchsorted(bin_mids, binbounds).astype(numpy.int32)
+    if trans:
+        obs_indices2 = numpy.searchsorted(bin_mids2, binbounds2).astype(numpy.int32)
+    else:
+        obs_indices2 = None
+    # make data arrays to hold output
+    if trans:
+        current_level_data = numpy.zeros(n_bins * m_bins, dtype=numpy.float32)
+    else:
+        current_level_data = numpy.zeros((n_bins * (n_bins + 1)) / 2, dtype=numpy.float32)
+    current_level_indices = numpy.empty(current_level_data.shape, dtype=numpy.int32)
+    current_level_indices.fill(-1)
+    current_level_shapes = numpy.zeros(current_level_data.shape, dtype=numpy.int32)
+    bin_position = numpy.empty(current_level_data.shape, dtype=numpy.int32)
+    bin_position.fill(-1)
+    # find largest binned data array
+    if trans:
+        _hic_binning.make_trans_mrh_toplevel(observed,
+                                             expected,
+                                             current_level_data,
+                                             obs_indices,
+                                             obs_indices2,
+                                             bin_position,
+                                             minobservations)
+    else:
+        _hic_binning.make_cis_mrh_toplevel(observed,
+                                           expected,
+                                           current_level_data,
+                                           obs_indices,
+                                           bin_position,
+                                           minobservations)
+    all_data = [current_level_data]
+    all_indices = [current_level_indices]
+    all_shapes = [current_level_shapes]
+    # find subpartitioning for all valid bins for each resolution level
+    resolution = maxbinsize / 2
+    if trans:
+        pos = n_bins * m_bins
+    else:
+        pos = (n_bins * (n_bins + 1)) / 2
+    # find levels below the first but above or equal to midbinsize
+    while resolution >= midbinsize:
+        prev_bin_position = bin_position
+        bin_position = numpy.empty(prev_bin_position.shape[0] * 4, dtype=numpy.int32)
+        bin_position.fill(-1)
+        prev_level_data = all_data[-1]
+        current_level_data = numpy.empty(prev_level_data.shape[0] * 4, dtype=numpy.float32)
+        current_level_data.fill(numpy.nan)
+        prev_level_indices = all_indices[-1]
+        prev_level_shapes = all_shapes[-1]
+        prev_n_bins = n_bins
+        prev_m_bins = 0
+        n_bins = span / resolution
+        binbounds = numpy.linspace(0, span, n_bins + 1)
+        obs_indices = numpy.searchsorted(bin_mids, binbounds).astype(numpy.int32)
+        if trans:
+            prev_m_bins = m_bins
+            m_bins = span2 / resolution
+            binbounds2 = numpy.linspace(0, span2, m_bins + 1)
+            obs_indices2 = numpy.searchsorted(bin_mids2, binbounds2).astype(numpy.int32)
+        if trans:
+            _hic_binning.make_trans_mrh_midlevel(observed,
+                                                 expected,
+                                                 current_level_data,
+                                                 prev_level_data,
+                                                 prev_level_indices,
+                                                 prev_level_shapes,
+                                                 obs_indices,
+                                                 obs_indices2,
+                                                 prev_bin_position,
+                                                 bin_position,
+                                                 prev_m_bins,
+                                                 m_bins,
+                                                 minobservations,
+                                                 pos)
+        else:
+            _hic_binning.make_cis_mrh_midlevel(observed,
+                                               expected,
+                                               current_level_data,
+                                               prev_level_data,
+                                               prev_level_indices,
+                                               prev_level_shapes,
+                                               obs_indices,
+                                               prev_bin_position,
+                                               bin_position,
+                                               prev_n_bins,
+                                               n_bins,
+                                               minobservations,
+                                               pos)
+        where = numpy.where(bin_position >= 0)[0]
+        pos += where.shape[0]
+        bin_position = bin_position[where]
+        all_data.append(current_level_data[where])
+        if resolution > minbinsize:
+            all_indices.append(numpy.empty(all_data[-1].shape[0], dtype=numpy.int32))
+            all_indices[-1].fill(-1)
+            all_shapes.append(numpy.zeros(all_data[-1].shape[0], dtype=numpy.int32))
+        resolution /= 2
+    # find levels below midbinsize
+    if midbinsize > minbinsize:
+        while resolution >= minbinsize:
+            prev_bin_position = bin_position
+            bin_position = numpy.empty(prev_bin_position.shape[0] * 4, dtype=numpy.int32)
+            bin_position.fill(-1)
+            prev_level_data = all_data[-1]
+            current_level_data = numpy.empty(prev_level_data.shape[0] * 4, dtype=numpy.float32)
+            current_level_data.fill(numpy.nan)
+            prev_level_indices = all_indices[-1]
+            prev_level_shapes = all_shapes[-1]
+            prev_n_bins = n_bins
+            prev_m_bins = 0
+            n_bins = span / resolution
+            binbounds = numpy.linspace(0, span, n_bins + 1)
+            obs_indices = numpy.searchsorted(mids, binbounds).astype(numpy.int32)
+            correction_sums = numpy.zeros(n_bins, dtype=numpy.float32)
+            for i in range(n_bins):
+                correction_sums[i] = numpy.sum(corrections[obs_indices[i]:obs_indices[i + 1]])
+            if trans:
+                prev_m_bins = m_bins
+                m_bins = span2 / resolution
+                binbounds2 = numpy.linspace(0, span2, m_bins + 1)
+                obs_indices2 = numpy.searchsorted(mids2, binbounds2).astype(numpy.int32)
+                correction_sums2 = numpy.zeros(m_bins, dtype=numpy.float32)
+                for i in range(m_bins):
+                    correction_sums2[i] = numpy.sum(corrections2[obs_indices2[i]:obs_indices2[i + 1]])
+            if trans:
+                _hic_binning.make_trans_mrh_lowerlevel(data,
+                                                       data_indices,
+                                                       correction_sums,
+                                                       correction_sums2,
+                                                       current_level_data,
+                                                       prev_level_data,
+                                                       prev_level_indices,
+                                                       prev_level_shapes,
+                                                       obs_indices,
+                                                       obs_indices2,
+                                                       prev_bin_position,
+                                                       bin_position,
+                                                       prev_m_bins,
+                                                       m_bins,
+                                                       minobservations,
+                                                       pos)
+            else:
+                _hic_binning.make_cis_mrh_lowerlevel(data,
+                                                     data_indices,
+                                                     corrections,
+                                                     correction_sums,
+                                                     fend_nums,
+                                                     current_level_data,
+                                                     prev_level_data,
+                                                     prev_level_indices,
+                                                     prev_level_shapes,
+                                                     obs_indices,
+                                                     prev_bin_position,
+                                                     bin_position,
+                                                     prev_n_bins,
+                                                     n_bins,
+                                                     minobservations,
+                                                     pos)
+            where = numpy.where(bin_position >= 0)[0]
+            pos += where.shape[0]
+            bin_position = bin_position[where]
+            all_data.append(current_level_data[where])
+            if resolution > minbinsize:
+                all_indices.append(numpy.empty(all_data[-1].shape[0], dtype=numpy.int32))
+                all_indices[-1].fill(-1)
+                all_shapes.append(numpy.zeros(all_data[-1].shape[0], dtype=numpy.int32))
+            resolution /= 2
+    data = all_data[0]
+    for i in range(1, len(all_data)):
+        where = numpy.where(numpy.logical_not(numpy.isnan(all_data[i])))
+        data = numpy.hstack((data, all_data[i]))
+        all_data[i] = None
+    indices = all_indices[0]
+    for i in range(1, len(all_indices)):
+        indices = numpy.hstack((indices, all_indices[i]))
+        all_indices[i] = None
+    shapes = all_shapes[0]
+    for i in range(1, len(all_shapes)):
+        shapes = numpy.hstack((shapes, all_shapes[i]))
+        all_shapes[i] = None
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
+    return [data, indices, shapes]

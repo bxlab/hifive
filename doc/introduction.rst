@@ -77,3 +77,9 @@ at the beginning of the Python program. However, in order to prevent namespace p
   import hifive
 
 HiFive is organized into a hierarchy of data structures. Each structure represents a set of data that may be shared with any number of structures higher in the hierarchy, thus eliminating redundancy of information. For example, a :class:`Fragment <hifive.fragment.Fragment>` object which contains information about the fragments being interrogated in a 5C experiment can be used for all replicates and conditions that use the same primer scheme. Likewise, a :class:`HiCData <hifive.hic_data.HiCData>` object which contains all of the mapped read information for a specific HiC experiment can be used for multiple analyses with different parameter values. This helps reduce the space these data occupy as well as reduce the time to run multiple analyses since each object need only be created once.
+
+Release History
+================
+
+- :ref:`1_0_3`
+- :ref:`1_0_2`

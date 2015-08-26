@@ -76,6 +76,9 @@ def main():
     elif subcommand == "hic-heatmap":
         from hifive.commands.create_hic_heatmap import run
         run(args)
+    elif subcommand == "hic-mrheatmap":
+        from hifive.commands.create_hic_mrheatmap import run
+        run(args)
     elif subcommand == "hic-interval":
         from hifive.commands.get_hic_interval import run
         run(args)
@@ -105,6 +108,7 @@ def generate_parser():
     add_hicnormalize_subparser(subparsers)
     add_complete_hic_subparser(subparsers)
     add_hic_heatmap_subparser(subparsers)
+    add_hic_mrheatmap_subparser(subparsers)
     add_hic_interval_subparser(subparsers)
     add_hic_combine_replicates_subparser(subparsers)
     return parser
@@ -577,6 +581,8 @@ def add_hic_probability_group(subparser):
         action='store_true', help="Precalculate correction values from fend means for the probability algorithm. [default: %(default)s]")
     subparser.add_argument("-l", "--learning-step", dest="step", required=False, type=float, default=0.4,
         action='store', help="The scaling factor for decreasing learning rate by if step doesn't meet armijo criterion. [default: %(default)s]")
+    subparser.add_argument("-a", "--probability-model", dest="probmodel", required=False, type=str, default='binomial',
+        choices=['binomial', 'poisson'], help="Which probability model to use for normalization. [default: %(default)s]")
     return
 
 def add_hic_express_group(subparser):
@@ -630,12 +636,9 @@ def add_hic_heatmap_subparser(subparsers):
     """Add command 'hic-heatmap' arguments to parser."""
     parser = subparsers.add_parser("hic-heatmap",
         help="HiFive Binning Function: Create a heatmap HDF5 file containing data from a HiFive HiC project.")
+    add_common_heatmap_arguments(parser)
     parser.add_argument("-b", "--binsize", dest="binsize", default=10000, type=int,
         help="The size of bins, in base pairs, to group data into. [default: %(default)s]")
-    parser.add_argument("-t", "--trans", dest="trans", default=False, action="store_true",
-        help="Calculate and include trans interactions in heatmaps. [default: %(default)s]")
-    parser.add_argument("-c", "--chromosomes", dest="chroms", default=None, type=str,
-        help="A comma-separated list of chromosomes to include in the heatmaps (None indicates all chromosomes). [default: %(default)s]")
     parser.add_argument("-d", "--datatype", dest="datatype", default="fend",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fend", "distance", "enrichment", "expected"])
@@ -643,8 +646,6 @@ def add_hic_heatmap_subparser(subparsers):
         help="Dynamically bin heatmap.")
     parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,
         help="The size of bins, in base pairs, to group data into for expanding under-populated bins. [default: %(default)s]")
-    parser.add_argument("-f", "--minobservations", dest="minobs", default=20, type=int,
-        help="The minimum number of observed reads in a bin for it to be considered valid. [default: %(default)s]")
     parser.add_argument("-a", "--search-distance", dest="search", default=0, type=int,
         help="The furthest distance from the bin minpoint to expand bounds. If set to zero, there is no limit on expansion distance. [default: %(default)s]")
     parser.add_argument("-v", "--remove-failed", dest="remove", default=False, action="store_true",
@@ -664,6 +665,31 @@ def add_hic_heatmap_subparser(subparsers):
         help="The name of a HiFive HiC project file to pull data from.")
     parser.add_argument(dest="output", type=str,
         help="The name of the file to write HiC heatmaps to.")
+    return
+
+def add_hic_mrheatmap_subparser(subparsers):
+    """Add command 'hic-mrheatmap' arguments to parser."""
+    parser = subparsers.add_parser("hic-mrheatmap",
+        help="HiFive Binning Function: Create a multi-resolution heatmap binary file containing data from a HiFive HiC project.")
+    add_common_heatmap_arguments(parser)
+    parser.add_argument("-B", "--maximum-binsize", dest="maxbin", default=1280000, type=int,
+        help="The largest sized bin to use (minimum resolution), in base pairs. [default: %(default)s]")
+    parser.add_argument("-b", "--minimum-binsize", dest="minbin", default=10000, type=int,
+        help="The smallest sized bin to use (maximum resolution), in base pairs. [default: %(default)s]")
+    parser.add_argument("-R", "--maximum-trans-binsize", dest="maxtransbin", default=None, type=int,
+        help="The largest sized bin to use for trans interactions (minimum resolution), in base pairs. [default: %(default)s]")
+    parser.add_argument("-r", "--minimum-trans-binsize", dest="mintransbin", default=None, type=int,
+        help="The smallest sized bin to use for trans interactions (maximum resolution), in base pairs. [default: %(default)s]")
+    parser.add_argument("-m", "--mid-binsize", dest="midbin", default=40000, type=int,
+        help="The smallest sized bin to use for the entire chromosome(s), in base pairs. This is used to balance memory usage vs. speed. [default: %(default)s]")
+    parser.add_argument("-d", "--datatype", dest="datatype", default="fend",
+        help="Which corrections (if any) to apply to counts. [default: %(default)s]",
+        choices=["raw", "fend", "distance", "enrichment"])
+    add_silent_argument(parser)
+    parser.add_argument(dest="project", type=str,
+        help="The name of a HiFive HiC project file to pull data from.")
+    parser.add_argument(dest="output", type=str,
+        help="The name of the file to write HiC multi-resolution heatmaps to.")
     return
 
 def add_hic_interval_subparser(subparsers):
@@ -716,6 +742,16 @@ def add_hic_interval_subparser(subparsers):
         help="The name of a HiFive HiC project file to pull data from.")
     parser.add_argument(dest="output", type=str,
         help="The name of the file to write HiC interval to.")
+    return
+
+def add_common_heatmap_arguments(parser):
+    """Add common heatmap arguments to parse."""
+    parser.add_argument("-t", "--trans", dest="trans", default=False, action="store_true",
+        help="Calculate and include trans interactions in heatmaps. [default: %(default)s]")
+    parser.add_argument("-c", "--chromosomes", dest="chroms", default=None, type=str,
+        help="A comma-separated list of chromosomes to include in the heatmaps (None indicates all chromosomes). [default: %(default)s]")
+    parser.add_argument("-f", "--minobservations", dest="minobs", default=20, type=int,
+        help="The minimum number of observed reads in a bin for it to be considered valid. [default: %(default)s]")
     return
 
 def add_silent_argument(parser):

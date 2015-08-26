@@ -288,11 +288,11 @@ def find_cis_compact_expected(
                     continue
                 map2 = mapping[fend1 + 1]
                 if map2 > map1:
-                    signal[map1, map2, 1] -= corrections[fend1] * corrections[fend1 + 1]
+                    signal[map1, map2 - map1 - 1, 1] -= corrections[fend1] * corrections[fend1 + 1]
                 if (fend1 + startfend) % 2 == 0 and fend1 + 3 < num_fends:
                     map2 = mapping[fend1 + 3]
                     if map2 > map1:
-                        signal[map1, map2, 1] -= corrections[fend1] * corrections[fend1 + 3]
+                        signal[map1, map2 - map1 - 1, 1] -= corrections[fend1] * corrections[fend1 + 3]
     return None
 
 
@@ -1196,10 +1196,8 @@ def find_trans_observed(
                 i += 1 
             while i < stop and data[i, 1] < num_fends2:
                 fend2 = data[i, 1]
-                if fend2 >= num_fends2 or mapping2[fend2] == -1:
-                    i += 1
-                    continue
-                signal[mapping1[fend1], mapping2[fend2], 0] += data[i, 2]
+                if mapping2[fend2] != -1:
+                    signal[mapping1[fend1], mapping2[fend2], 0] += data[i, 2]
                 i += 1
     return None
 
@@ -1536,4 +1534,645 @@ def binning_bin_trans_expected(
                 if distance_div > 0:
                     index += (distance_bins - 1) * distance_div
                 counts[index, 1] += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def remap_mrh_data(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping2,
+        int lowerlimit,
+        int upperlimit,
+        int offset,
+        int invalid,
+        int flip):
+    cdef long long int i, j, k, map1, map2
+    cdef long long int num_data = data.shape[0]
+    cdef long long int num_fends = indices.shape[0] - 1
+    with nogil:
+        i = 0
+        if mapping2 is None:   
+            for j in range(num_fends - 1):
+                if indices[j] == indices[j + 1]:
+                    continue
+                map1 = mapping[data[indices[j], 0] - offset]
+                if map1 < 0:
+                    continue
+                for k in range(indices[j], indices[j + 1]):
+                    if data[k, 1] < upperlimit:
+                        map2 = mapping[data[k, 1] - offset]
+                        if map2 < 0:
+                            continue
+                        data[i, 0] = map1
+                        data[i, 1] = map2
+                        data[i, 2] = data[k, 2]
+                        i += 1
+        else:   
+            for j in range(num_fends):
+                if indices[j] == indices[j + 1]:
+                    continue
+                map1 = mapping[data[indices[j], 0] - offset]
+                if map1 == -1:
+                    continue               
+                for k in range(indices[j], indices[j + 1]):
+                    if data[k, 1] < lowerlimit or data[k, 1] >= upperlimit:
+                        continue
+                    map2 = mapping2[data[k, 1] - lowerlimit]
+                    if map2 == -1:
+                        continue
+                    data[i, 0] = map1
+                    data[i, 1] = map2
+                    data[i, 2] = data[k, 2]
+                    i += 1
+            if flip == 1:
+                for j in range(i):
+                    k = data[j, 0]
+                    data[j, 0] = data[j, 1]
+                    data[j, 1] = k
+    return i
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_mrh_observed(
+        np.ndarray[DTYPE_int_t, ndim=2] data not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices not None,
+        np.ndarray[DTYPE_int_t, ndim=2] observed not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping2):
+    cdef long long int i, j, bin1, bin2
+    cdef long long int num_fends = indices.shape[0] - 1
+    with nogil:
+        if mapping2 is None:
+            for i in range(num_fends):
+                bin1 = mapping[i]
+                for j in range(indices[i], indices[i + 1]):
+                    bin2 = mapping[data[j, 0]]
+                    observed[bin1, bin2] += data[j, 1]
+        else:
+            for i in range(num_fends):
+                bin1 = mapping[i]
+                for j in range(indices[i], indices[i + 1]):
+                    bin2 = mapping2[data[j, 0]]
+                    observed[bin1, bin2] += data[j, 1]
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_mrh_cis_expected(
+        np.ndarray[DTYPE_t, ndim=2] expected not None,
+        np.ndarray[DTYPE_int_t, ndim=1] fend_nums not None,
+        np.ndarray[DTYPE_int_t, ndim=1] binmapping not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
+        np.ndarray[DTYPE_t, ndim=2] distance_parameters,
+        double chrom_mean,
+        int dt_int):
+    cdef long long int i, j, k, l, bin1, bin2, num, num_parameters, map1, map2
+    cdef double value, corr, distance
+    cdef long long int n = expected.shape[0]
+    cdef long long int valid_fends = binmapping.shape[0]
+    cdef long long int num_fends = mapping.shape[0]
+    if not fend_indices is None:
+        num_parameters = fend_indices.shape[1]
+    with nogil:
+        if dt_int == 0:
+            # if raw data is requested, only determine the number of valid fends per bin
+            for i in range(n):
+                for j in range(i, n):
+                    expected[i, j] = (obs_indices[i + 1] - obs_indices[i]) * (obs_indices[j + 1] - obs_indices[j])
+                    expected[j, i] += expected[i, j]
+            for i in range(valid_fends - 1):
+                bin1 = binmapping[i]
+                num = fend_nums[i]
+                if fend_nums[i + 1] - num == 1:
+                    bin2 = binmapping[i + 1]
+                    expected[bin1, bin2] -= 1
+                    expected[bin2, bin1] -= 1
+                if num % 2 == 0:
+                    if fend_nums[i + 1] - num == 3:
+                        bin2 = binmapping[i + 1]
+                        expected[bin1, bin2] -= 1
+                        expected[bin2, bin1] -= 1
+                    elif i < valid_fends - 2 and fend_nums[i + 2] - num == 3:
+                        bin2 = binmapping[i + 2]
+                        expected[bin1, bin2] -= 1
+                        expected[bin2, bin1] -= 1
+                    elif i < valid_fends - 3 and fend_nums[i + 3] - num == 3:
+                        bin2 = binmapping[i + 3]
+                        expected[bin1, bin2] -= 1
+                        expected[bin2, bin1] -= 1
+        # check if can use shortcutting
+        elif dt_int == 1 and fend_indices is None:
+            for i in range(n):
+                for j in range(i, n):
+                    expected[i, j] = correction_sums[i] * correction_sums[j]
+                expected[i, i] /= 2.0
+            for i in range(num_fends):
+                map1 = mapping[i]
+                if map1 == -1:
+                    continue
+                bin1 = binmapping[map1]
+                corr = corrections[map1]
+                expected[bin1, bin1] -= corr * corr / 2.0
+                if i < num_fends - 1:
+                    map2 = mapping[i + 1]
+                    if map2 > map1:
+                        expected[bin1, binmapping[map2]] -= corr * corrections[map2]
+                    if i < num_fends - 3 and fend_nums[map1] % 2 == 0:
+                        map2 = mapping[i + 3]
+                        if map2 > map1:
+                            expected[bin1, binmapping[map2]] -= corr * corrections[map2]
+        else:
+            # if distance correction is requested, use chrom mean, else 1.0
+            for i in range(valid_fends - 1):
+                bin1 = binmapping[i]
+                num = fend_nums[i]
+                l = 0
+                for j in range(i + 1, min(valid_fends, i + 4)):
+                    if fend_nums[i + 1] - num == 1:
+                        continue
+                    if num % 2 == 0 and fend_nums[j] - num == 3:
+                        continue
+                    if dt_int < 2:
+                        value = 1.0
+                    else:                            
+                        distance = log(mids[j] - mids[i])
+                        while distance > distance_parameters[l, 0]:
+                            l += 1
+                        value = exp(distance * distance_parameters[l, 1] + distance_parameters[l, 2] + chrom_mean)
+                    if not corrections is None:
+                        value *= corrections[i] * corrections[j]
+                    if not fend_indices is None:
+                        for k in range(num_parameters):
+                            if fend_indices[i, k, 0] < fend_indices[j, k, 0]:
+                                value *= binning_corrections[fend_indices[i, k, 1] + fend_indices[j, k, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[i, k, 0] + fend_indices[j, k, 1]]
+                    expected[bin1, binmapping[j]] += value
+                for j in range(i + 4, valid_fends):
+                    if dt_int < 2:
+                        value = 1.0
+                    else:                            
+                        distance = log(mids[j] - mids[i])
+                        while distance > distance_parameters[l, 0]:
+                            l += 1
+                        value = exp(distance * distance_parameters[l, 1] + distance_parameters[l, 2] + chrom_mean)
+                    if not corrections is None:
+                        value *= corrections[i] * corrections[j]
+                    if not fend_indices is None:
+                        for k in range(num_parameters):
+                            if fend_indices[i, k, 0] < fend_indices[j, k, 0]:
+                                value *= binning_corrections[fend_indices[i, k, 1] + fend_indices[j, k, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[i, k, 0] + fend_indices[j, k, 1]]
+                    expected[bin1, binmapping[j]] += value
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_mrh_trans_expected(
+        np.ndarray[DTYPE_t, ndim=2] expected not None,
+        np.ndarray[DTYPE_int_t, ndim=1] binmapping not None,
+        np.ndarray[DTYPE_int_t, ndim=1] binmapping2 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices not None,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices2 not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_t, ndim=1] corrections2,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums2,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices2,
+        double chrom_mean,
+        int dt_int):
+    cdef long long int i, j, k, bin1, num_parameters
+    cdef double value
+    cdef long long int n = expected.shape[0]
+    cdef long long int m = expected.shape[1]
+    cdef long long int num_fends = binmapping.shape[0]
+    cdef long long int num_fends2 = binmapping2.shape[0]
+    if not fend_indices is None:
+        num_parameters = fend_indices.shape[1]
+    with nogil:
+        if dt_int == 0:
+            # if raw data is requested, only determine the number of valid fends per bin
+            for i in range(n):
+                for j in range(m):
+                    expected[i, j] = (obs_indices[i + 1] - obs_indices[i]) * (obs_indices2[j + 1] - obs_indices2[j])
+        else:
+            # check if can use shortcutting
+            if dt_int == 1 and fend_indices is None:
+                for i in range(n):
+                    for j in range(m):
+                        expected[i, j] += correction_sums[i] * correction_sums2[j]
+            else:
+                # if distance correction is requested, use chrom mean, else 1.0
+                for i in range(num_fends):
+                    bin1 = binmapping[i]
+                    for j in range(num_fends2):
+                        if dt_int < 2:
+                            value = 1.0
+                        else:
+                            value = chrom_mean
+                        if not corrections is None:
+                            value *= corrections[i] * corrections2[j]
+                        if not fend_indices is None:
+                            for k in range(num_parameters):
+                                if fend_indices[i, k, 0] < fend_indices[j, k, 0]:
+                                    value *= binning_corrections[fend_indices[i, k, 1] + fend_indices[j, k, 0]]
+                                else:
+                                    value *= binning_corrections[fend_indices[i, k, 0] + fend_indices[j, k, 1]]
+                        expected[bin1, binmapping2[j]] += value
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def make_trans_mrh_toplevel(
+        np.ndarray[DTYPE_int_t, ndim=2] observed,
+        np.ndarray[DTYPE_t, ndim=2] expected,
+        np.ndarray[DTYPE_t, ndim=1] current_level_data,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices2,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_position,
+        int minobservations):
+    cdef long long int i, j, k, l, index
+    cdef double value
+    cdef int n_bins = obs_indices.shape[0] - 1
+    cdef int m_bins = obs_indices2.shape[0] - 1
+    cdef double nan = numpy.nan
+    with nogil:
+        index = 0
+        for i in range(n_bins):
+            for j in range(m_bins):
+                bin_position[index] = i * m_bins + j
+                for k in range(obs_indices[i], obs_indices[i + 1]):
+                    for l in range(obs_indices2[j], obs_indices2[j + 1]):
+                        current_level_data[index] += observed[k, l]
+                if current_level_data[index] >= minobservations:
+                    # find expected values
+                    value = 0.0
+                    for k in range(obs_indices[i], obs_indices[i + 1]):
+                        for l in range(obs_indices2[j], obs_indices2[j + 1]):
+                            value += expected[k, l]
+                    current_level_data[index] = log2(current_level_data[index] / value)
+                else:
+                    current_level_data[index] = nan
+                index += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def make_cis_mrh_toplevel(
+        np.ndarray[DTYPE_int_t, ndim=2] observed,
+        np.ndarray[DTYPE_t, ndim=2] expected,
+        np.ndarray[DTYPE_t, ndim=1] current_level_data,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_position,
+        int minobservations):
+    cdef long long int i, j, k, l, index
+    cdef double value
+    cdef long long int n_bins = obs_indices.shape[0] - 1
+    cdef double nan = numpy.nan
+    with nogil:
+        index = 0
+        for i in range(n_bins):
+            for j in range(i, n_bins):
+                bin_position[index] = i * n_bins + j
+                for k in range(obs_indices[i], obs_indices[i + 1]):
+                    for l in range(obs_indices[j], obs_indices[j + 1]):
+                        current_level_data[index] += observed[k, l]
+                if current_level_data[index] >= minobservations:
+                    # find expected values
+                    value = 0.0
+                    for k in range(obs_indices[i], obs_indices[i + 1]):
+                        for l in range(obs_indices[j], obs_indices[j + 1]):
+                            value += expected[k, l]
+                    current_level_data[index] = log2(current_level_data[index] / value)
+                else:
+                    current_level_data[index] = nan
+                index += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def make_trans_mrh_midlevel(
+        np.ndarray[DTYPE_int_t, ndim=2] observed,
+        np.ndarray[DTYPE_t, ndim=2] expected,
+        np.ndarray[DTYPE_t, ndim=1] current_level_data,
+        np.ndarray[DTYPE_t, ndim=1] prev_level_data,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices2,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_position,
+        int prev_m_bins,
+        int m_bins,
+        int minobservations,
+        int pos):
+    cdef long long int i, j, k, l, m, valid, shape, pos2, index, start1, stop1, start2, stop2, value1
+    cdef double value2
+    cdef long long int num_prev_data = prev_level_data.shape[0]
+    cdef double nan = numpy.nan
+    with nogil:
+        pos2 = 0
+        for i in range(num_prev_data):
+            if prev_level_data[i] == nan:
+                prev_level_indices[i] = -1
+            else:
+                valid = 0
+                # find position of previous resolution bin
+                start1 = (prev_bin_position[i] / prev_m_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_m_bins) * 2
+                stop2 = start2 + 2
+                # find new resolution data for this set of bins
+                index = 1
+                shape = 0
+                for j in range(start1, stop1):
+                    for k in range(start2, stop2):
+                        value1 = 0
+                        value2 = 0.0
+                        for l in range(obs_indices[j], obs_indices[j + 1]):
+                            for m in range(obs_indices2[k], obs_indices2[k + 1]):
+                                value1 += observed[l, m]
+                                value2 += expected[l, m]
+                        if value1 >= minobservations:
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * m_bins + k
+                            shape += index
+                            valid += 1
+                            pos2 += 1
+                        index *= 2
+                # if there are valid values at this new resolution, add the values to the new data set
+                if valid > 0:
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
+                else:
+                    prev_level_indices[i] = -1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def make_cis_mrh_midlevel(
+        np.ndarray[DTYPE_int_t, ndim=2] observed,
+        np.ndarray[DTYPE_t, ndim=2] expected,
+        np.ndarray[DTYPE_t, ndim=1] current_level_data,
+        np.ndarray[DTYPE_t, ndim=1] prev_level_data,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_position,
+        int prev_n_bins,
+        int n_bins,
+        int minobservations,
+        int pos):
+    cdef long long int i, j, k, l, m, valid, pos2, shape, index, start1, stop1, start2, stop2, value1
+    cdef double value2
+    cdef long long int num_prev_data = prev_level_data.shape[0]
+    cdef double nan = numpy.nan
+    with nogil:
+        pos2 = 0
+        for i in range(num_prev_data):
+            if prev_level_data[i] == nan:
+                prev_level_indices[i] = -1
+            else:
+                # find position of previous resolution bin
+                start1 = (prev_bin_position[i] / prev_n_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_n_bins) * 2
+                stop2 = start2 + 2
+                # find new resolution data for this set of bins
+                valid = 0
+                index = 1
+                shape = 0
+                for j in range(start1, stop1):
+                    for k in range(start2, stop2):
+                        # since it's possible to be below the diagonal, check and skip if necessary
+                        if j > k:
+                            index *= 2
+                            continue
+                        value1 = 0
+                        value2 = 0.0
+                        for l in range(obs_indices[j], obs_indices[j + 1]):
+                            for m in range(obs_indices[k], obs_indices[k + 1]):
+                                value1 += observed[l, m]
+                                value2 += expected[l, m]
+                        if value1 >= minobservations:
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * n_bins + k
+                            shape += index
+                            valid += 1
+                            pos2 += 1
+                        index *= 2
+                # if there are valid values at this new resolution, add the values to the new data set
+                if valid > 0:
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
+                else:
+                    prev_level_indices[i] = -1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def make_trans_mrh_lowerlevel(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int64_t, ndim=1] data_indices,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums2,
+        np.ndarray[DTYPE_t, ndim=1] current_level_data,
+        np.ndarray[DTYPE_t, ndim=1] prev_level_data,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices2,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_position,
+        int prev_m_bins,
+        int m_bins,
+        int minobservations,
+        int pos):
+    cdef long long int i, j, k, l, m, valid, pos2, shape, index, index1, index2
+    cdef long long int start1, stop1, start2, stop2, start, mid, stop, value1
+    cdef double value2
+    cdef long long int num_prev_data = prev_level_data.shape[0]
+    cdef double nan = numpy.nan
+    with nogil:
+        pos2 = 0
+        for i in range(num_prev_data):
+            if prev_level_data[i] == nan:
+                prev_level_indices[i] = -1
+            else:
+                # find position of previous resolution bin
+                start1 = (prev_bin_position[i] / prev_m_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_m_bins) * 2
+                stop2 = start2 + 2
+                # find new resolution data for this set of bins
+                valid = 0
+                index = 1
+                shape = 0
+                m = 0
+                for j in range(start1, stop1):
+                    for k in range(start2, stop2):
+                        value1 = 0
+                        mid = 0
+                        for l in range(obs_indices[j], obs_indices[j + 1]):
+                            start = data_indices[l]
+                            stop = data_indices[l + 1]
+                            index1 = obs_indices2[k]
+                            index2 = obs_indices2[k + 1]
+                            m = min(mid + start, stop)
+                            while m > start and data[m - 1, 0] >= index1:
+                                m -= 1
+                            while m < stop and data[m, 0] < index1:
+                                m += 1
+                            mid = m - start
+                            while m < stop and data[m, 0] < index2:
+                                value1 += data[m, 1]
+                                m += 1
+                        if value1 >= minobservations:
+                            # find expected value
+                            value2 = correction_sums[j] * correction_sums2[k]
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * m_bins + k
+                            shape += index
+                            valid += 1
+                            pos2 += 1
+                        index *= 2
+                # if there are valid values at this new resolution, add the values to the new data set
+                if valid > 0:
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
+                else:
+                    prev_level_indices[i] = -1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def make_cis_mrh_lowerlevel(
+        np.ndarray[DTYPE_int_t, ndim=2] data,
+        np.ndarray[DTYPE_int64_t, ndim=1] data_indices,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_int_t, ndim=1] fend_nums,
+        np.ndarray[DTYPE_t, ndim=1] current_level_data,
+        np.ndarray[DTYPE_t, ndim=1] prev_level_data,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_level_shapes,
+        np.ndarray[DTYPE_int_t, ndim=1] obs_indices,
+        np.ndarray[DTYPE_int_t, ndim=1] prev_bin_position,
+        np.ndarray[DTYPE_int_t, ndim=1] bin_position,
+        int prev_n_bins,
+        int n_bins,
+        int minobservations,
+        int pos):
+    cdef long long int i, j, k, l, m, valid, pos2, shape, index, index1, index2
+    cdef long long int start1, stop1, start2, stop2, start, mid, stop, value1
+    cdef double value2
+    cdef long long int num_prev_data = prev_level_data.shape[0]
+    cdef double nan = numpy.nan
+    with nogil:
+        pos2 = 0
+        for i in range(num_prev_data):
+            if prev_level_data[i] == nan:
+                prev_level_indices[i] = -1
+            else:
+                # find position of previous resolution bin
+                start1 = (prev_bin_position[i] / prev_n_bins) * 2
+                stop1 = start1 + 2
+                start2 = (prev_bin_position[i] % prev_n_bins) * 2
+                stop2 = start2 + 2
+                # find new resolution data for this set of bins
+                valid = 0
+                index = 1
+                shape = 0
+                for j in range(start1, stop1):
+                    for k in range(start2, stop2):
+                        # since it's possible to be below the diagonal, check and skip if necessary
+                        if j > k:
+                            index *= 2
+                            continue
+                        value1 = 0
+                        mid = 0
+                        for l in range(obs_indices[j], obs_indices[j + 1]):
+                            start = data_indices[l]
+                            stop = data_indices[l + 1]
+                            index1 = obs_indices[k]
+                            index2 = obs_indices[k + 1]
+                            m = min(mid + start, stop - 1)
+                            while m > start and data[m, 0] > index1:
+                                m -= 1
+                            while m < stop and data[m, 0] < index1:
+                                m += 1
+                            mid = m - start
+                            while m < stop and data[m, 0] < index2:
+                                value1 += data[m, 1]
+                                m += 1
+                        if value1 >= minobservations:
+                            # find expected value
+                            value2 = correction_sums[j] * correction_sums[k]
+                            l = obs_indices[j + 1] - 1
+                            m = obs_indices[k]
+                            start = obs_indices[j]
+                            stop = obs_indices[k + 1]
+                            if fend_nums[l] + 1 == fend_nums[m]:
+                                value2 -= corrections[l] * corrections[m]
+                            if fend_nums[l] % 2 == 0:
+                                if fend_nums[l] + 3 == fend_nums[m]:
+                                    value2 -= corrections[l] * corrections[m]
+                                elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
+                                    value2 -= corrections[l] * corrections[m + 1]
+                                elif m + 2 < stop and fend_nums[l] + 3 == fend_nums[m + 2]:
+                                    value2 -= corrections[l] * corrections[m + 2]
+                            l -= 1
+                            if l >= start and fend_nums[l] % 2 == 0:
+                                if fend_nums[l] + 3 == fend_nums[m]:
+                                    value2 -= corrections[l] * corrections[m]
+                                elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
+                                    value2 -= corrections[l] * corrections[m + 1]
+                            l -= 1
+                            if l >= start and fend_nums[l] % 2 == 0:
+                                if fend_nums[l] + 3 == fend_nums[m]:
+                                    value2 -= corrections[l] * corrections[m]
+                            current_level_data[pos2] = log2(value1 / value2)
+                            bin_position[pos2] = j * n_bins + k
+                            shape += index
+                            valid += 1
+                            pos2 += 1
+                        index *= 2
+                # if there are valid values at this new resolution, add the values to the new data set
+                if valid > 0:
+                    prev_level_indices[i] = pos2 - valid + pos
+                    prev_level_shapes[i] = shape
+                else:
+                    prev_level_indices[i] = -1
     return None
