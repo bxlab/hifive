@@ -24,6 +24,7 @@ Contents:
    fivec_tutorial.rst
    hic_tutorial.rst
    api.rst
+   release_history.rst
 
 Indices and tables
 ++++++++++++++++++
