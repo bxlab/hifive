@@ -4,6 +4,18 @@
 Release History
 *******************
 
+.. _1_1:
+
+1.1 (2015-08-26)
+-----------------
+
+- Added multi-resolution heatmaps (MRH).
+- Added stand-alone script for plotting MRH data.
+- Fixed requirements resolution for pip loading without requirements already installed.
+- Re-implemented Poisson model for HiC probability algorithm.
+- Lowered memory requirement for HiC data loading.
+- Added dockerfile for building docker image.
+
 .. _1_0_3:
 
 1.0.3 (2015-04-23)

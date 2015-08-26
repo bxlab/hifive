@@ -18,7 +18,7 @@ from distutils.extension import Extension
 
 MAJOR = 1
 MINOR = 1
-ISRELEASED = False
+ISRELEASED = True
 VERSION = '%d.%d' % (MAJOR, MINOR)
 
 if 'setuptools.extension' in sys.modules:
@@ -139,8 +139,6 @@ def setup_package():
         include_dirs = [numpy.get_include()]
         metadata['packages'] = find_packages(exclude=['examples', 'test', 'ez_setup.py'], where='./')
         metadata['ext_modules'] = get_extension_modules(include_dirs)
-        print metadata['ext_modules']
-
 
     setup(**metadata)
 

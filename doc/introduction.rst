@@ -81,5 +81,6 @@ HiFive is organized into a hierarchy of data structures. Each structure represen
 Release History
 ================
 
+- :ref:`1_1`
 - :ref:`1_0_3`
 - :ref:`1_0_2`
