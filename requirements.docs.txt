@@ -1,5 +1,4 @@
 Cython
 numpy
 scipy
-h5py
 mock
