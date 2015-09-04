@@ -18,8 +18,11 @@ from distutils.extension import Extension
 
 MAJOR = 1
 MINOR = 1
+PATCH = 1
 ISRELEASED = True
 VERSION = '%d.%d' % (MAJOR, MINOR)
+if not PATCH is None:
+    VERSION += '.%d' % (PATCH)
 
 if 'setuptools.extension' in sys.modules:
     m = sys.modules['setuptools.extension']
