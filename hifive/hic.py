@@ -117,8 +117,6 @@ class HiC(object):
         When a HiCData object is associated with the project file, the 'history' attribute is updated with the history of the HiCData object.
         """
         self.history += "HiC.load_data(filename='%s') - " % (filename)
-        if self.rank > 0:
-            return None
         filename = os.path.abspath(filename)
         # ensure data h5dict exists
         if not os.path.exists(filename):
