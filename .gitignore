@@ -9,3 +9,4 @@ hifive.egg-info/
 *.so
 test/generate_test_data.py
 doc/_static/hic_distance.py
+hifive/version.py

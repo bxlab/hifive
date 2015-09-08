@@ -1211,7 +1211,7 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     chrint2 = None
     span = stop - start
     startfend = _find_fend_from_coord(hic, chrint, start)
-    stopfend = _find_fend_from_coord(hic, chrint, stop) + 1
+    stopfend = _find_fend_from_coord(hic, chrint, stop)
     if chrom2 is None:
         trans = False
     else:
@@ -1219,7 +1219,7 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
         chrint2 = hic.chr2int[chrom2]
         trans = True
         startfend2 = _find_fend_from_coord(hic, chrint2, start2)
-        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2) + 1
+        stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
     # determine actual midresolution limit
     temp = maxbinsize
     while temp / 2 >= max(midbinsize, minbinsize):

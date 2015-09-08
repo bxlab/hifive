@@ -2414,8 +2414,8 @@ class HiC(object):
             chrint = self.chr2int[chrom]
             valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0]
             if valid.shape[0] > 0:
-                chrom_bounds[i, 0] = self.fends['fends']['mid'][valid[0] + chr_indices[chrint]]
-                chrom_bounds[i, 1] = self.fends['fends']['mid'][valid[-1] + chr_indices[chrint]] + 1
+                chrom_bounds[i, 0] = self.fends['fends']['start'][valid[0] + chr_indices[chrint]]
+                chrom_bounds[i, 1] = self.fends['fends']['stop'][valid[-1] + chr_indices[chrint]]
         # determine largest bin bounds for intra-chromosomal heatmaps
         cis_chrom_bounds = numpy.zeros(chrom_bounds.shape, dtype=numpy.int32)
         valid = numpy.where(chrom_bounds[:, 1] > chrom_bounds[:, 0])[0]
