@@ -276,30 +276,32 @@ def find_distancebound_possible_interactions(
                     if filter[j] == 0:
                         continue
                     total = chr_total - 1
-                    # remove upstream interactions outside of maxdistance
-                    k = chr_indices[i]
-                    stop = (j / 2) * 2 - 2
-                    while k < stop and mids[j] - mids[k] >= maxdistance:
-                        total -= filter[k]
-                        k += 1
-                    stop = k - 1
-                    # remove upstream interactions inside of mindistance
-                    k = (j / 2) * 2 - 3
-                    while k > stop and mids[j] - mids[k] < mindistance:
-                        total -= filter[k]
-                        k -= 1
-                    # remove downstream interactions outside of maxdistance
-                    k = chr_indices[i + 1] - 1
-                    stop = (j / 2) * 2 + 3
-                    while k > stop and mids[k] - mids[j] >= maxdistance:
-                        total -= filter[k]
-                        k -= 1
-                    stop = k + 1
-                    # remove downstream interactions inside of mindistance
-                    k = (j / 2) * 2 + 4
-                    while k < stop and mids[k] - mids[j] < mindistance:
-                        total -= filter[k]
-                        k += 1
+                    if j > chr_indices[i] + 4:
+                        # remove upstream interactions outside of maxdistance
+                        k = chr_indices[i]
+                        stop = (j / 2) * 2 - 2
+                        while k < stop and mids[j] - mids[k] >= maxdistance:
+                            total -= filter[k]
+                            k += 1
+                        stop = k - 1
+                        # remove upstream interactions inside of mindistance
+                        k = (j / 2) * 2 - 3
+                        while k > stop and mids[j] - mids[k] < mindistance:
+                            total -= filter[k]
+                            k -= 1
+                    if j < chr_indices[i + 1] - 4:
+                        # remove downstream interactions outside of maxdistance
+                        k = chr_indices[i + 1] - 1
+                        stop = (j / 2) * 2 + 3
+                        while k > stop and mids[k] - mids[j] >= maxdistance:
+                            total -= filter[k]
+                            k -= 1
+                        stop = k + 1
+                        # remove downstream interactions inside of mindistance
+                        k = (j / 2) * 2 + 4
+                        while k < stop and mids[k] - mids[j] < mindistance:
+                            total -= filter[k]
+                            k += 1
                     if j % 2 == 0:
                         # remove same fragment fend
                         total -= filter[j + 1]
@@ -317,7 +319,7 @@ def find_distancebound_possible_interactions(
                         # remove same fragment fend
                         total -= filter[j - 1]
                         # remove previous fragment fends if necessary
-                        if j > chr_indices[i]:
+                        if j > chr_indices[i] + 2:
                             total -= filter[j - 3]
                             if mids[j] - mids[j - 2] < mindistance:
                                 total -= filter[j - 2]

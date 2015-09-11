@@ -707,8 +707,9 @@ class HiC(object):
             gradients = numpy.zeros(corrections.shape[0], dtype=numpy.float64)
             cont = True
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),            
-            log_corrections = numpy.log(corrections).astype(numpy.float32)
+                print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
+            log_corrections = numpy.zeros(corrections.shape[0], dtype=numpy.float32)
+            log_corrections[:] = numpy.log(corrections)
             if model == 'binomial':
                 cost_function = _optimize.calculate_binom_cost
                 gradient_function = _optimize.calculate_binom_gradients
@@ -734,6 +735,19 @@ class HiC(object):
             change = 0.0
             cont = True
             iteration = 0
+            output = h5py.File('temp_%s.hdf5' % chrom,'w')
+            output.create_dataset(name='zero_indices0', data=zero_indices0)
+            output.create_dataset(name='zero_indices1', data=zero_indices1)
+            output.create_dataset(name='nonzero_indices0', data=nonzero_indices0)
+            output.create_dataset(name='nonzero_indices1', data=nonzero_indices1)
+            output.create_dataset(name='zero_means', data=zero_means)
+            output.create_dataset(name='nonzero_means', data=nonzero_means)
+            output.create_dataset(name='corrections', data=corrections)
+            output.create_dataset(name='log_corrections', data=log_corrections)
+            output.create_dataset(name='fend_ranges', data=fend_ranges)
+            output.create_dataset(name='interactions', data=interactions)
+            output.close()
+            print numpy.mean(zero_indices0), numpy.mean(zero_indices1), numpy.mean(nonzero_indices0), numpy.mean(nonzero_indices1), numpy.mean(nonzero_means), numpy.mean(zero_means), numpy.mean(log_corrections), numpy.mean(corrections), start_cost
             while cont:
                 gradients.fill(0.0)
                 inv_corrections = (1.0 / corrections).astype(numpy.float32)
@@ -764,7 +778,7 @@ class HiC(object):
                             self.comm.Send(new_corrections, dest=i, tag=13)
                     else:
                         self.comm.Recv(new_corrections, source=0, tag=13)
-                    log_corrections = numpy.log(new_corrections)
+                    log_corrections[:] = numpy.log(new_corrections)
                     cost = cost_function(counts,
                                          zero_indices0,
                                          zero_indices1,
@@ -853,7 +867,7 @@ class HiC(object):
 
     def find_express_fend_corrections(self, iterations=100, mindistance=0, maxdistance=0, remove_distance=True, 
                                       usereads='cis', mininteractions=0, minchange=0.0001, chroms=[], precorrect=False,
-                                      binary=False, kr=True):
+                                      binary=False, kr=False):
         """
         Using iterative matrix-balancing approximation, learn correction values for each valid fend. This function is MPI compatible.
 
@@ -1019,6 +1033,14 @@ class HiC(object):
                                                                useread_int,
                                                                mindistance,
                                                                maxdistance)
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                interactions += self.comm.recv(source=i, tag=11)
+            for i in range(1, self.num_procs):
+                self.comm.Send(interactions, dest=i, tag=13)
+        else:
+            self.comm.send(interactions, dest=0, tag=11)
+            self.comm.Recv(interactions, source=0, tag=13)
         # precalculate interaction distance means for all included interactions
         if not remove_distance or data is None:
             distance_means = None

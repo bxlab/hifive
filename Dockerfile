@@ -29,9 +29,20 @@ RUN pip install -U setuptools
 RUN pip install numpy scipy pysam cython
 RUN pip install h5py
 
+# Get python package PIL
+
+RUN ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so.8.0.2 /usr/lib/libjpeg.so
+RUN ln -s /usr/lib/x86_64-linux-gnu/libz.so /usr/lib/libz.so
+RUN apt-get install -y wget
+RUN cd tmp && wget http://effbot.org/downloads/Imaging-1.1.7.tar.gz && tar xzf Imaging-1.1.7.tar.gz && cd Imaging-1.1.7&& python setup.py install
+
 # Get hifive
 
 RUN apt-get install -y unzip wget
-RUN mkdir -p tmp && cd tmp && wget https://github.com/bxlab/hifive/archive/master.zip && unzip master.zip && cd hifive-master && python setup.py install
+RUN mkdir -p tmp && cd tmp && wget https://github.com/bxlab/hifive/archive/v1.1.3.zip && unzip v1.1.3.zip && cd hifive-1.1.3 && python setup.py install
+
+# Get hifive test data
+
+RUN mkdir -p test_data && cd test_data && wget http://files.figshare.com/2258231/testdata.tar.bz2 && tar xjf testdata.tar.bz2
 
 MAINTAINER Michael Sauria <mike.sauria@jhu.edu>
