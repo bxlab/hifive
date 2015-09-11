@@ -708,8 +708,7 @@ class HiC(object):
             cont = True
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
-            log_corrections = numpy.zeros(corrections.shape[0], dtype=numpy.float32)
-            log_corrections[:] = numpy.log(corrections)
+            log_corrections = numpy.log(corrections).astype(numpy.float32)
             if model == 'binomial':
                 cost_function = _optimize.calculate_binom_cost
                 gradient_function = _optimize.calculate_binom_gradients
@@ -735,19 +734,6 @@ class HiC(object):
             change = 0.0
             cont = True
             iteration = 0
-            output = h5py.File('temp_%s.hdf5' % chrom,'w')
-            output.create_dataset(name='zero_indices0', data=zero_indices0)
-            output.create_dataset(name='zero_indices1', data=zero_indices1)
-            output.create_dataset(name='nonzero_indices0', data=nonzero_indices0)
-            output.create_dataset(name='nonzero_indices1', data=nonzero_indices1)
-            output.create_dataset(name='zero_means', data=zero_means)
-            output.create_dataset(name='nonzero_means', data=nonzero_means)
-            output.create_dataset(name='corrections', data=corrections)
-            output.create_dataset(name='log_corrections', data=log_corrections)
-            output.create_dataset(name='fend_ranges', data=fend_ranges)
-            output.create_dataset(name='interactions', data=interactions)
-            output.close()
-            print numpy.mean(zero_indices0), numpy.mean(zero_indices1), numpy.mean(nonzero_indices0), numpy.mean(nonzero_indices1), numpy.mean(nonzero_means), numpy.mean(zero_means), numpy.mean(log_corrections), numpy.mean(corrections), start_cost
             while cont:
                 gradients.fill(0.0)
                 inv_corrections = (1.0 / corrections).astype(numpy.float32)
@@ -827,7 +813,7 @@ class HiC(object):
             chrom_mean = chrom_mean ** 2.0 - numpy.sum(corrections ** 2.0)
             chrom_mean /= corrections.shape[0] * (corrections.shape[0] - 1)
             self.chromosome_means[self.chr2int[chrom]] += numpy.log(chrom_mean)
-            log_corrections = numpy.log(corrections).astype(numpy.float32)
+            log_corrections[:] = numpy.log(corrections).astype(numpy.float32)
             cost = cost_function(counts,
                                  zero_indices0,
                                  zero_indices1,
