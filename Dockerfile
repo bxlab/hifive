@@ -43,6 +43,7 @@ RUN mkdir -p tmp && cd tmp && wget https://github.com/bxlab/hifive/archive/v1.1.
 
 # Get hifive test data
 
-RUN mkdir -p test_data && cd test_data && wget http://files.figshare.com/2258231/testdata.tar.bz2 && tar xjf testdata.tar.bz2
+RUN mkdir -p test_data && cd test_data && wget http://files.figshare.com/2259932/test5Cdata.tar.bz2 && tar xjf test5Cdata.tar.bz2
+RUN cd test_data && wget http://files.figshare.com/2259931/testHiCdata.tar.bz2 && tar xjf testHiCdata.tar.bz2
 
 MAINTAINER Michael Sauria <mike.sauria@jhu.edu>
