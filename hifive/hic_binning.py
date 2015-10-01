@@ -1239,10 +1239,9 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     obs_indices = numpy.searchsorted(mids, binbounds).astype(numpy.int32)
     if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
         corrections = hic.corrections[fend_nums]
-        correction_sums = numpy.bincount(binmapping, weights=corrections, minlength=n).astype(numpy.float32)
     else:
-        corrections = None
-        correction_sums = None
+        corrections = numpy.ones(fend_nums.shape[0], dtype=numpy.float32)
+    correction_sums = numpy.bincount(binmapping, weights=corrections, minlength=n).astype(numpy.float32)
     if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
         binning_corrections = hic.binning_corrections
         fend_indices = hic.binning_fend_indices[fend_nums, :, :]
@@ -1269,10 +1268,9 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
         binmapping2 = mids2 / midbinsize
         if hic.normalization in ['express', 'probability', 'binning-express', 'binning-probability']:
             corrections2 = hic.corrections[fend_nums2]
-            correction_sums2 = numpy.bincount(binmapping2, weights=corrections2, minlength=m).astype(numpy.float32)
         else:
-            corrections2 = None
-            correction_sums2 = None
+            corrections2 = numpy.ones(fend_nums2.shape[0], dtype=numpy.float32)
+        correction_sums2 = numpy.bincount(binmapping2, weights=corrections2, minlength=m).astype(numpy.float32)
         if hic.normalization in ['binning', 'binning-express', 'binning-probability']:
             fend_indices2 = hic.binning_fend_indices[fend_nums2, :, :]
         else:

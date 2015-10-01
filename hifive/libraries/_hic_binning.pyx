@@ -2059,7 +2059,10 @@ def make_trans_mrh_lowerlevel(
                                 m += 1
                         if value1 >= minobservations:
                             # find expected value
-                            value2 = correction_sums[j] * correction_sums2[k]
+                            if not correction_sums is None and not correction_sums2 is None:
+                                value2 = correction_sums[j] * correction_sums2[k]
+                            else:
+                                value2 = 1.0
                             current_level_data[pos2] = log2(value1 / value2)
                             bin_position[pos2] = j * m_bins + k
                             shape += index
@@ -2139,30 +2142,33 @@ def make_cis_mrh_lowerlevel(
                                 m += 1
                         if value1 >= minobservations:
                             # find expected value
-                            value2 = correction_sums[j] * correction_sums[k]
-                            l = obs_indices[j + 1] - 1
-                            m = obs_indices[k]
-                            start = obs_indices[j]
-                            stop = obs_indices[k + 1]
-                            if fend_nums[l] + 1 == fend_nums[m]:
-                                value2 -= corrections[l] * corrections[m]
-                            if fend_nums[l] % 2 == 0:
-                                if fend_nums[l] + 3 == fend_nums[m]:
+                            if not correction_sums is None:
+                                value2 = correction_sums[j] * correction_sums[k]
+                                l = obs_indices[j + 1] - 1
+                                m = obs_indices[k]
+                                start = obs_indices[j]
+                                stop = obs_indices[k + 1]
+                                if fend_nums[l] + 1 == fend_nums[m]:
                                     value2 -= corrections[l] * corrections[m]
-                                elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
-                                    value2 -= corrections[l] * corrections[m + 1]
-                                elif m + 2 < stop and fend_nums[l] + 3 == fend_nums[m + 2]:
-                                    value2 -= corrections[l] * corrections[m + 2]
-                            l -= 1
-                            if l >= start and fend_nums[l] % 2 == 0:
-                                if fend_nums[l] + 3 == fend_nums[m]:
-                                    value2 -= corrections[l] * corrections[m]
-                                elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
-                                    value2 -= corrections[l] * corrections[m + 1]
-                            l -= 1
-                            if l >= start and fend_nums[l] % 2 == 0:
-                                if fend_nums[l] + 3 == fend_nums[m]:
-                                    value2 -= corrections[l] * corrections[m]
+                                if fend_nums[l] % 2 == 0:
+                                    if fend_nums[l] + 3 == fend_nums[m]:
+                                        value2 -= corrections[l] * corrections[m]
+                                    elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
+                                        value2 -= corrections[l] * corrections[m + 1]
+                                    elif m + 2 < stop and fend_nums[l] + 3 == fend_nums[m + 2]:
+                                        value2 -= corrections[l] * corrections[m + 2]
+                                l -= 1
+                                if l >= start and fend_nums[l] % 2 == 0:
+                                    if fend_nums[l] + 3 == fend_nums[m]:
+                                        value2 -= corrections[l] * corrections[m]
+                                    elif m + 1 < stop and fend_nums[l] + 3 == fend_nums[m + 1]:
+                                        value2 -= corrections[l] * corrections[m + 1]
+                                l -= 1
+                                if l >= start and fend_nums[l] % 2 == 0:
+                                    if fend_nums[l] + 3 == fend_nums[m]:
+                                        value2 -= corrections[l] * corrections[m]
+                            else:
+                                value2 = 1.0
                             current_level_data[pos2] = log2(value1 / value2)
                             bin_position[pos2] = j * n_bins + k
                             shape += index
