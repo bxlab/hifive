@@ -439,6 +439,8 @@ def add_hicdataset_subparser(subparsers):
         help="A HiCPipe-style tabular MAT file containing fend pair counts.")
     parser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
         help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
+    parser.add_argument("--skip-duplicate-filtering", dest="skipdups", required=False, default=False,
+        action='store_true', help="Skip filtering of PCR duplicates. [default: %(default)s]")
     parser.add_argument(dest="fend", type=str,
         help="The file name of an appropriate HiFive Fend file.")
     parser.add_argument(dest="output", type=str,
@@ -536,6 +538,8 @@ def add_complete_hic_group(subparser):
         help="A HiCPipe-style tabular MAT file containing fend pair counts.")
     subparser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
         help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
+    subparser.add_argument("--skip-duplicate-filtering", dest="skipdups", required=False, default=False,
+        action='store_true', help="Skip filtering of PCR duplicates. [default: %(default)s]")
     subparser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
         action='store', help="The minimum number of interactions needed for valid fragment. [default: %(default)s]")
     subparser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,

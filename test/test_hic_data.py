@@ -18,7 +18,9 @@ import h5py
 
 class HiCData(unittest.TestCase):
     def setUp(self):
-        self.data = h5py.File('test/data/test_import.hcd', 'r')
+        self.mat_data = h5py.File('test/data/test_import_mat.hcd', 'r')
+        self.raw_data = h5py.File('test/data/test_import_raw.hcd', 'r')
+        self.bam_data = h5py.File('test/data/test_import_bam.hcd', 'r')
         self.fend_fname = 'test/data/test.fends'
         self.mat_fname = 'test/data/test.mat'
         self.raw_fname = 'test/data/test.raw'
@@ -29,13 +31,13 @@ class HiCData(unittest.TestCase):
         subprocess.call("./bin/hifive hic-data -q -R %s -i 500 %s test/data/test_temp.hcd" %
                         (self.raw_fname, self.fend_fname), shell=True)
         data = h5py.File('test/data/test_temp.hcd', 'r')
-        self.compare_hdf5_dicts(self.data, data, 'data')
+        self.compare_hdf5_dicts(self.raw_data, data, 'data')
 
     def test_hic_mat_data_creation(self):
         subprocess.call("./bin/hifive hic-data -q -M %s -i 500 %s test/data/test_temp.hcd" %
                         (self.mat_fname, self.fend_fname), shell=True)
         data = h5py.File('test/data/test_temp.hcd', 'r')
-        self.compare_hdf5_dicts(self.data, data, 'data')
+        self.compare_hdf5_dicts(self.mat_data, data, 'data')
 
     def test_hic_bam_data_creation(self):
         if 'pysam' not in sys.modules.keys():
@@ -44,7 +46,7 @@ class HiCData(unittest.TestCase):
         subprocess.call("./bin/hifive hic-data -q -S %s %s -i 500 %s test/data/test_temp.hcd" %
                         (self.bam_fname1, self.bam_fname2, self.fend_fname), shell=True)
         data = h5py.File('test/data/test_temp.hcd', 'r')
-        self.compare_hdf5_dicts(self.data, data, 'data')
+        self.compare_hdf5_dicts(self.bam_data, data, 'data')
 
     def test_hic_mat_export(self):
         data = hic_data.HiCData('test/data/test_temp.hcd', 'w', silent=True)

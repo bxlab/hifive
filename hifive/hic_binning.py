@@ -27,9 +27,295 @@ except:
 
 from libraries._hic_interactions import find_max_fend
 import libraries._hic_binning as _hic_binning
-
+import libraries._hic_interactions as _hic_interactions
 
 def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=None, startfend=None, stopfend=None,
+                    datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
+                    proportional=False, includediagonal=False, **kwargs):
+    """
+    Create an array of format 'arraytype' and fill with data requested in 'datatype'.
+
+    :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
+    :type hic: :class:`HiC <hifive.hic.HiC>`
+    :param chrom: The name of a chromosome contained in 'hic'.
+    :type chrom: str.
+    :param binsize: This is the coordinate width of each bin. A value of zero indicates unbinned. If binbounds is not None, this value is ignored.
+    :type binsize: int.
+    :param binbounds: An array containing start and stop coordinates for a set of user-defined bins. Any fend not falling in a bin is ignored.
+    :type binbounds: numpy array
+    :param start: The smallest coordinate to include in the array, measured from fend midpoints or the start of the first bin. If 'binbounds' is given, this value is ignored. If both 'start' and 'startfend' are given, 'start' will override 'startfend'. If unspecified, this will be set to the midpoint of the first fend for 'chrom', adjusted to the first multiple of 'binsize' if not zero. Optional.
+    :type start: int.
+    :param stop: The largest coordinate to include in the array, measured from fend midpoints or the end of the last bin. If 'binbounds' is given, this value is ignored. If both 'stop' and 'stopfend' are given, 'stop' will override 'stopfend'. If unspecified, this will be set to the midpoint of the last fend plus one for 'chrom', adjusted to the last multiple of 'start' + 'binsize' if not zero. Optional.
+    :type stop: int.
+    :param startfend: The first fend to include in the array. If 'binbounds' is given, this value is ignored. If unspecified and 'start' is not given, this is set to the first valid fend in 'chrom'. In cases where 'start' is specified and conflicts with 'startfend', 'start' is given preference. Optional
+    :type startfend: int.
+    :param stopfend: The first fend not to include in the array. If 'binbounds' is given, this value is ignored. If unspecified and 'stop' is not given, this is set to the last valid fend in 'chrom' plus one. In cases where 'stop' is specified and conflicts with 'stopfend', 'stop' is given preference. Optional.
+    :type stopfend: str.
+    :param datatype: This specifies the type of data that is processed and returned. Options are 'raw', 'distance', 'fend', 'enrichment', and 'expected'. Observed values are always in the first index along the last axis, except when 'datatype' is 'expected'. In this case, filter values replace counts. Conversely, if 'raw' is specified, unfiltered fends return value of one. Expected values are returned for 'distance', 'fend', 'enrichment', and 'expected' values of 'datatype'. 'distance' uses only the expected signal given distance for calculating the expected values, 'fend' uses only fend correction values, and both 'enrichment' and 'expected' use both correction and distance mean values.
+    :type datatype: str.
+    :param arraytype: This determines what shape of array data are returned in. Acceptable values are 'compact', 'full', and 'upper'. 'compact' means data are arranged in a N x M x 2 array where N is the number of bins, M is the maximum number of steps between included bin pairs, and data are stored such that bin n,m contains the interaction values between n and n + m + 1. 'full' returns a square, symmetric array of size N x N x 2. 'upper' returns only the flattened upper triangle of a full array, excluding the diagonal of size (N * (N - 1) / 2) x 2.
+    :type arraytype: str.
+    :param maxdistance: This specifies the maximum coordinate distance between bins that will be included in the array. If set to zero, all distances are included.
+    :type maxdistance: str.
+    :param skipfiltered: If 'True', all interaction bins for filtered out fends are removed and a reduced-size array is returned.
+    :type skipfiltered: bool.
+    :param returnmapping: If 'True', a list containing the data array and a 2d array containing first coordinate included and excluded from each bin, and the first fend included and excluded from each bin is returned. Otherwise only the data array is returned.
+    :type returnmapping: bool.
+    :param proportional: Indicates whether interactions should proportionally contribute to bins based on the amount of overlap instead of being attributed solely based on midpoint. Only valid for binned heatmaps.
+    :type proportional: bool.
+    :param includediagonal: If true, interactions with both ends falling in the same bin are included. This changes the size of the upper array to N * (N + 1) / 2 and increase the compact array's first axis by one.
+    :type includediagonal: bool.
+    :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'.
+    """
+    if 'silent' in kwargs:
+        silent = kwargs['silent']
+    else:
+        silent = False
+    # check that all values are acceptable
+    if datatype not in ['raw', 'fend', 'distance', 'enrichment', 'expected']:
+        if not silent:
+            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+        return None
+    elif datatype in ['fend', 'enrichment'] and hic.normalization == 'none':
+        if not silent:
+            print >> sys.stderr, ("Normalization has not been performed yet on this project. Select either 'raw' or 'distance' for datatype. No data returned\n"),
+        return None
+    elif datatype in ['distance', 'enrichment'] and hic.distance_parameters is None:
+        if not silent:
+            print >> sys.stderr, ("No distance-dependence relationship has been calculated for this project yet. Select either 'raw' or 'fend' for datatype. No data returned\n"),
+        return None
+    if arraytype not in ['full', 'compact', 'upper']:
+        if not silent:
+            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+        return None
+    chrint = hic.chr2int[chrom.strip('chr')]
+    if maxdistance is None:
+        maxdistance = 0
+    # Determine start, stop, startfend, and stopfend
+    # if binbounds is specified, use these coordinate bounds
+    if binbounds is not None:
+        start = binbounds[0, 0]
+        stop = binbounds[-1, 1]
+        startfend = _find_fend_from_coord(hic, chrint, start)
+        stopfend = _find_fend_from_coord(hic, chrint, stop)
+    else:
+        if start is None and startfend is None:
+            # if not specified, use first fend and first coordinate of chromosome
+            startfend = hic.fends['chr_indices'][chrint]
+            start = hic.fends['fends']['mid'][startfend]
+            if binsize > 0:
+                start = (start / binsize) * binsize
+        elif start is None:
+            # startfend is given, find start coordinate
+            start = hic.fends['fends']['mid'][startfend]
+            if binsize > 0:
+                start = (start / binsize) * binsize
+        else:
+            # start is specified, find startfend
+            startfend = _find_fend_from_coord(hic, chrint, start)
+        if (stop is None or stop == 0) and stopfend is None:
+            # if not specified, use first fend of next chromosome and last coordinate of chromosome plus one
+            stopfend = hic.fends['chr_indices'][chrint + 1]
+            stop = hic.fends['fends']['mid'][stopfend - 1] + 1
+            if binsize > 0:
+                stop = ((stop - start - 1) / binsize + 1) * binsize + start
+        elif stop is None or stop == 0:
+            # stopfend is given, find stop coordinate
+            stop = hic.fends['fends']['mid'][stopfend - 1] + 1
+            if binsize > 0:
+                stop = ((stop - 1 - start) / binsize + 1) * binsize + start
+        else:
+            # stop is specified, find stopfend
+            if binsize > 0:
+                stop = ((stop - 1 - start) / binsize + 1) * binsize + start
+            stopfend = _find_fend_from_coord(hic, chrint, stop)
+    if not silent:
+        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
+    # check if any valid data is in this range
+    valid = numpy.where(hic.filter[startfend:stopfend] > 0)[0]
+    if valid.shape[0] == 0:
+        if not silent:
+            print >> sys.stderr, ("Insufficient data\n"),
+        return None
+    # If datatype is not 'expected', pull the needed slice of data
+    if datatype != 'expected':
+        start_index = hic.data['cis_indices'][startfend]
+        stop_index = hic.data['cis_indices'][stopfend]
+        if start_index == stop_index:
+            if not silent:
+                print >> sys.stderr, ("Insufficient data\n"),
+            return None
+        data_indices = hic.data['cis_indices'][startfend:(stopfend + 1)]
+        # remap data indices
+        data_indices -= data_indices[0]
+        data = hic.data['cis_data'][start_index:stop_index, :]
+        # remap fends
+        data[:, :2] -= startfend
+    # map fends to cis array bins, with -1 indicating invalid fend
+    mapping = numpy.zeros(stopfend - startfend, dtype=numpy.int32) - 1
+    mids = hic.fends['fends']['mid'][startfend:stopfend]
+    # if binbounds are defined, use them to set fend mapping
+    if binbounds is not None:
+        start_indices = numpy.searchsorted(mids[valid], binbounds[:, 0], side='right') - 1
+        stop_indices = numpy.searchsorted(mids[valid], binbounds[:, 1], side='right')
+        # only fends that fall in define bins are valid
+        where = numpy.where(start_indices == stop_indices)[0]
+        valid = valid[where]
+        mapping[valid] = start_indices[where]
+        num_bins = binbounds.shape[0]
+    else:
+        # if fends are unbinned
+        if binsize == 0:
+            # check if we're skipping invalid fends
+            if skipfiltered:
+                num_bins = valid.shape[0]
+                mapping[valid] = numpy.arange(num_bins)
+            else:
+                num_bins = stopfend - startfend
+                mapping[valid] = valid
+        else:
+            # assign binned fends based on midpoint
+            mapping[valid] = (mids[valid] - start) / binsize
+            num_bins = (stop - start) / binsize
+        # find binbounds
+        binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
+        for i, j in enumerate(mapping):
+            if binbounds[j, 0] == -1:
+                binbounds[j, 0] = mids[i]
+            binbounds[j, 1] = mids[i] + 1
+    # if correction is requested, determine the appropriate type
+    distance_parameters = None
+    chrom_mean = 0.0
+    corrections = None
+    correction_sums = None
+    binning_corrections = None
+    binning_num_bins = None
+    fend_indices = None
+    # if only raw data is requested, we can use a shortcut for finding the number of
+    # valid possible fends in each bin combination
+    if datatype == 'raw':
+        corrections = numpy.zeros(stopfend - startfend, dtype=numpy.float32)
+        corrections[valid] = 1.0
+        if binsize > 0 and maxdistance == 0 and not proportional:
+            correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid],
+                                             minlength=num_bins).astype(numpy.float32)
+    # if we want to correct the data, figure out what we need to do that
+    if datatype in ['fend', 'enrichment', 'expected']:
+        # determine which correction(s) has been performed and get parameters
+        if hic.normalization.count('binning') > 0:
+            binning_corrections = hic.binning_corrections
+            binning_num_bins = hic.binning_num_bins
+            fend_indices = hic.binning_fend_indices
+        if hic.normalization.count('express') > 0 or hic.normalization.count('probability') > 0:
+            corrections = numpy.zeros(stopfend - startfend, dtype=numpy.float32)
+            corrections[valid] = hic.corrections[startfend:stopfend][valid]
+            # if only fend corrections are requested, we can use a shortcut for finding expected values
+            if (binsize > 0 and maxdistance == 0 and datatype == 'fends' and
+                hic.normalization in ['express', 'probability'] and
+                not proportional):
+                correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid],
+                                                 minlength=num_bins).astype(numpy.float32)
+    # if accounting for distance, get distance parameters
+    if datatype in ['distance', 'enrichment', 'expected']:
+        distance_parameters = hic.distance_parameters
+        chrom_mean = hic.chromosome_means[chrint]
+    # If proportional binning is requested
+    ranges = None
+    overlap = None
+    if proportional and binsize > 0:
+        fends = hic.fends['fends'][startfend:stopfend]
+        ranges = numpy.zeros((mapping.shape[0], 2), dtype=numpy.int32)
+        overlap = numpy.zeros(ranges.shape, dtype=numpy.float32)
+        positions = numpy.arange(1, 1 + num_bins) * binsize + start
+        ranges[:, 0] = numpy.searchsorted(positions, fends['start'])
+        ranges[:, 1] = numpy.searchsorted(positions[:-1], fends['stop'])
+        where = numpy.where(ranges[:, 0] < ranges[:, 1])[0]
+        overlap[where, 0] = numpy.minimum(positions[ranges[where, 0]] - fends['start'][where],
+                                          binsize) / float(binsize)
+        overlap[where, 1] = numpy.minimum(fends['stop'][where] - positions[ranges[where, 1]] + binsize,
+                                          binsize) / float(binsize)
+        where = numpy.where(ranges[:, 0] == ranges[:, 1])[0]
+        overlap[where, 0] = (fends['stop'][where] - fends['start'][where]) / float(binsize)
+    # Create requested output array
+    if arraytype == 'compact':
+        # find maximmum distance between valid bins
+        if maxdistance is not None and maxdistance > 0:
+            max_bin = _hic_interactions.find_max_bin(binbounds, maxdistance)
+        else:
+            max_bin = num_bins - 1
+        data_array = numpy.zeros((num_bins, max_bin + int(includediagonal), 2), dtype=numpy.float32)
+    else:
+        data_array = numpy.zeros((num_bins * (num_bins - 1 + 2 * int(includediagonal)) / 2, 2), dtype=numpy.float32)
+    if maxdistance == 0:
+        maxdistance = stop - start + 1
+    # Fill in data values
+    if arraytype == 'compact':
+        _hic_binning.find_cis_compact_expected(mapping, corrections, binning_corrections,
+                                               binning_num_bins, fend_indices, mids, distance_parameters,
+                                               data_array, correction_sums, ranges, overlap,
+                                               chrom_mean, startfend, maxdistance, int(includediagonal))
+        if datatype != 'expected':
+            _hic_binning.find_cis_compact_observed(data, data_indices, mapping, mids, data_array,
+                                                   ranges, overlap, maxdistance, int(includediagonal))
+        else:
+            data_array[:, :, 0] = data_array[:, :, 1]
+            data_array[:, :, 1].fill(0)
+            if correction_sums is not None:
+                correction_sums = numpy.bincount(mapping[valid], minlength=num_bins).astype(numpy.float32)
+            corrections.fill(0)
+            corrections[valid] = 1.0
+            _hic_binning.find_cis_compact_expected(mapping, corrections, None, None, None, mids, None,
+                                                   data_array, correction_sums, ranges, overlap,
+                                                   chrom_mean, startfend, maxdistance, int(includediagonal))
+            data_array = data_array[:, :, ::-1]
+    else:
+        _hic_binning.find_cis_upper_expected(mapping, corrections, binning_corrections,
+                                             binning_num_bins, fend_indices, mids, distance_parameters,
+                                             data_array, correction_sums, ranges, overlap,
+                                             chrom_mean, startfend, maxdistance, int(includediagonal))
+        if datatype != 'expected':
+            _hic_binning.find_cis_upper_observed(data, data_indices, mapping, mids, data_array,
+                                                 ranges, overlap, maxdistance, int(includediagonal))
+        else:
+            data_array[:, 0] = data_array[:, 1]
+            data_array[:, 1].fill(0)
+            if correction_sums is not None:
+                correction_sums = numpy.bincount(mapping[valid], minlength=num_bins).astype(numpy.float64)
+            corrections.fill(0)
+            corrections[valid] = 1.0
+            _hic_binning.find_cis_upper_expected(mapping, corrections, None, None, None, mids, None,
+                                                 data_array, correction_sums, ranges, overlap,
+                                                 chrom_mean, startfend, maxdistance, int(includediagonal))
+            data_array = data_array[:, ::-1]
+    # If requesting 'full' array, convert 'upper' array type to 'full'
+    if arraytype == 'full':
+        indices = numpy.triu_indices(num_bins, 1 - int(includediagonal))
+        full_data_array = numpy.zeros((num_bins, num_bins, 2), dtype=numpy.float32)
+        full_data_array[indices[1], indices[0], :] = data_array
+        full_data_array[indices[0], indices[1], :] = data_array
+        del data_array
+        data_array = full_data_array
+    if returnmapping:
+        bin_mapping = numpy.zeros((num_bins, 4), dtype=numpy.int32)
+        bin_mapping[:, :2] = binbounds
+        if binsize == 0:
+            if skipfiltered:
+                bin_mapping[:, 2] = valid + startfend
+            else:
+                bin_mapping[:, 2] = numpy.arange(startfend, stopfend)
+            bin_mapping[:, 3] = bin_mapping[:, 2] + 1
+        else:
+            bin_mapping[:, 2] = numpy.searchsorted(mids, bin_mapping[:, 0]) + startfend
+            bin_mapping[:, 3] = numpy.searchsorted(mids, bin_mapping[:, 1]) + startfend
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
+        return [data_array, bin_mapping]
+    else:
+        if not silent:
+            print >> sys.stderr, ("Done\n"),
+        return data_array
+
+def find_cis_signal2(hic, chrom, binsize=10000, binbounds=None, start=None, stop=None, startfend=None, stopfend=None,
                     datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
                     proportional=False, **kwargs):
     """
@@ -741,15 +1027,28 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     # Create data array
     if chrint1 < chrint2:
         data_array = numpy.zeros((num_bins1, num_bins2, 2), dtype=numpy.float32)
+        if not data is None:
+            data = data[numpy.where((data[:, 1] >= 0) *
+                                    (data[:, 1] < mapping2.shape[0]) *
+                                    (data[:, 0] < mapping1.shape[0]))[0], :]
     else:
         data_array = numpy.zeros((num_bins2, num_bins1, 2), dtype=numpy.float32)
+        if not data is None:
+            data = data[numpy.where((data[:, 1] >= 0) *
+                                    (data[:, 1] < mapping1.shape[0]) *
+                                    (data[:, 0] < mapping2.shape[0]))[0], :]
     # Fill in data values
     if chrint1 < chrint2:
         _hic_binning.find_trans_expected(mapping1, mapping2, corrections1, corrections2, binning_corrections,
                                          binning_num_bins, fend_indices, data_array,
                                          correction_sums1, correction_sums2, trans_mean, startfend1, startfend2)
         if datatype != 'expected':
-            _hic_binning.find_trans_observed(data, data_indices, mapping1, mapping2, data_array)
+            #_hic_binning.find_trans_observed(data, data_indices, mapping1, mapping2, data_array)
+            data = data[numpy.where((data[:, 1] >= 0) * (data[:, 1] < mapping2.shape[0]) *
+                                    (data[:, 0] < mapping1.shape[0]))[0], :]
+            where = numpy.where((mapping1[data[:, 0]] >= 0) * (mapping2[data[:, 1]] >= 0))[0]
+            data_array[:, :, 0] = numpy.bincount(mapping1[data[where, 0]] * num_bins2 + mapping2[data[where, 1]],
+                            weights=data[where, 2], minlength=num_bins1 * num_bins2).reshape(num_bins1, num_bins2)
         else:
             data_array[:, :, 0] = data_array[:, :, 1]
             data_array[:, :, 1].fill(0)
@@ -768,7 +1067,12 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
                                          binning_num_bins, fend_indices, data_array,
                                          correction_sums2, correction_sums1, trans_mean, startfend2, startfend1)
         if datatype != 'expected':
-            _hic_binning.find_trans_observed(data, data_indices, mapping2, mapping1, data_array)
+            #_hic_binning.find_trans_observed(data, data_indices, mapping2, mapping1, data_array)
+            data = data[numpy.where((data[:, 1] >= 0) * (data[:, 1] < mapping1.shape[0]) *
+                                    (data[:, 0] < mapping2.shape[0]))[0], :]
+            where = numpy.where((mapping2[data[:, 0]] >= 0) * (mapping1[data[:, 1]] >= 0))[0]
+            data_array[:, :, 0] = numpy.bincount(mapping2[data[where, 0]] * num_bins1 + mapping1[data[where, 1]],
+                            weights=data[where, 2], minlength=num_bins1 * num_bins2).reshape(num_bins2, num_bins1)
         else:
             data_array[:, :, 0] = data_array[:, :, 1]
             data_array[:, :, 1].fill(0)
@@ -1085,7 +1389,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
             if not dynamically_binned:
                 heatmaps[chrom] = find_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype,
                                                   arraytype='upper', returnmapping=True, silent=silent,
-                                                  skipfiltered=True)
+                                                  skipfiltered=True, includediagonal=True)
             else:
                 temp = find_cis_signal(hic, chrom[0], binsize=expansion_binsize, datatype=datatype, arraytype='upper',
                                        returnmapping=True, silent=silent)
@@ -1139,6 +1443,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
         output.create_dataset('chromosomes', data=numpy.array(chroms))
         if 'history' in kwargs:
             output.attrs['history'] = kwargs['history']
+        output.attrs['filetype'] = 'hic_heatmap'
         output.close()
         if not silent:
             print >> sys.stderr, ("Creating binned heatmap...Done\n"),

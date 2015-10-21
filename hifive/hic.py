@@ -60,6 +60,7 @@ class HiC(object):
     def __init__(self, filename, mode='r', silent=False):
         """Create a HiC object."""
         self.file = os.path.abspath(filename)
+        self.filetype = 'hic_project'
         if 'mpi4py' in sys.modules.keys():
             self.comm = MPI.COMM_WORLD
             self.rank = self.comm.Get_rank()
@@ -1164,7 +1165,7 @@ class HiC(object):
                 if iteration >= iterations or change[0] < minchange:
                     cont = False
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rFinding fend corrections  Iteration: %i  Cost: %f  Change: %f") % (' ' * 80,
+                    print >> sys.stderr, ("\n%s\rFinding fend corrections  Iteration: %i  Cost: %f  Change: %f") % (' ' * 80,
                                           iteration, cost, change),
                 for i in range(1, self.num_procs):
                     self.comm.Send(corrections, dest=i, tag=13)
@@ -2014,7 +2015,7 @@ class HiC(object):
     def cis_heatmap(self, chrom, start=None, stop=None, startfend=None, stopfend=None, binsize=0, binbounds=None,
                     datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
                     dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
-                    removefailed=False, image_file=None, proportional=False, **kwargs):
+                    removefailed=False, image_file=None, proportional=False, includediagonal=False, **kwargs):
         """
         Return a heatmap of cis data of the type and shape specified by the passed arguments.
 
@@ -2058,6 +2059,8 @@ class HiC(object):
         :type image_file: str.
         :param proportional: Indicates whether interactions should proportionally contribute to bins based on the amount of overlap instead of being attributed solely based on midpoint. Only valid for binned heatmaps and does not work in conjunction with dynamic binning.
         :type proportional: bool.
+        :param includediagonal: If true, interactions with both ends falling in the same bin are included. This changes the size of the upper array to N * (N + 1) / 2 and increase the compact array's first axis by one.
+        :type includediagonal: bool.
         :returns: Array in format requested with 'arraytype' containing data requested with 'datatype'. If returnmapping is True, a list is returned containined the requested data array and an array of associated positions (dependent on the binning options selected).
 
         """
@@ -2080,7 +2083,7 @@ class HiC(object):
                                                stop=stop, startfend=startfend, stopfend=stopfend, datatype=datatype,
                                                arraytype=arraytype, maxdistance=maxdistance, skipfiltered=skipfiltered,
                                                returnmapping=returnmapping, proportional=proportional,
-                                               silent=self.silent)
+                                               includediagonal=includediagonal, silent=self.silent)
         else:
             if not binbounds is None:
                 estart = binbounds[0, 0]

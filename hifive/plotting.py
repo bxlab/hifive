@@ -31,7 +31,7 @@ except:
 
 def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                        min_color="0000ff", mid_color="ffffff", max_color="ff0000",
-                       returnscale=False, **kwargs):
+                       returnscale=False, diagonal_included=False, **kwargs):
     """
     Fill in and rescale bitmap from a HiC compact array.
 
@@ -53,6 +53,8 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
     :type max_color: str.
     :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
     :type returnscale: bool.
+    :param diagonal_included: If true, adjust output shape as necessary.
+    :type diagonal_included: bool.
     :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -112,10 +114,10 @@ def plot_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True
     scaled = numpy.round(scaled).astype(numpy.uint32)
     img = numpy.empty((dim, dim), dtype=numpy.uint32)
     img[:, :] = int('ff999999', 16)
-    for i in range(dim - 1):
-        where = numpy.where(scaled[i, :min(scaled.shape[1], dim - i - 1), 1] > 0)[0]
-        img[i, where + i + 1] = scaled[i, where, 0]
-        img[where + i + 1, i] = img[i, where + i + 1]
+    for i in range(dim - 1 + int(diagonal_included)):
+        where = numpy.where(scaled[i, :min(scaled.shape[1], dim - i - 1 + int(diagonal_included)), 1] > 0)[0]
+        img[i, where + i + 1 - int(diagonal_included)] = scaled[i, where, 0]
+        img[where + i + 1 - int(diagonal_included), i] = img[i, where + i + 1 - int(diagonal_included)]
     pilImage = Image.frombuffer('RGBA', (dim, dim), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
@@ -222,7 +224,7 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
 
 def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                      min_color="0000ff", mid_color="ffffff", max_color="ff0000",
-                     returnscale=False, **kwargs):
+                     returnscale=False, diagonal_included=False, **kwargs):
     """
     Fill in and rescale bitmap from a 5C or HiC upper array.
 
@@ -244,6 +246,8 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
     :type max_color: str.
     :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
     :type returnscale: bool.
+    :param diagonal_included: If true, adjust output shape as necessary.
+    :type diagonal_included: bool.
     :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -263,7 +267,7 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
                      (min_color[0] + max_color[0]) / 2.0)
     else:
         mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
-    dim = int(0.5 + (0.25 + 2 * data.shape[0]) ** 0.5)
+    dim = int(0.5 + (0.25 + 2 * data.shape[0]) ** 0.5) - int(diagonal_included)
     scaled = numpy.copy(data).astype(numpy.float64)
     where = numpy.where(data[:, 1] > 0)[0]
     scaled[where, 0] /= scaled[where, 1]
@@ -304,10 +308,10 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
     img = numpy.empty((dim, dim), dtype=numpy.uint32)
     img[:, :] = int('ff999999', 16)
     for i in range(dim - 1):
-        index = i * dim - i * (i + 1) / 2
-        where = numpy.where(scaled[index:(index + dim - i - 1), 1] > 0)[0]
-        img[i, where + i + 1] = scaled[where + index, 0]
-        img[where + i + 1, i] = img[i, where + i + 1]
+        index = i * dim - i * (i + 1 - 2 * int(diagonal_included)) / 2
+        where = numpy.where(scaled[index:(index + dim - i - 1 + int(diagonal_included)), 1] > 0)[0]
+        img[i, where + i + 1 - int(diagonal_included)] = scaled[where + index, 0]
+        img[where + i + 1 - int(diagonal_included), i] = img[i, where + i + 1 - int(diagonal_included)]
     pilImage = Image.frombuffer('RGBA', (dim, dim), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),
@@ -373,7 +377,11 @@ def plot_hic_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=Tr
     data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float64)
     for i in range(len(chroms)):
         if '%s.counts' % chroms[i] in input and '%s.expected' % chroms[i] in input:
-            indices = numpy.triu_indices(sizes[i], 1)
+            n = input['%s.positions' % chroms[i]].shape[0]
+            if n * (n - 1) / 2 == input['%s.counts' % chroms[i]].shape[0]:
+                indices = numpy.triu_indices(sizes[i], 1)
+            else:
+                indices = numpy.triu_indices(sizes[i], 0)
             data[indices[0] + starts[i], indices[1] + starts[i], 0] = input['%s.counts' % chroms[i]][:]
             data[indices[0] + starts[i], indices[1] + starts[i], 1] = input['%s.expected' % chroms[i]][:]
     for i in range(len(chroms) - 1):

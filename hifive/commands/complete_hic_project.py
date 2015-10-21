@@ -58,9 +58,9 @@ def run(args):
         del fends
         data = HiCData(data_fname, 'w', silent=args.silent)
         if not args.bam is None: 
-            data.load_data_from_bam(fend_fname, args.bam, args.insert)
+            data.load_data_from_bam(fend_fname, args.bam, args.insert, args.skipdups)
         elif not args.raw is None: 
-            data.load_data_from_raw(fend_fname, args.raw, args.insert)
+            data.load_data_from_raw(fend_fname, args.raw, args.insert, args.skipdups)
         elif not args.mat is None: 
             data.load_data_from_mat(fend_fname, args.mat, args.insert)
         data.save()

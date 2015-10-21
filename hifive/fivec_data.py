@@ -44,6 +44,7 @@ class FiveCData(object):
         self.file = os.path.abspath(filename)
         self.silent = silent
         self.history = ''
+        self.filetype = 'fivec_data'
         if mode != 'w':
             self.load()
         return None

@@ -42,6 +42,7 @@ class Fend(object):
         self.file = filename
         self.silent = silent
         self.history = ''
+        self.filetype = 'fend'
         if mode != 'w':
             self.load()
         return None

@@ -997,6 +997,7 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
                         output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
     if 'history' in kwargs:
         output.attrs['history'] = kwargs['history']
+    output.attrs['filetype'] = 'fivec_heatmap'
     output.close()
     if not silent:
         print >> sys.stderr, ("Creating binned heatmap...Done\n"),

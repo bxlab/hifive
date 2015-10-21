@@ -39,6 +39,7 @@ class Fragment(object):
         self.file = filename
         self.silent = silent
         self.history = ""
+        self.filetype = "fragment"
         if mode != 'w':
             self.load()
         return None

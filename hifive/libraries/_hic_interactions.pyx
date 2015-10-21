@@ -31,6 +31,24 @@ cdef extern from "math.h":
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
+def find_max_bin(
+        np.ndarray[DTYPE_int_t, ndim=2] binbounds not None,
+        int maxdistance):
+    cdef int i, j, maxbin, start
+    cdef int num_bins = binbounds.shape[0]
+    with nogil:
+        maxbin = 0
+        for i in range(num_bins):
+            start = binbounds[i, 1] - 1
+            j = i + 1
+            while j < num_bins and binbounds[j, 0] - start < maxdistance:
+                j += 1
+            maxbin = max(maxbin, j - i - 1)
+    return maxbin
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
 def find_max_fend(
         np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,

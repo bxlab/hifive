@@ -33,13 +33,15 @@ cdef extern from "math.h":
 @cython.wraparound(False)
 @cython.cdivision(True)
 def find_cis_compact_observed(
-        np.ndarray[DTYPE_int_t, ndim=2] data,
-        np.ndarray[DTYPE_int64_t, ndim=1] indices,
+        np.ndarray[DTYPE_int_t, ndim=2] data not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices not None,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
         np.ndarray[DTYPE_int_t, ndim=2] ranges,
-        np.ndarray[DTYPE_t, ndim=2] overlap):
+        np.ndarray[DTYPE_t, ndim=2] overlap,
+        int maxdistance,
+        int diag):
     cdef long long int fend1, fend2, i, j, k, map1, map2, start1, start2, stop1, stop2
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
@@ -52,34 +54,38 @@ def find_cis_compact_observed(
                 if fend2 >= num_fends:
                     continue
                 map2 = mapping[fend2]
-                if map2 == -1 or map1 == map2 or fend2 >= max_fend[fend1]:
+                if map2 == -1:
+                    continue
+                if mids[fend2] - mids[fend1] > maxdistance:
+                    continue
+                if diag == 0 and map1 == map2:
                     continue
                 if ranges is None:
-                    signal[map1, map2 - map1 - 1, 0] += data[i, 2]
+                    signal[map1, map2 - map1 - 1 + diag, 0] += data[i, 2]
                 else:
                     start1 = ranges[fend1, 0]
                     start2 = ranges[fend2, 0]
                     stop1 = ranges[fend1, 1]
                     stop2 = ranges[fend2, 1]
                     if start1 < start2:
-                        signal[start1, start2 - start1 - 1, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 0]
+                        signal[start1, start2 - start1 - 1 + diag, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 0]
                     if start1 < stop2:
-                        signal[start1, stop2 - start1 - 1, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 1]
+                        signal[start1, stop2 - start1 - 1 + diag, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 1]
                     for j in range(max(start1, start2) + 1, stop2):
-                        signal[start1, j - start1 - 1, 0] += data[i, 2] * overlap[fend1, 0]
+                        signal[start1, j - start1 - 1 + diag, 0] += data[i, 2] * overlap[fend1, 0]
                     if stop1 < start2:
-                        signal[stop1, start2 - stop1 - 1, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 0]
+                        signal[stop1, start2 - stop1 - 1 + diag, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 0]
                     if stop1 < stop2:
-                        signal[stop1, stop2 - stop1 - 1, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 1]
+                        signal[stop1, stop2 - stop1 - 1 + diag, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 1]
                     for j in range(max(stop1, start2) + 1, stop2):
-                        signal[stop1, j - stop1 - 1, 0] += data[i, 2] * overlap[fend1, 1]
+                        signal[stop1, j - stop1 - 1 + diag, 0] += data[i, 2] * overlap[fend1, 1]
                     for j in range(start1 + 1, stop1):
                         if j < start2:
-                            signal[j, start2 - j - 1, 0] += data[i, 2] * overlap[fend2, 0]
+                            signal[j, start2 - j - 1 + diag, 0] += data[i, 2] * overlap[fend2, 0]
                         if j < stop2:
-                            signal[j, stop2 - j - 1, 0] += data[i, 2] * overlap[fend2, 1]
+                            signal[j, stop2 - j - 1 + diag, 0] += data[i, 2] * overlap[fend2, 1]
                         for k in range(max(j, start2) + 1, stop2):
-                            signal[j, k - j - 1, 0] += data[i, 2]
+                            signal[j, k - j - 1 + diag, 0] += data[i, 2]
     return None
 
 
@@ -90,25 +96,32 @@ def find_cis_upper_observed(
         np.ndarray[DTYPE_int_t, ndim=2] data,
         np.ndarray[DTYPE_int64_t, ndim=1] indices,
         np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
         np.ndarray[DTYPE_int_t, ndim=2] ranges,
-        np.ndarray[DTYPE_t, ndim=2] overlap):
+        np.ndarray[DTYPE_t, ndim=2] overlap,
+        int maxdistance,
+        int diag):
     cdef long long int fend1, fend2, i, j, k, index, map1, map2, start1, start2, stop1, stop2, index1
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5)) - diag
+    cdef int diag2 = diag * 2
     with nogil:
         for fend1 in range(num_fends - 1):
             map1 = mapping[fend1]
             if map1 == -1:
                 continue
-            index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
+            index = map1 * (num_bins - 1) - map1 * (map1 + 1 - diag2) / 2 - 1 + diag
             for i in range(indices[fend1], indices[fend1 + 1]):
                 fend2 = data[i, 1]
                 if fend2 >= num_fends:
                     continue
                 map2 = mapping[fend2]
-                if map2 == -1 or map2 == map1 or fend2 >= max_fend[fend1]:
+                if map2 == -1:
+                    continue
+                if mids[fend2] - mids[fend1] > maxdistance:
+                    continue
+                if diag == 0 and map1 == map2:
                     continue
                 if ranges is None:
                     signal[index + map2, 0] += data[i, 2]
@@ -117,25 +130,25 @@ def find_cis_upper_observed(
                     start2 = ranges[fend2, 0]
                     stop1 = ranges[fend1, 1]
                     stop2 = ranges[fend2, 1]
-                    index1 = start1 * (num_bins - 1) - start1 * (start1 + 1) / 2 - 1
-                    if start1 < start2:
+                    index1 = start1 * (num_bins - 1) - start1 * (start1 + 1 - diag2) / 2 - 1 + diag
+                    if start1 < start2 + diag:
                         signal[index1 + start2, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 0]
-                    if start1 < stop2:
+                    if start1 < stop2 + diag:
                         signal[index1 + stop2, 0] += data[i, 2] * overlap[fend1, 0] * overlap[fend2, 1]
                     for j in range(max(start1, start2) + 1, stop2):
                         signal[index1 + j, 0] += data[i, 2] * overlap[fend1, 0]
-                    index1 = stop1 * (num_bins - 1) - stop1 * (stop1 + 1) / 2 - 1
-                    if stop1 < start2:
+                    index1 = stop1 * (num_bins - 1) - stop1 * (stop1 + 1 - diag2) / 2 - 1 + diag
+                    if stop1 < start2 + diag:
                         signal[index1 + start2, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 0]
-                    if stop1 < stop2:
+                    if stop1 < stop2 + diag:
                         signal[index1 + stop2, 0] += data[i, 2] * overlap[fend1, 1] * overlap[fend2, 1]
                     for j in range(max(stop1, start2) + 1, stop2):
                         signal[index1 + j, 0] += data[i, 2] * overlap[fend1, 1]
                     for j in range(start1 + 1, stop1):
-                        index1 = j * (num_bins - 1) - j * (j + 1) / 2 - 1
-                        if j < start2:
+                        index1 = j * (num_bins - 1) - j * (j + 1 - diag2) / 2 - 1 + diag
+                        if j < start2 + diag:
                             signal[index1 + start2, 0] += data[i, 2] * overlap[fend2, 0]
-                        if j < stop2:
+                        if j < stop2 + diag:
                             signal[index1 + stop2, 0] += data[i, 2] * overlap[fend2, 1]
                         for k in range(max(j, start2) + 1, stop2):
                             signal[index1 + k, 0] += data[i, 2]
@@ -153,13 +166,14 @@ def find_cis_compact_expected(
         np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_t, ndim=2] parameters,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=3] signal not None,
-        np.ndarray[DTYPE_64_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
         np.ndarray[DTYPE_int_t, ndim=2] ranges,
         np.ndarray[DTYPE_t, ndim=2] overlap,
         double chrom_mean,
-        int startfend):
+        int startfend,
+        int maxdistance,
+        int diag):
     cdef long long int fend1, fend2, afend1, afend2, j, k, map1, map2, index, num_parameters, num_bins, max_bin
     cdef long long int start1, start2, stop1, stop2, l, m
     cdef double distance, value
@@ -181,7 +195,7 @@ def find_cis_compact_expected(
                 # find opposite strand adjacents, skipping same fragment and same strand adjacents
                 fend2 = fend1 + 2
                 map2 = mapping[fend2]
-                if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
+                if map2 >= 0 and (diag == 1 or map2 != map1) and mids[fend2] - mids[fend1] <= maxdistance:
                      # give starting expected value
                     value = 1.0
                     # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
@@ -203,34 +217,34 @@ def find_cis_compact_expected(
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                     if ranges is None:
-                        signal[map1, map2 - map1 - 1, 1] += value
+                        signal[map1, map2 - map1 - 1 + diag, 1] += value
                     else:
                         start1 = ranges[fend1, 0]
                         start2 = ranges[fend2, 0]
                         stop1 = ranges[fend1, 1]
                         stop2 = ranges[fend2, 1]
-                        if start1 < start2:
-                            signal[start1, start2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
-                        if start1 < stop2:
-                            signal[start1, stop2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
+                        if start1 < start2 + diag:
+                            signal[start1, start2 - start1 - 1 + diag, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
+                        if start1 < stop2 + diag:
+                            signal[start1, stop2 - start1 - 1 + diag, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
                         for l in range(max(start1, start2) + 1, stop2):
-                            signal[start1, l - start1 - 1, 1] += value * overlap[fend1, 0]
-                        if stop1 < start2:
-                            signal[stop1, start2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
-                        if stop1 < stop2:
-                            signal[stop1, stop2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
+                            signal[start1, l - start1 - 1 + diag, 1] += value * overlap[fend1, 0]
+                        if stop1 < start2 + diag:
+                            signal[stop1, start2 - stop1 - 1 + diag, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
+                        if stop1 < stop2 + diag:
+                            signal[stop1, stop2 - stop1 - 1 + diag, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
                         for l in range(max(stop1, start2) + 1, stop2):
-                            signal[stop1, l - stop1 - 1, 1] += value * overlap[fend1, 1]
+                            signal[stop1, l - stop1 - 1 + diag, 1] += value * overlap[fend1, 1]
                         for l in range(start1 + 1, stop1):
-                            if l < start2:
-                                signal[l, start2 - l - 1, 1] += value * overlap[fend2, 0]
-                            if l < stop2:
-                                signal[l, stop2 - l - 1, 1] += value * overlap[fend2, 1]
+                            if l < start2 + diag:
+                                signal[l, start2 - l - 1 + diag, 1] += value * overlap[fend2, 0]
+                            if l < stop2 + diag:
+                                signal[l, stop2 - l - 1 + diag, 1] += value * overlap[fend2, 1]
                             for m in range(max(l, start2) + 1, stop2):
-                                signal[l, m - l - 1, 1] += value
-                for fend2 in range(((fend1 + startfend) / 2) * 2 + 4 - startfend, min(max_fend[fend1], num_fends)):
+                                signal[l, m - l - 1 + diag, 1] += value
+                for fend2 in range(((fend1 + startfend) / 2) * 2 + 4 - startfend, num_fends):
                     map2 = mapping[fend2]
-                    if map2 == -1 or map2 == map1:
+                    if map2 == -1 or mids[fend2] - mids[fend1] > maxdistance or (diag == 0 and map2 == map1):
                         continue
                      # give starting expected value
                     value = 1.0
@@ -253,46 +267,54 @@ def find_cis_compact_expected(
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                     if ranges is None:
-                        signal[map1, map2 - map1 - 1, 1] += value
+                        signal[map1, map2 - map1 - 1 + diag, 1] += value
                     else:
                         start1 = ranges[fend1, 0]
                         start2 = ranges[fend2, 0]
                         stop1 = ranges[fend1, 1]
                         stop2 = ranges[fend2, 1]
-                        if start1 < start2:
-                            signal[start1, start2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
-                        if start1 < stop2:
-                            signal[start1, stop2 - start1 - 1, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
+                        if start1 < start2 + diag:
+                            signal[start1, start2 - start1 - 1 + diag, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
+                        if start1 < stop2 + diag:
+                            signal[start1, stop2 - start1 - 1 + diag, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
                         for l in range(max(start1, start2) + 1, stop2):
-                            signal[start1, l - start1 - 1, 1] += value * overlap[fend1, 0]
-                        if stop1 < start2:
-                            signal[stop1, start2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
-                        if stop1 < stop2:
-                            signal[stop1, stop2 - stop1 - 1, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
+                            signal[start1, l - start1 - 1 + diag, 1] += value * overlap[fend1, 0]
+                        if stop1 < start2 + diag:
+                            signal[stop1, start2 - stop1 - 1 + diag, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
+                        if stop1 < stop2 + diag:
+                            signal[stop1, stop2 - stop1 - 1 + diag, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
                         for l in range(max(stop1, start2) + 1, stop2):
-                            signal[stop1, l - stop1 - 1, 1] += value * overlap[fend1, 1]
+                            signal[stop1, l - stop1 - 1 + diag, 1] += value * overlap[fend1, 1]
                         for l in range(start1 + 1, stop1):
-                            if l < start2:
-                                signal[l, start2 - l - 1, 1] += value * overlap[fend2, 0]
-                            if l < stop2:
-                                signal[l, stop2 - l - 1, 1] += value * overlap[fend2, 1]
+                            if l < start2 + diag:
+                                signal[l, start2 - l - 1 + diag, 1] += value * overlap[fend2, 0]
+                            if l < stop2 + diag:
+                                signal[l, stop2 - l - 1 + diag, 1] += value * overlap[fend2, 1]
                             for m in range(max(l, start2) + 1, stop2):
-                                signal[l, m - l - 1, 1] += value
+                                signal[l, m - l - 1 + diag, 1] += value
         else:
-            for j in range(num_bins - 1):
-                for k in range(j + 1, min(num_bins, j + max_bin + 1)):
-                    signal[j, k - j - 1, 1] += correction_sums[j] * correction_sums[k]
+            for j in range(num_bins - 1 + diag):
+                for k in range(j + 1 - diag, min(num_bins, j + max_bin + 1 - diag)):
+                    signal[j, k - j - 1 + diag, 1] += correction_sums[j] * correction_sums[k]
+            if diag == 1:
+                for j in range(num_bins):
+                    signal[j, 0, 1] /= 2.0
             for fend1 in range(num_fends - 1):
                 map1 = mapping[fend1]
                 if map1 == -1:
                     continue
                 map2 = mapping[fend1 + 1]
-                if map2 > map1:
-                    signal[map1, map2 - map1 - 1, 1] -= corrections[fend1] * corrections[fend1 + 1]
+                if diag == 1 or map2 > map1:
+                    signal[map1, map2 - map1 - 1 + diag, 1] -= corrections[fend1] * corrections[fend1 + 1]
                 if (fend1 + startfend) % 2 == 0 and fend1 + 3 < num_fends:
                     map2 = mapping[fend1 + 3]
-                    if map2 > map1:
-                        signal[map1, map2 - map1 - 1, 1] -= corrections[fend1] * corrections[fend1 + 3]
+                    if diag == 1 or map2 > map1:
+                        signal[map1, map2 - map1 - 1 + diag, 1] -= corrections[fend1] * corrections[fend1 + 3]
+            if diag == 1:
+                for fend1 in range(num_fends):
+                    map1 = mapping[fend1]
+                    if map1 != -1:
+                        signal[map1, 0, 1] -= corrections[fend1] * corrections[fend1] / 2.0
     return None
 
 
@@ -307,18 +329,20 @@ def find_cis_upper_expected(
         np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
         np.ndarray[DTYPE_int_t, ndim=1] mids,
         np.ndarray[DTYPE_t, ndim=2] parameters,
-        np.ndarray[DTYPE_int_t, ndim=1] max_fend not None,
         np.ndarray[DTYPE_t, ndim=2] signal not None,
-        np.ndarray[DTYPE_64_t, ndim=1] correction_sums,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
         np.ndarray[DTYPE_int_t, ndim=2] ranges,
         np.ndarray[DTYPE_t, ndim=2] overlap,
         double chrom_mean,
-        int startfend):
+        int startfend,
+        int maxdistance,
+        int diag):
     cdef long long int fend1, fend2, afend1, afend2, j, k, index, map1, map2, index2, num_parameters
     cdef long long int start1, start2, stop1, stop2, l, m, index1
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
-    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    cdef int diag2 = diag * 2
+    cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5)) - diag
     if not fend_indices is None:
         num_parameters = fend_indices.shape[1]
     else:
@@ -330,11 +354,14 @@ def find_cis_upper_expected(
                 if map1 == -1:
                     continue
                 k = 0
-                index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
+                index = map1 * (num_bins - 1) - map1 * (map1 + 1 - diag2) / 2 - 1 + diag
                 # find opposite strand adjacents, skipping same fragment and same strand adjacents
                 fend2 = fend1 + 2
-                map2 = mapping[fend2]
-                if map2 >= 0 and map2 != map1 and fend2 < max_fend[fend1]:
+                if fend2 >= num_fends:
+                    map2 = -1
+                else:
+                    map2 = mapping[fend2]
+                if map2 >= 0 and (diag == 1 or map2 != map1) and mids[fend2] - mids[fend1] <= maxdistance:
                      # give starting expected value
                     value = 1.0
                     # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
@@ -362,31 +389,31 @@ def find_cis_upper_expected(
                         start2 = ranges[fend2, 0]
                         stop1 = ranges[fend1, 1]
                         stop2 = ranges[fend2, 1]
-                        index1 = start1 * (num_bins - 1) - start1 * (start1 + 1) / 2 - 1
-                        if start1 < start2:
+                        index1 = start1 * (num_bins - 1) - start1 * (start1 + 1 - diag2) / 2 - 1 + diag
+                        if start1 < start2 + diag:
                             signal[index1 + start2, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
-                        if start1 < stop2:
+                        if start1 < stop2 + diag:
                             signal[index1 + stop2, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
                         for l in range(max(start1, start2) + 1, stop2):
                             signal[index1 + l, 1] += value * overlap[fend1, 0]
                         index1 = stop1 * (num_bins - 1) - stop1 * (stop1 + 1) / 2 - 1
-                        if stop1 < start2:
+                        if stop1 < start2 + diag:
                             signal[index1 + start2, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
-                        if stop1 < stop2:
+                        if stop1 < stop2 + diag:
                             signal[index1 + stop2, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
                         for l in range(max(stop1, start2) + 1, stop2):
                             signal[index1 + l, 1] += value * overlap[fend1, 1]
                         for l in range(start1 + 1, stop1):
                             index1 = l * (num_bins - 1) - l * (l + 1) / 2 - 1
-                            if l < start2:
+                            if l < start2 + diag:
                                 signal[index1 + start2, 1] += value * overlap[fend2, 0]
-                            if l < stop2:
+                            if l < stop2 + diag:
                                 signal[index1 + stop2, 1] += value * overlap[fend2, 1]
                             for m in range(max(l, start2) + 1, stop2):
                                 signal[index1 + m, 1] += value
-                for fend2 in range(((fend1 + startfend) / 2) * 2 + 4 - startfend, min(max_fend[fend1], num_fends)):
+                for fend2 in range(((fend1 + startfend) / 2) * 2 + 4 - startfend, num_fends):
                     map2 = mapping[fend2]
-                    if map2 == -1 or map2 == map1:
+                    if map2 == -1 or mids[fend2] - mids[fend1] > maxdistance or (diag == 0 and map2 == map1):
                         continue
                      # give starting expected value
                     value = 1.0
@@ -416,44 +443,54 @@ def find_cis_upper_expected(
                         stop1 = ranges[fend1, 1]
                         stop2 = ranges[fend2, 1]
                         index1 = start1 * (num_bins - 1) - start1 * (start1 + 1) / 2 - 1
-                        if start1 < start2:
+                        if start1 < start2 + diag:
                             signal[index1 + start2, 1] += value * overlap[fend1, 0] * overlap[fend2, 0]
-                        if start1 < stop2:
+                        if start1 < stop2 + diag:
                             signal[index1 + stop2, 1] += value * overlap[fend1, 0] * overlap[fend2, 1]
                         for l in range(max(start1, start2) + 1, stop2):
                             signal[index1 + l, 1] += value * overlap[fend1, 0]
                         index1 = stop1 * (num_bins - 1) - stop1 * (stop1 + 1) / 2 - 1
-                        if stop1 < start2:
+                        if stop1 < start2 + diag:
                             signal[index1 + start2, 1] += value * overlap[fend1, 1] * overlap[fend2, 0]
-                        if stop1 < stop2:
+                        if stop1 < stop2 + diag:
                             signal[index1 + stop2, 1] += value * overlap[fend1, 1] * overlap[fend2, 1]
                         for l in range(max(stop1, start2) + 1, stop2):
                             signal[index1 + l, 1] += value * overlap[fend1, 1]
                         for l in range(start1 + 1, stop1):
                             index1 = l * (num_bins - 1) - l * (l + 1) / 2 - 1
-                            if l < start2:
+                            if l < start2 + diag:
                                 signal[index1 + start2, 1] += value * overlap[fend2, 0]
-                            if l < stop2:
+                            if l < stop2 + diag:
                                 signal[index1 + stop2, 1] += value * overlap[fend2, 1]
                             for m in range(max(l, start2) + 1, stop2):
                                 signal[index1 + m, 1] += value
         else:
-            for j in range(num_bins - 1):
-                index = j * (num_bins - 1) - j * (j + 1) / 2 - 1
-                for k in range(j + 1, num_bins):
+            for j in range(num_bins - 1 + diag):
+                index = j * (num_bins - 1) - j * (j + 1 - diag2) / 2 - 1 + diag
+                for k in range(j + 1 - diag, num_bins):
                     signal[index + k, 1] += correction_sums[j] * correction_sums[k]
+            if diag == 1:
+                for j in range(num_bins):
+                    index = j * num_bins - j * (j - 1) / 2
+                    signal[index, 1] /= 2.0
             for fend1 in range(num_fends - 1):
                 map1 = mapping[fend1]
                 if map1 == -1:
                     continue
-                index = map1 * (num_bins - 1) - map1 * (map1 + 1) / 2 - 1
+                index = map1 * (num_bins - 1) - map1 * (map1 + 1 - diag2) / 2 - 1 + diag
                 map2 = mapping[fend1 + 1]
-                if map2 > map1:
+                if diag == 1 or map2 > map1:
                     signal[index + map2, 1] -= corrections[fend1] * corrections[fend1 + 1]
                 if (fend1 + startfend) % 2 == 0 and fend1 + 3 < num_fends:
                     map2 = mapping[fend1 + 3]
-                    if map2 > map1:
+                    if diag == 1 or map2 > map1:
                         signal[index + map2, 1] -= corrections[fend1] * corrections[fend1 + 3]
+            if diag == 1:
+                for fend1 in range(num_fends):
+                    map1 = mapping[fend1]
+                    if map1 != -1:
+                        index = fend1 * num_bins - fend1 * (fend1 - 1) / 2
+                        signal[index, 1] -= corrections[fend1] * corrections[fend1] / 2.0
     return None
 
 

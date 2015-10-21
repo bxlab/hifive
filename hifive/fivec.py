@@ -48,6 +48,7 @@ class FiveC(object):
     def __init__(self, filename, mode='r', silent=False):
         """Create a FiveC object."""
         self.file = os.path.abspath(filename)
+        self.filetype = 'fivec_project'
         self.silent = silent        
         self.binning_corrections = None
         self.binning_correction_indices = None

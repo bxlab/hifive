@@ -42,6 +42,20 @@ class HiCData(object):
         self.file = os.path.abspath(filename)
         self.silent = silent
         self.history = ''
+        self.filetype = 'hic_data'
+        self.stats = {
+            'total_reads': 0,
+            'valid_cis_reads': 0,
+            'valid_trans_reads': 0,
+            'valid_cis_pairs': 0,
+            'valid_trans_pairs': 0,
+            'pcr_duplicates': 0,
+            'out_of_bounds': 0,
+            'insert_size': 0,
+            'same_fragment': 0,
+            'failed_cut': 0,
+            'chr_not_in_fends': 0,
+        }
         if mode != "w":
             self.load()
         return None
@@ -69,6 +83,12 @@ class HiCData(object):
         for key in self.__dict__.keys():
             if key in ['file', 'chr2int', 'fends', 'silent', 'cuts']:
                 continue
+            elif key == 'stats':
+                stats = []
+                for name, count in self.stats.iteritems():
+                    stats.append((name, count))
+                stats = numpy.array(stats, dtype=numpy.dtype([('name', 'S20'), ('count', numpy.int32)]))
+                datafile.create_dataset(name='stats', data=stats)
             elif self[key] is None:
                 continue
             elif isinstance(self[key], numpy.ndarray):
@@ -88,7 +108,12 @@ class HiCData(object):
         """
         datafile = h5py.File(self.file, 'r')
         for key in datafile.keys():
-            self[key] = numpy.copy(datafile[key])
+            if key == 'stats':
+                stats = datafile[key][...]
+                for i in range(stats.shape[0]):
+                    self.stats[stats['name'][i]] = stats['count'][i]
+            else:
+                self[key] = numpy.copy(datafile[key])
         for key in datafile['/'].attrs.keys():
             self[key] = datafile['/'].attrs[key]
         # ensure fend h5dict exists
@@ -121,7 +146,7 @@ class HiCData(object):
                 self.fends['fends']['stop'][chr_indices[i + 1] - 1]])
         return None
 
-    def load_data_from_raw(self, fendfilename, filelist, maxinsert):
+    def load_data_from_raw(self, fendfilename, filelist, maxinsert, skip_duplicate_filtering=False):
         """
         Read interaction counts from a text file(s) and place in h5dict.
 
@@ -137,6 +162,8 @@ class HiCData(object):
         :type filelist: list
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
+        :param skip_duplicate_filtering: Do not remove PCR duplicates. This allows much lower memoer requirements since files can be processed in chunks.
+        :type skip_duplicate_filtering: bool.
         :returns: None
 
         :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
@@ -149,7 +176,7 @@ class HiCData(object):
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_data_from_raw(fendfilename='%s', filelist=%s, maxinsert=%i) - " % (fendfilename, str(filelist), maxinsert)
+        self.history += "HiCData.load_data_from_raw(fendfilename='%s', filelist=%s, maxinsert=%i, skip_duplicate_filtering=%s) - " % (fendfilename, str(filelist), maxinsert, str(skip_duplicate_filtering))
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
@@ -166,9 +193,16 @@ class HiCData(object):
         chroms = self.fends['chromosomes'][...]
         for i, j in enumerate(chroms):
             self.chr2int[j] = i
+        self.insert_distribution = numpy.zeros((182, 2), dtype=numpy.int32)
+        self.insert_distribution[1:, 1] = numpy.round(numpy.exp(numpy.linspace(3.8, 12.8, 181))).astype(numpy.int32)
         # load data from all files, skipping if chromosome not in the fend file.
         if isinstance(filelist, str):
             filelist = [filelist]
+        raw_filelist = []
+        for filename in filelist:
+            raw_filelist.append("%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                                           os.path.dirname(self.file)), os.path.basename(filename)))
+        self.raw_filelist = ",".join(raw_filelist)
         fend_pairs = []
         for i in range(len(chroms)):
             fend_pairs.append([])
@@ -188,12 +222,15 @@ class HiCData(object):
                 continue
             if not self.silent:
                 print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
+            a = 0
             input = open(fname, 'r', 1)
+            new_reads = 0
             for line in input:
                 temp = line.strip('\n').split('\t')
-                temp[0].strip('chr')
-                temp[3].strip('chr')
+                temp[0] = temp[0].strip('chr')
+                temp[3] = temp[3].strip('chr')
                 if temp[0] not in self.chr2int or temp[3] not in self.chr2int:
+                    self.stats['chr_not_in_fends'] += 1
                     continue
                 chrint1 = self.chr2int[temp[0]]
                 chrint2 = self.chr2int[temp[3]]
@@ -205,37 +242,110 @@ class HiCData(object):
                             start1 = -start1
                         if temp[5] == '-':
                             start2 = -start2
-                        data[chrint2][chrint1][(start1, start2)] = None
+                        key = (start1, start2)
+                        if key not in data[chrint2][chrint1]:
+                            if skip_duplicate_filtering:
+                                data[chrint2][chrint1][key] = 1
+                            else:
+                                data[chrint2][chrint1][key] = None
+                        else:
+                            if skip_duplicate_filtering:
+                                data[chrint2][chrint1][key] += 1
+                            else:
+                                self.stats['pcr_duplicates'] += 1
                     else:
                         if temp[2] == '-':
                             start1 = -start1
                         if temp[5] == '-':
                             start2 = -start2
-                        data[chrint1][chrint2][(start2, start1)] = None
+                        key = (start2, start1)
+                        if key not in data[chrint1][chrint2]:
+                            if skip_duplicate_filtering:
+                                data[chrint1][chrint2][key] = 1
+                            else:
+                                data[chrint1][chrint2][key] = None
+                        else:
+                            if skip_duplicate_filtering:
+                                data[chrint1][chrint2][key] += 1
+                            else:
+                                self.stats['pcr_duplicates'] += 1
                 elif chrint1 < chrint2:
                     if temp[2] == '-':
                         start1 = -start1
                     if temp[5] == '-':
                         start2 = -start2
-                    data[chrint2][chrint1][(start1, start2)] = None
+                    key = (start1, start2)
+                    if key not in data[chrint2][chrint1]:
+                        if skip_duplicate_filtering:
+                            data[chrint2][chrint1][key] = 1
+                        else:
+                            data[chrint2][chrint1][key] = None
+                    else:
+                        if skip_duplicate_filtering:
+                            data[chrint2][chrint1][key] += 1
+                        else:
+                            self.stats['pcr_duplicates'] += 1
                 else:
                     if temp[2] == '-':
                         start1 = -start1
                     if temp[5] == '-':
                         start2 = -start2
-                    data[chrint1][chrint2][(start2, start1)] = None
+                    key = (start2, start1)
+                    if key not in data[chrint1][chrint2]:
+                        if skip_duplicate_filtering:
+                            data[chrint1][chrint2][key] = 1
+                        else:
+                            data[chrint1][chrint2][key] = None
+                    else:
+                        if skip_duplicate_filtering:
+                            data[chrint1][chrint2][key] += 1
+                        else:
+                            self.stats['pcr_duplicates'] += 1
+                a += 1
+                if skip_duplicate_filtering and a >= 10000000:
+                    for i in range(len(data)):
+                        for j in range(len(data[i])):
+                            temp = numpy.zeros((len(data[i][j]), 3), dtype=numpy.int32)
+                            k = 0
+                            for key, count in data[i][j].iteritems():
+                                temp[k, :] = (key[0], key[1], count)
+                                self.stats['pcr_duplicates'] += count - 1
+                                k += 1
+                            data[i][j] = temp
+                            new_reads += numpy.sum(data[i][j][:, 2])
+                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    if not self.silent:
+                        print >> sys.stderr, ("\r%s\rLoading data from %s...") % (' '*50, fname.split('/')[-1]),
+                    for i in range(len(data)):
+                        for j in range(len(data[i])):
+                            data[i][j] = {}
+                    a = 0
             input.close()
-            new_reads = 0
-            for i in range(len(data)):
-                for j in range(len(data[i])):
-                    data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
-                    new_reads += data[i][j].shape[0]
-            if not self.silent:
-                print >> sys.stderr, ("%i validly-mapped reads pairs loaded.\n") % (new_reads),
+            if not skip_duplicate_filtering or a > 0:
+                for i in range(len(data)):
+                    for j in range(len(data[i])):
+                        if skip_duplicate_filtering:
+                            temp = numpy.zeros((len(data[i][j]), 3), dtype=numpy.int32)
+                            k = 0
+                            for key, count in data[i][j].iteritems():
+                                temp[k, :] = (key[0], key[1], count)
+                                self.stats['pcr_duplicates'] += count - 1
+                                k += 1
+                            data[i][j] = temp
+                            new_reads += numpy.sum(data[i][j][:, 2])
+                        else:
+                            data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
+                            new_reads += data[i][j].shape[0]
+                # map data to fends, filtering as needed
+                if new_reads > 0 and (a > 0 or not skip_duplicate_filtering):
+                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
             total_reads += new_reads
-            # map data to fends, filtering as needed
-            if new_reads > 0:
-                self._find_fend_pairs(data, fend_pairs)
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\r%i validly-mapped reads pairs loaded.\n") % (' ' * 50, new_reads),
+        if skip_duplicate_filtering:
+            self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends']
+        else:
+            self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends'] + self.stats['pcr_duplicates']
         self._clean_fend_pairs(fend_pairs)
         total_fend_pairs = 0
         for i in range(len(fend_pairs)):
@@ -254,7 +364,7 @@ class HiCData(object):
         self.history += 'Success\n'
         return None
 
-    def load_data_from_bam(self, fendfilename, filelist, maxinsert):
+    def load_data_from_bam(self, fendfilename, filelist, maxinsert, skip_duplicate_filtering=False):
         """
         Read interaction counts from pairs of BAM-formatted alignment file(s) and place in h5dict.
 
@@ -264,6 +374,8 @@ class HiCData(object):
         :type filelist: list of mapped sequencing runs. Each run should be a list of the first and second read end bam files ([[run1_1, run1_2], [run2_1, run2_2]...])
         :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
         :type maxinsert: int.
+        :param skip_duplicate_filtering: Do not remove PCR duplicates. This allows much lower memoer requirements since files can be processed in chunks.
+        :type skip_duplicate_filtering: bool.
         :returns: None
 
         :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
@@ -276,7 +388,7 @@ class HiCData(object):
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_data_from_bam(fendfilename='%s', filelist=%s, maxinsert=%i) - " % (fendfilename, str(filelist), maxinsert)
+        self.history += "HiCData.load_data_from_bam(fendfilename='%s', filelist=%s, maxinsert=%i, skip_duplicate_filtering=%s) - " % (fendfilename, str(filelist), maxinsert, str(skip_duplicate_filtering))
         if 'pysam' not in sys.modules.keys():
             if not self.silent:
                 print >> sys.stderr, ("The pysam module must be installed to use this function.")
@@ -297,9 +409,18 @@ class HiCData(object):
         chroms = self.fends['chromosomes'][...]
         for i, j in enumerate(chroms):
             self.chr2int[j] = i
+        self.insert_distribution = numpy.zeros((92, 2), dtype=numpy.int32)
+        self.insert_distribution[1:, 1] = numpy.round(numpy.exp(numpy.linspace(3.8, 8.3, 91))).astype(numpy.int32)
         # load data from all files, skipping if chromosome not in the fend file.
         if isinstance(filelist[0], str):
             filelist = [[filelist[0], filelist[1]]]
+        bam_filelist = []
+        for filenames in filelist:
+            bam_filelist.append("%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filenames[0])),
+                                           os.path.dirname(self.file)), os.path.basename(filenames[0])))
+            bam_filelist.append("%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filenames[1])),
+                                           os.path.dirname(self.file)), os.path.basename(filenames[1])))
+        self.bam_filelist = ",".join(bam_filelist)
         total_reads = 0
         fend_pairs = []
         for i in range(len(chroms)):
@@ -339,12 +460,12 @@ class HiCData(object):
                     continue
                 # if chromosome not in chr2int, skip
                 if read.tid not in idx2int:
+                    self.stats['chr_not_in_fends'] += 1
                     continue
                 if read.is_reverse:
                     end = -(read.pos + len(read.seq))
                 else:
                     end = read.pos
-
                 unpaired[read.qname] = (idx2int[read.tid], end)
             input.close()
             if not self.silent:
@@ -363,44 +484,122 @@ class HiCData(object):
                 chrom = input.header['SQ'][i]['SN'].strip('chr')
                 if chrom in self.chr2int:
                     idx2int[i] = self.chr2int[chrom]
+            a = 0
+            new_reads = 0
             for read in input.fetch(until_eof=True):
                 # Only consider reads with an alignment
                 if read.is_unmapped:
                     continue
+                if read.qname not in unpaired:
+                    continue
                 # if chromosome not in chr2int, skip
                 if read.tid not in idx2int:
+                    self.stats['chr_not_in_fends'] += 1
                     continue
                 if read.is_reverse:
                     start2 = -(read.pos + len(read.seq))
                 else:
                     start2 = read.pos
-                if read.qname not in unpaired:
-                    continue
                 chr1, start1 = unpaired[read.qname]
                 chr2 = idx2int[read.tid]
                 if chr1 == chr2:
                     if abs(start1) < abs(start2):
-                        data[chr2][chr1][(start1, start2)] = None
+                        key = (start1, start2)
+                        if key not in data[chr2][chr1]:
+                            if skip_duplicate_filtering:
+                                data[chr2][chr1][(start1, start2)] = 1
+                            else:
+                                data[chr2][chr1][(start1, start2)] = None
+                        else:
+                            if skip_duplicate_filtering:
+                                data[chr2][chr1][(start1, start2)] += 1
+                            else:
+                                self.stats['pcr_duplicates'] += 1
                     else:
-                        data[chr1][chr2][(start2, start1)] = None
+                        key = (start2, start1)
+                        if key not in data[chr1][chr2]:
+                            if skip_duplicate_filtering:
+                                data[chr1][chr2][(start2, start1)] = 1
+                            else:
+                                data[chr1][chr2][(start2, start1)] = None
+                        else:
+                            if skip_duplicate_filtering:
+                                data[chr1][chr2][(start2, start1)] += 1
+                            else:
+                                self.stats['pcr_duplicates'] += 1
                 elif chr1 < chr2:
-                    data[chr2][chr1][(start1, start2)] = None
+                    key = (start1, start2)
+                    if key not in data[chr2][chr1]:
+                        if skip_duplicate_filtering:
+                            data[chr2][chr1][(start1, start2)] = 1
+                        else:
+                            data[chr2][chr1][(start1, start2)] = None
+                    else:
+                        if skip_duplicate_filtering:
+                            data[chr2][chr1][(start1, start2)] += 1
+                        else:
+                            self.stats['pcr_duplicates'] += 1
                 else:
-                    data[chr1][chr2][(start2, start1)] = None
+                    key = (start2, start1)
+                    if key not in data[chr1][chr2]:
+                        if skip_duplicate_filtering:
+                            data[chr1][chr2][(start2, start1)] = 1
+                        else:
+                            data[chr1][chr2][(start2, start1)] = None
+                    else:
+                        if skip_duplicate_filtering:
+                            data[chr1][chr2][(start2, start1)] = 1
+                        else:
+                            self.stats['pcr_duplicates'] += 1
+                a += 1
+                if skip_duplicate_filtering and a >= 10000000:
+                    for i in range(len(data)):
+                        for j in range(len(data[i])):
+                            temp = numpy.zeros((len(data[i][j]),3), dtype=numpy.int32)
+                            k = 0
+                            for key, count in data[i][j].iteritems():
+                                temp[k, :] = (key[0], key[1], count)
+                                self.stats['pcr_duplicates'] += count - 1
+                                k += 1
+                            data[i][j] = temp
+                            new_reads += numpy.sum(data[i][j][:, 2])
+                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    if not self.silent:
+                        print >> sys.stderr, ("\r%s\rLoading data from %s...") % (' '*50, filepair[1].split('/')[-1]),
+                    for i in range(len(data)):
+                        for j in range(len(data[i])):
+                            data[i][j] = {}
+                    a = 0
             input.close()
             del unpaired
-            new_reads = 0
-            for i in range(len(data)):
-                for j in range(len(data[i])):
-                    data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
-                    new_reads += data[i][j].shape[0]
+            if a > 0 or not skip_duplicate_filtering:
+                for i in range(len(data)):
+                    for j in range(len(data[i])):
+                        if skip_duplicate_filtering:
+                                temp = numpy.zeros((len(data[i][j]),3), dtype=numpy.int32)
+                                k = 0
+                                for key, count in data[i][j].iteritems():
+                                    temp[k, :] = (key[0], key[1], count)
+                                    self.stats['pcr_duplicates'] += count - 1
+                                    k += 1
+                                data[i][j] = temp
+                                new_reads += numpy.sum(data[i][j][:, 2])
+                        else:
+                            data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
+                            new_reads += data[i][j].shape[0]
+                if new_reads > 0 and (a > 0 or not skip_duplicate_filtering):
+                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
             if not self.silent:
-                print >> sys.stderr, ("Done\nRead %i validly-mapped read pairs.\n") % (new_reads),
+                print >> sys.stderr, ("\r%s\rRead %i validly-mapped read pairs.\n") % (' ' * 50, new_reads),
             total_reads += new_reads
             # map data to fends, filtering as needed
             if new_reads > 0:
                 self._find_fend_pairs(data, fend_pairs)
             del data
+        if skip_duplicate_filtering:
+            self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends']
+        else:
+            self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends'] + self.stats['pcr_duplicates']
         self._clean_fend_pairs(fend_pairs)
         total_fend_pairs = 0
         for i in range(len(fend_pairs)):
@@ -467,7 +666,10 @@ class HiCData(object):
             return None
         if not self.silent:
             print >> sys.stderr, ("Loading data from mat file..."),
+        self.matfile = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                                  os.path.dirname(self.file)), os.path.basename(filename))
         input = open(filename, 'r')
+        total_reads = 0
         for line in input:
             temp = line.strip('\n').split('\t')
             try:
@@ -475,17 +677,20 @@ class HiCData(object):
             except ValueError:
                 continue
             fend2 = int(temp[1]) - 1
+            count = int(temp[2])
+            total_reads += count
             chr1 = numpy.searchsorted(chr_indices, fend1, side='right') - 1
             chr2 = numpy.searchsorted(chr_indices, fend2, side='right') - 1
             if chr2 < chr1:
-                fend_pairs[chr1][chr2][(fend2 - chr_indices[chr2], fend1 - chr_indices[chr1])] = int(temp[2])
+                fend_pairs[chr1][chr2][(fend2 - chr_indices[chr2], fend1 - chr_indices[chr1])] = count
             elif chr1 < chr2:
-                fend_pairs[chr2][chr1][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = int(temp[2])
+                fend_pairs[chr2][chr1][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = count
             elif fend1 < fend2:
-                fend_pairs[chr2][chr1][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = int(temp[2])
+                fend_pairs[chr2][chr1][(fend1 - chr_indices[chr1], fend2 - chr_indices[chr2])] = count
             else:
-                fend_pairs[chr1][chr2][(fend2 - chr_indices[chr2], fend1 - chr_indices[chr1])] = int(temp[2])
+                fend_pairs[chr1][chr2][(fend2 - chr_indices[chr2], fend1 - chr_indices[chr1])] = count
         input.close()
+        self.stats['total_reads'] = total_reads
         self._clean_fend_pairs(fend_pairs)
         total_fend_pairs = 0
         for i in range(len(fend_pairs)):
@@ -503,7 +708,7 @@ class HiCData(object):
         self.history += "Success\n"
         return None
 
-    def _find_fend_pairs(self, data, fend_pairs):
+    def _find_fend_pairs(self, data, fend_pairs, skip_duplicate_filtering=False):
         """Return array with lower fend, upper fend, and count for pair."""
         if 'cuts' not in self.__dict__.keys():
             self._find_cut_sites()
@@ -515,7 +720,6 @@ class HiCData(object):
                     continue
                 mapped_fends = numpy.empty((data[i][j].shape[0], 2), dtype=numpy.int32)
                 distances = numpy.zeros(data[i][j].shape[0], dtype=numpy.int32)
-                distances.fill(self.maxinsert + 1)
                 signs = numpy.minimum(0, numpy.sign(data[i][j]))
                 data[i][j] = numpy.abs(data[i][j])
                 if not self.silent:
@@ -524,23 +728,42 @@ class HiCData(object):
                 mapped_fends[:, 1] = numpy.searchsorted(self.cuts[i], data[i][j][:, 1])
                 valid = numpy.where((mapped_fends[:, 0] > 0) * (mapped_fends[:, 0] < self.cuts[j].shape[0]) *
                                     (mapped_fends[:, 1] > 0) * (mapped_fends[:, 1] < self.cuts[i].shape[0]))[0]
+                if skip_duplicate_filtering:
+                    self.stats['out_of_bounds'] += numpy.sum(data[i][j][:, 2]) - numpy.sum(data[i][j][valid, 2])
+                else:
+                    self.stats['out_of_bounds'] += mapped_fends.shape[0] - valid.shape[0]
                 # find distance from cutsite to mapped coordinate
                 distances[valid] = (numpy.abs(data[i][j][valid, 0] - self.cuts[j][mapped_fends[valid, 0] +
                                     signs[valid, 0]]) + numpy.abs(data[i][j][valid, 1] -
                                     self.cuts[i][mapped_fends[valid, 1] + signs[valid, 1]]))
+                # add distances to distance distribution counts
+                self.insert_distribution[:, 0] += numpy.bincount(numpy.searchsorted(self.insert_distribution[1:, 1],
+                    distances[valid], side='right'), minlength=self.insert_distribution.shape[0])
                 # remove fends with too great an insert distance
-                valid = numpy.where(distances <= self.maxinsert)[0]
+                valid1 = numpy.where(distances[valid] <= self.maxinsert)[0]
+                if skip_duplicate_filtering:
+                    self.stats['insert_size'] += (numpy.sum(data[i][j][valid, 2]) -
+                                                  numpy.sum(data[i][j][valid[valid1], 2]))
+                else:
+                    self.stats['insert_size'] += valid.shape[0] - valid1.shape[0]
+                valid = valid[valid1]
                 # convert from fragments to fends
-                mapped_fends[valid, :2] = mapped_fends[valid, :2] * 2 - 1 + signs[valid, :]
+                mapped_fends[valid, :2] = mapped_fends[valid, :2] * 2 - 1 + signs[valid, :2]
                 if not self.silent:
                     print >> sys.stderr, ("\r%s\rCounting fend pairs...") % (' ' * 50),
                 for k in valid:
                     key = (mapped_fends[k, 0], mapped_fends[k, 1])
                     if key not in fend_pairs[i][j]:
-                        fend_pairs[i][j][key] = 1
+                        if skip_duplicate_filtering:
+                            fend_pairs[i][j][key] = data[i][j][k, 2]
+                        else:
+                            fend_pairs[i][j][key] = 1
                     else:
-                        fend_pairs[i][j][key] += 1
-        if not self.silent:
+                        if skip_duplicate_filtering:
+                            fend_pairs[i][j][key] += data[i][j][k, 2]
+                        else:
+                            fend_pairs[i][j][key] += 1
+        if not self.silent and not skip_duplicate_filtering:
             print >> sys.stderr, ("Done\n"),
         return None
 
@@ -552,38 +775,48 @@ class HiCData(object):
                 # same fend
                 name = (j, j)
                 if name in fend_pairs[i][i]:
+                    self.stats['same_fragment'] += fend_pairs[i][i][name]
                     del fend_pairs[i][i][name]
                 name = (j + 1, j + 1)
                 if name in fend_pairs[i][i]:
+                    self.stats['same_fragment'] += fend_pairs[i][i][name]
                     del fend_pairs[i][i][name]
                 # same fend
                 name = (j, j + 1)
                 if name in fend_pairs[i][i]:
+                    self.stats['same_fragment'] += fend_pairs[i][i][name]
                     del fend_pairs[i][i][name]
                 # same fend
                 name = (j + 1, j)
                 if name in fend_pairs[i][i]:
+                    self.stats['same_fragment'] += fend_pairs[i][i][name]
                     del fend_pairs[i][i][name]
                 # adjacent fends, opposite strands
                 name = (j, j + 3)
                 if name in fend_pairs[i][i]:
+                    self.stats['failed_cut'] += fend_pairs[i][i][name]
                     del fend_pairs[i][i][name]
                 name = (j + 1, j + 2)
                 if name in fend_pairs[i][i]:
+                    self.stats['failed_cut'] += fend_pairs[i][i][name]
                     del fend_pairs[i][i][name]
             j = chr_indices[i + 1] - chr_indices[i] - 2
             # same fend
             name = (j, j)
             if name in fend_pairs[i][i]:
+                self.stats['same_fragment'] += fend_pairs[i][i][name]
                 del fend_pairs[i][i][name]
             name = (j + 1, j + 1)
             if name in fend_pairs[i][i]:
+                self.stats['same_fragment'] += fend_pairs[i][i][name]
                 del fend_pairs[i][i][name]
             name = (j, j + 1)
             if name in fend_pairs[i][i]:
+                self.stats['same_fragment'] += fend_pairs[i][i][name]
                 del fend_pairs[i][i][name]
             name = (j + 1, j)
             if name in fend_pairs[i][i]:
+                self.stats['same_fragment'] += fend_pairs[i][i][name]
                 del fend_pairs[i][i][name]
         return None
 
@@ -596,6 +829,7 @@ class HiCData(object):
         cis_count = 0
         for i in range(len(fend_pairs)):
             cis_count += len(fend_pairs[i][i])
+        self.stats['valid_cis_pairs'] = cis_count
         # create cis array
         self.cis_data = numpy.empty((cis_count, 3), dtype=numpy.int32)
         pos = 0
@@ -614,11 +848,13 @@ class HiCData(object):
             self.cis_data[chr_start:pos, :] = self.cis_data[order + chr_start, :]
             self.cis_data[chr_start:pos, :2] += chr_indices[i]
             del order
+        self.stats['valid_cis_reads'] += numpy.sum(self.cis_data[:, 2])
         # determine number of trans pairs
         trans_count = 0
         for i in range(len(fend_pairs)):
             for j in range(i + 1, len(fend_pairs)):
                 trans_count += len(fend_pairs[j][i])
+        self.stats['valid_trans_pairs'] = trans_count
         # create cis array
         self.trans_data = numpy.empty((trans_count, 3), dtype=numpy.int32)
         pos = 0
@@ -639,6 +875,7 @@ class HiCData(object):
                 self.trans_data[chr_start:pos, 0] += chr_indices[i]
                 self.trans_data[chr_start:pos, 1] += chr_indices[j]
                 del order
+        self.stats['valid_trans_reads'] += numpy.sum(self.trans_data[:, 2])
         # create data indices
         if self.cis_data.shape[0] > 0:
             cis_indices = numpy.r_[0, numpy.bincount(self.cis_data[:, 0],
@@ -656,6 +893,15 @@ class HiCData(object):
             self.trans_indices = trans_indices
         else:
             self.trans_data = None
+        # create interaction partner profiles for quality reporting
+        if self.cis_data is not None:
+            fend_profiles = numpy.bincount(self.cis_data[:, 0], minlength=chr_indices[-1])
+            fend_profiles += numpy.bincount(self.cis_data[:, 1], minlength=chr_indices[-1])
+            self.cis_interaction_distribution = numpy.bincount(fend_profiles)
+        if self.trans_data is not None:
+            fend_profiles = numpy.bincount(self.trans_data[:, 0], minlength=chr_indices[-1])
+            fend_profiles += numpy.bincount(self.trans_data[:, 1], minlength=chr_indices[-1])
+            self.trans_interaction_distribution = numpy.bincount(fend_profiles)
         if not self.silent:
             print >> sys.stderr, ("Done  %i cis reads, %i trans reads\n") % (numpy.sum(self.cis_data[:, 2]),
                                                                              numpy.sum(self.trans_data[:, 2])),
