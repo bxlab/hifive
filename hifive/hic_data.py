@@ -860,21 +860,22 @@ class HiCData(object):
         pos = 0
         # fill in each chromosome's trans interactions
         for i in range(len(fend_pairs) - 1):
+            chr1_start = pos
             for j in range(i + 1, len(fend_pairs)):
                 if len(fend_pairs[j][i]) == 0:
                     continue
-                chr_start = pos
+                chr2_start = pos
                 for key, count in fend_pairs[j][i].iteritems():
                     self.trans_data[pos, :2] = key
                     self.trans_data[pos, 2] = count
                     pos += 1
                 fend_pairs[j][i] = None
-                # sort interactions
-                order = numpy.lexsort((self.trans_data[chr_start:pos, 1], self.trans_data[chr_start:pos, 0]))
-                self.trans_data[chr_start:pos, :] = self.trans_data[order + chr_start, :]
-                self.trans_data[chr_start:pos, 0] += chr_indices[i]
-                self.trans_data[chr_start:pos, 1] += chr_indices[j]
-                del order
+                self.trans_data[chr2_start:pos, 0] += chr_indices[i]
+                self.trans_data[chr2_start:pos, 1] += chr_indices[j]
+            # sort interactions
+            order = numpy.lexsort((self.trans_data[chr1_start:pos, 1], self.trans_data[chr1_start:pos, 0]))
+            self.trans_data[chr1_start:pos, :] = self.trans_data[order + chr1_start, :]
+            del order
         self.stats['valid_trans_reads'] += numpy.sum(self.trans_data[:, 2])
         # create data indices
         if self.cis_data.shape[0] > 0:

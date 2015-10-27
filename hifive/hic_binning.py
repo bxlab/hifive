@@ -1605,12 +1605,16 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                         startfend2,
                         stopfend2 - startfend2,
                         1)
+            data[:num_data, :] = data[numpy.lexsort((data[:num_data, 1], data[:num_data, 0])), :]
         else:
             start_index = hic.data['trans_indices'][startfend]
             stop_index = hic.data['trans_indices'][stopfend]
             data = hic.data['trans_data'][start_index:stop_index, :]
+            data = data[numpy.where((data[:, 1] >= startfend2) * (data[:, 1] < stopfend2))[0], :]
             data_indices = hic.data['trans_indices'][startfend:(stopfend + 1)]
             data_indices -= data_indices[0]
+            for i in range(1, data_indices.shape[0]):
+                data_indices[i] += data_indices[i - 1]
             num_data = _hic_binning.remap_mrh_data(
                         data,
                         data_indices,
@@ -1638,8 +1642,6 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                     startfend,
                     stopfend - startfend,
                     0)
-    if trans and chrint2 < chrint:
-        data = data[numpy.lexsort((data[:, 1], data[:, 0])), :]
     data_indices = numpy.r_[0, numpy.bincount(data[:num_data, 0], minlength=valid.shape[0])].astype(numpy.int64)
     for i in range(1, data_indices.shape[0]):
         data_indices[i] += data_indices[i - 1]
