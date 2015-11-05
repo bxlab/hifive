@@ -9,6 +9,7 @@ import hic
 import fivec_binning
 import hic_binning
 import plotting
+import tads
 #import modeling
 
 from hic import HiC

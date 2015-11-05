@@ -179,10 +179,12 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             num_bins = (stop - start) / binsize
         # find binbounds
         binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
-        for i, j in enumerate(mapping):
-            if binbounds[j, 0] == -1:
-                binbounds[j, 0] = mids[i]
-            binbounds[j, 1] = mids[i] + 1
+        binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
+        binbounds[:, 1] = numpy.arange(1, num_bins + 1) * binsize + start
+        #for i, j in enumerate(mapping):
+        #    if binbounds[j, 0] == -1:
+        #        binbounds[j, 0] = mids[i]
+        #    binbounds[j, 1] = mids[i] + 1
     # if correction is requested, determine the appropriate type
     distance_parameters = None
     chrom_mean = 0.0
@@ -210,7 +212,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             corrections = numpy.zeros(stopfend - startfend, dtype=numpy.float32)
             corrections[valid] = hic.corrections[startfend:stopfend][valid]
             # if only fend corrections are requested, we can use a shortcut for finding expected values
-            if (binsize > 0 and maxdistance == 0 and datatype == 'fends' and
+            if (binsize > 0 and maxdistance == 0 and datatype == 'fend' and
                 hic.normalization in ['express', 'probability'] and
                 not proportional):
                 correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid],
@@ -314,6 +316,15 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         if not silent:
             print >> sys.stderr, ("Done\n"),
         return data_array
+
+def _compact_to_upper(array):
+    n, m = array.shape[0], array.shape[1]
+    new_array = numpy.zeros((n * (n - 1) / 2, 2), dtype=numpy.float32)
+    for i in range(n - 1):
+        stop = min(m, n - i - 1)
+        start = i * n - i * (i + 1) / 2
+        new_array[start:(start + stop), :] = array[i, :stop, :]
+    return new_array
 
 def find_cis_signal2(hic, chrom, binsize=10000, binbounds=None, start=None, stop=None, startfend=None, stopfend=None,
                     datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,

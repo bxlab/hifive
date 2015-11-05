@@ -187,7 +187,7 @@ def find_cis_compact_expected(
         max_bin = signal.shape[1]
     with nogil:
         if correction_sums is None or not ranges is None:
-            for fend1 in range(num_fends - 1):
+            for fend1 in range(num_fends - 2):
                 map1 = mapping[fend1]
                 if map1 == -1:
                     continue
@@ -349,7 +349,7 @@ def find_cis_upper_expected(
         num_parameters = 0
     with nogil:
         if correction_sums is None or not ranges is None:
-            for fend1 in range(num_fends - 1):
+            for fend1 in range(num_fends - 2):
                 map1 = mapping[fend1]
                 if map1 == -1:
                     continue
@@ -357,10 +357,7 @@ def find_cis_upper_expected(
                 index = map1 * (num_bins - 1) - map1 * (map1 + 1 - diag2) / 2 - 1 + diag
                 # find opposite strand adjacents, skipping same fragment and same strand adjacents
                 fend2 = fend1 + 2
-                if fend2 >= num_fends:
-                    map2 = -1
-                else:
-                    map2 = mapping[fend2]
+                map2 = mapping[fend2]
                 if map2 >= 0 and (diag == 1 or map2 != map1) and mids[fend2] - mids[fend1] <= maxdistance:
                      # give starting expected value
                     value = 1.0

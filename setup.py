@@ -172,6 +172,10 @@ def get_extension_modules(include_dirs):
                                 "hifive/libraries/_normal.cpp"],
                                 include_dirs=include_dirs, language="c++",
                                 extra_compile_args=[]))
+    # TAD functions
+    extensions.append(Extension("hifive.libraries._hic_tads", ["hifive/libraries/_hic_tads.pyx"],
+                                include_dirs=include_dirs, language="c++",
+                                extra_compile_args=[]))
     # Modeling functions
     #extensions.append(Extension("hifive.libraries._modeling", ["hifive/libraries/_modeling.pyx"],
     #                            include_dirs=include_dirs, language="c++",

@@ -6,6 +6,7 @@ import _hic_binning
 import _hic_distance
 import _hic_interactions
 import _hic_optimize
+import _hic_tads
 #import _modeling
 
 #------------------------------------------------
