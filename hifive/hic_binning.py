@@ -1400,7 +1400,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
             if not dynamically_binned:
                 heatmaps[chrom] = find_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype,
                                                   arraytype='upper', returnmapping=True, silent=silent,
-                                                  skipfiltered=True, includediagonal=True)
+                                                  skipfiltered=True, includediagonal=False)
             else:
                 temp = find_cis_signal(hic, chrom[0], binsize=expansion_binsize, datatype=datatype, arraytype='upper',
                                        returnmapping=True, silent=silent)
