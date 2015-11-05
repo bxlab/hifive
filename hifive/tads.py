@@ -22,7 +22,6 @@ try:
     from mpi4py import MPI
 except:
     pass
-import pyx
 
 import libraries._hic_tads as _hic_tads
 import hic_binning
