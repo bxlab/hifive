@@ -113,8 +113,9 @@ def find_betadeltas(
 def find_BIs(
         np.ndarray[DTYPE_t, ndim=3] data,
         np.ndarray[DTYPE_t, ndim=3] BIs,
-        int p,
-        int minbin):
+        int minbin,
+        int maxbin,
+        int width):
     cdef long long int i, j, k, l, n, bi_count
     cdef double a0, a1, b0, b1, temp, bi_sum, bi2_sum
     cdef int num_bins = data.shape[0]
@@ -123,58 +124,61 @@ def find_BIs(
         bi_sum = 0.0
         bi2_sum = 0.0
         bi_count = 0
-        for i in range(num_bins):
+        for i in range(1, num_bins - 1):
             n = 0
-            for j in range(2, min(num_bins - i - 1, max_bins + 1)):
-                a0 = 0
-                a1 = 0
-                b0 = 0
-                b1 = 0
-                l = min(i, p)
+            a0 = 0
+            a1 = 0
+            b0 = 0
+            b1 = 0
+            for j in range(1, min(num_bins - i - 1, maxbin)):
+                l = min(i, width)
                 for k in range(l):
-                    b0 += data[i - 1 - k, j + k - 1, 0]
-                    b1 += data[i - 1 - k, j + k - 1, 1]
-                l = min(j - 1, p)
+                    b0 += data[i - 1 - k, j + k, 0]
+                    b1 += data[i - 1 - k, j + k, 1]
+                l = min(j, width)
                 for k in range(l):
-                    a0 += data[i + k, j - k - 2, 0]
-                    a1 += data[i + k, j - k - 2, 1]
-                if a0 > 0 and b0 > 0:
+                    a0 += data[i + k, j - k - 1, 0]
+                    a1 += data[i + k, j - k - 1, 1]
+                if a0 >= 10 and b0 >= 10:
+                    #BIs[i, j + 1, 0] = log(a0 * b1 / (a1 * b0))
                     n += 1
                     if n > 1:
-                        BIs[i, j, 0] = (log(a0 * b1 / (a1 * b0)) + (n - 1) * BIs[i, j - 1, 0]) / n
+                        BIs[i, j + 1, 0] = (log(a0 * b1 / (a1 * b0)) + (j - 1) * BIs[i, j, 0]) / j
                     else:
-                        BIs[i, j, 0] = log(a0 * b1 / (a1 * b0))
+                        BIs[i, j + 1, 0] = log(a0 * b1 / (a1 * b0)) / j
                 elif n > 0:
-                    BIs[i, j, 0] = BIs[i, j - 1, 0]
-        for i in range(num_bins):
+                    BIs[i, j + 1, 0] = BIs[i, j, 0] * (j - 1.0) / j
+        for i in range(2, num_bins):
             n = 0
-            for j in range(2, min(i, max_bins + 1)):
-                a0 = 0.0
-                a1 = 0.0
-                b0 = 0.0
-                b1 = 0.0
-                l = min(j - 1, p)
+            a0 = 0.0
+            a1 = 0.0
+            b0 = 0.0
+            b1 = 0.0
+            for j in range(1, min(i, maxbin)):
+                l = min(j, width)
                 for k in range(l):
-                    a0 += data[i - j, j - k - 2, 0]
-                    a1 += data[i - j, j - k - 2, 1]
-                l = min(num_bins - i, p)
+                    a0 += data[i - j - 1, j - k - 1, 0]
+                    a1 += data[i - j - 1, j - k - 1, 1]
+                l = min(num_bins - i, width)
                 for k in range(l):
-                    b0 += data[i - j, k + j - 1, 0]
-                    b1 += data[i - j, k + j - 1, 1]
-                if a0 > 0 and b0 > 0:
+                    b0 += data[i - j - 1, k + j, 0]
+                    b1 += data[i - j - 1, k + j, 1]
+                if a0 >= 10 and b0 >= 10:
+                    #BIs[i - j - 1, j + 1, 1] = log(a0 * b1 / (a1 * b0))
                     n += 1
                     if n > 1:
-                        BIs[i - j, j, 1] = (log(a0 * b1 / (a1 * b0)) + (n - 1) * BIs[i - j + 1, j - 1, 1]) / n
+                        BIs[i - j - 1, j + 1, 1] = (log(a0 * b1 / (a1 * b0)) + (j - 1) * BIs[i - j, j, 1]) / j
                     else:
-                        BIs[i - j, j, 1] = log(a0 * b1 / (a1 * b0))
+                        BIs[i - j - 1, j + 1, 1] = log(a0 * b1 / (a1 * b0)) / j
                 elif n > 0:
-                    BIs[i - j, j, 1] = BIs[i - j + 1, j - 1, 1]
+                    BIs[i - j - 1, j + 1, 1] = BIs[i - j, j, 1] * (j - 1.0) / j
         for i in range(num_bins):
             for j in range(minbin):
                 BIs[i, j, 0] = 0
                 BIs[i, j, 1] = 0
-            for j in range(minbin, max_bins):
-                if BIs[i, j, 0] > -Inf and BIs[i, j, 1] > -Inf:
+            for j in range(minbin, maxbin + 1):
+                #if BIs[i, j, 0] > -Inf and BIs[i, j, 1] > -Inf:
+                if BIs[i, j, 0] > 0 and BIs[i, j, 1] > 0:
                     BIs[i, j, 0] += BIs[i, j, 1]
                     BIs[i, j, 1] = 1
                     bi_sum += BIs[i, j, 0]
@@ -185,9 +189,38 @@ def find_BIs(
                     BIs[i, j, 1] = 0
         bi2_sum = pow(bi2_sum / (bi_count - 1), 0.5)
         for i in range(num_bins):
-            for j in range(max_bins):
+            for j in range(minbin, maxbin + 1):
                 if BIs[i, j, 1] == 1:
-                    BIs[i, j, 0] /= bi2_sum
+                    if BIs[i, j, 0] > bi2_sum:
+                        BIs[i, j, 0] /= bi2_sum
+                    else:
+                        BIs[i, j, 0] = 0
+                        BIs[i, j, 1] = 0
+    return None
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_BI_path(
+        np.ndarray[DTYPE_t, ndim=3] bscores,
+        np.ndarray[DTYPE_int_t, ndim=1] path,
+        np.ndarray[DTYPE_64_t, ndim=1] scores,
+        int minbin,
+        int maxbin):
+    cdef int i, j, k
+    cdef double score
+    cdef int num_bins = path.shape[0]
+    with nogil:
+        path[0] = 1
+        for i in range(1, num_bins):
+            scores[i] = scores[i - 1]
+            path[i] = 1
+            for j in range(minbin, min(maxbin + 1, i)):
+                if bscores[i - j + 1, j - 1, 1] == 1:
+                    score = scores[i - j] + pow(j, 0.5) * bscores[i - j + 1, j - 1, 0]
+                    if score > scores[i]:
+                        scores[i] = score
+                        path[i] = j
     return None
 
 @cython.boundscheck(False)
@@ -655,7 +688,7 @@ def find_arrowhead_path(
             scores[i] = scores[i - 1]
             path[i] = 1
             for j in range(minbin, min(maxbin, i)):
-                score = scores[i - j] + j * dscores[i - j, j - 1]
+                score = scores[i - j] + pow(j, 0.5) * dscores[i - j, j - 1]
                 if score > scores[i]:
                     scores[i] = score
                     path[i] = j

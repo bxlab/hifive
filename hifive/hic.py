@@ -2194,47 +2194,58 @@ class HiC(object):
             if not self.silent:
                 print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
             return None
-        # determine if data is to be dynamically binned
-        if not dynamically_binned:
-            data = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,
+        if chrom1 == chrom2:
+            data = hic_binning.find_cis_subregion_signal(self, chrom1, start1=start1, stop1=stop1,
                                                 startfend1=startfend1, stopfend1=stopfend1, binbounds1=binbounds1,
                                                 start2=start2, stop2=stop2, startfend2=startfend2, stopfend2=stopfend2,
                                                 binbounds2=binbounds2, binsize=binsize, datatype=datatype,
                                                 returnmapping=returnmapping, skipfiltered=skipfiltered,
                                                 silent=self.silent)
         else:
-            if not binbounds1 is None:
-                estart1 = binbounds1[0, 0]
-                estop1 = binbounds1[-1, 1]
-            else:
-                estart1 = start1
-                estop1 = stop1
-            if not binbounds2 is None:
-                estart2 = binbounds2[0, 0]
-                estop2 = binbounds2[-1, 1]
-            else:
-                estart2 = start2
-                estop2 = stop2
-            expansion, exp_mapping1, exp_mapping2 = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=estart1,
-                                                                        stop1=estop1, startfend1=startfend1,
-                                                                        stopfend1=stopfend1, binbounds1=binbounds1,
-                                                                        start2=estart2, stop2=estop2,
-                                                                        startfend2=startfend2, stopfend2=stopfend2,
-                                                                        binbounds2=binbounds2,
-                                                                        binsize=expansion_binsize, datatype=datatype,
-                                                                        returnmapping=True, silent=self.silent)
-            binned, mapping1, mapping2 = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1,
-                                                                       stop1=stop1, startfend1=startfend1,
-                                                                       stopfend1=stopfend1, binbounds1=binbounds1,
-                                                                       start2=start2, stop2=stop2,
-                                                                       startfend2=startfend2, stopfend2=stopfend2,
-                                                                       binbounds2=binbounds2, binsize=binsize,
-                                                                       datatype=datatype, returnmapping=True,
-                                                                       silent=self.silent)
-            hic_binning.dynamically_bin_trans_array(expansion, exp_mapping1, exp_mapping2, binned, mapping1,
-                                                    mapping2, minobservations=minobservations,
-                                                    searchdistance=searchdistance, removefailed=removefailed,
+            # determine if data is to be dynamically binned
+            if not dynamically_binned:
+                data = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1, stop1=stop1,
+                                                    startfend1=startfend1, stopfend1=stopfend1, binbounds1=binbounds1,
+                                                    start2=start2, stop2=stop2, startfend2=startfend2,
+                                                    stopfend2=stopfend2,
+                                                    binbounds2=binbounds2, binsize=binsize, datatype=datatype,
+                                                    returnmapping=returnmapping, skipfiltered=skipfiltered,
                                                     silent=self.silent)
+            else:
+                if not binbounds1 is None:
+                    estart1 = binbounds1[0, 0]
+                    estop1 = binbounds1[-1, 1]
+                else:
+                    estart1 = start1
+                    estop1 = stop1
+                if not binbounds2 is None:
+                    estart2 = binbounds2[0, 0]
+                    estop2 = binbounds2[-1, 1]
+                else:
+                    estart2 = start2
+                    estop2 = stop2
+                expansion, exp_mapping1, exp_mapping2 = hic_binning.find_trans_signal(self, chrom1, chrom2,
+                                                                            start1=estart1,
+                                                                            stop1=estop1, startfend1=startfend1,
+                                                                            stopfend1=stopfend1, binbounds1=binbounds1,
+                                                                            start2=estart2, stop2=estop2,
+                                                                            startfend2=startfend2, stopfend2=stopfend2,
+                                                                            binbounds2=binbounds2,
+                                                                            binsize=expansion_binsize,
+                                                                            datatype=datatype,
+                                                                            returnmapping=True, silent=self.silent)
+                binned, mapping1, mapping2 = hic_binning.find_trans_signal(self, chrom1, chrom2, start1=start1,
+                                                                           stop1=stop1, startfend1=startfend1,
+                                                                           stopfend1=stopfend1, binbounds1=binbounds1,
+                                                                           start2=start2, stop2=stop2,
+                                                                           startfend2=startfend2, stopfend2=stopfend2,
+                                                                           binbounds2=binbounds2, binsize=binsize,
+                                                                           datatype=datatype, returnmapping=True,
+                                                                           silent=self.silent)
+                hic_binning.dynamically_bin_trans_array(expansion, exp_mapping1, exp_mapping2, binned, mapping1,
+                                                        mapping2, minobservations=minobservations,
+                                                        searchdistance=searchdistance, removefailed=removefailed,
+                                                        silent=self.silent)
             if returnmapping:
                 data = [binned, mapping1, mapping2]
             else:

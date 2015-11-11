@@ -490,6 +490,157 @@ def find_cis_upper_expected(
                         signal[index, 1] -= corrections[fend1] * corrections[fend1] / 2.0
     return None
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_cis_subregion_observed(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
+        np.ndarray[DTYPE_int_t, ndim=2] data not None,
+        np.ndarray[DTYPE_int64_t, ndim=1] indices not None,
+        np.ndarray[DTYPE_t, ndim=3] signal not None,
+        int startfend1,
+        int startfend2):
+    cdef long long int fend1, fend2, i, j, map1, map2, map1b, map2b, valid1, valid2
+    cdef long long int num_fends = indices.shape[0] - 1
+    cdef long long int startfend = min(startfend1, startfend2)
+    cdef long long int stopfend1 = startfend1 + mapping1.shape[0]
+    cdef long long int stopfend2 = startfend2 + mapping2.shape[0]
+    with nogil:
+        for i in range(num_fends):
+            valid1 = 0
+            valid2 = 0
+            fend1 = i + startfend
+            if fend1 >= startfend1 and fend1 < stopfend1:
+                map1 = mapping1[fend1 - startfend1]
+                if map1 >= 0:
+                    valid1 = 1
+            if fend1 >= startfend2 and fend1 < stopfend2:
+                map2 = mapping2[fend1 - startfend2]
+                if map2 >= 0:
+                    valid2 = 1
+            if valid1 == 0 and valid2 == 0:
+                continue
+            for j in range(indices[i], indices[i + 1]):
+                fend2 = data[j, 1]
+                if valid1 == 1 and fend2 >= startfend2 and fend2 < stopfend2:
+                    map2b = mapping2[fend2 - startfend2]
+                    if map2b >= 0:
+                        signal[map1, map2b, 0] += data[j, 2]
+                if valid2 == 1 and fend2 >= startfend1 and fend2 < stopfend1:
+                    map1b = mapping1[fend2 - startfend1]
+                    if map1b >= 0:
+                        signal[map1b, map2, 0] += data[j, 2]
+    return None
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_cis_subregion_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping1 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] mapping2 not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections1,
+        np.ndarray[DTYPE_t, ndim=1] corrections2,
+        np.ndarray[DTYPE_t, ndim=1] binning_corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] binning_num_bins,
+        np.ndarray[DTYPE_int_t, ndim=3] fend_indices,
+        np.ndarray[DTYPE_t, ndim=3] signal not None,
+        np.ndarray[DTYPE_64_t, ndim=1] correction_sums1,
+        np.ndarray[DTYPE_64_t, ndim=1] correction_sums2,
+        np.ndarray[DTYPE_int_t, ndim=1] mids1,
+        np.ndarray[DTYPE_int_t, ndim=1] mids2,
+        np.ndarray[DTYPE_t, ndim=2] parameters,
+        double chrom_mean,
+        int startfend1,
+        int startfend2):
+    cdef long long int fend1, fend2, afend1, afend2, i, j, k, map1, map2, index, num_parameters, num_bins1, num_bins2
+    cdef long long int start1, start2, stop1, stop2, l, m
+    cdef double distance, value
+    cdef long long int num_fends1 = mapping1.shape[0]
+    cdef long long int num_fends2 = mapping2.shape[0]
+    if not fend_indices is None:
+        num_parameters = fend_indices.shape[1]
+    else:
+        num_parameters = 0
+    if not correction_sums1 is None:
+        num_bins1 = correction_sums1.shape[0]
+        num_bins2 = correction_sums2.shape[0]
+    with nogil:
+        if correction_sums1 is None:
+            for fend1 in range(num_fends1):
+                map1 = mapping1[fend1]
+                if map1 == -1:
+                    continue
+                afend1 = fend1 + startfend1
+                for fend2 in range(num_fends2):
+                    map2 = mapping2[fend2]
+                    if map2 == -1:
+                        continue
+                    afend2 = fend2 + startfend2
+                    diff = afend1 - afend2
+                    if (diff < 2 and diff > -2) or (afend1 % 2 == 0 and diff == 3) or (afend2 % 2 == 0 and diff == -3):
+                        continue
+                     # give starting expected value
+                    value = 1.0
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections1 is None:
+                        value *= corrections1[fend1] * corrections2[fend2]
+                    # if finding fend, enrichment, or expected, and using binning bias correction, correct for fend
+                    if not binning_corrections is None:
+                        for j in range(num_parameters):
+                            if fend_indices[afend1, j, 0] < fend_indices[afend2, j, 0]:
+                                value *= binning_corrections[fend_indices[afend1, j, 1] + fend_indices[afend2, j, 0]]
+                            else:
+                                value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
+                    # if finding distance, enrichment, or expected, correct for distance
+                    if not parameters is None:
+                        distance = mids2[fend2] - mids1[fend1]
+                        if distance > 0:
+                            distance = log(distance)
+                        else:
+                            distance = log(-distance)
+                        k = 0
+                        while distance > parameters[k, 0]:
+                            k += 1
+                        value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                    signal[map1, map2, 1] += value
+        else:
+            for i in range(num_bins1):
+                for j in range(num_bins2):
+                    signal[i, j, 1] += correction_sums1[i] * correction_sums2[j]
+            for i in range(num_fends1):
+                map1 = mapping1[i]
+                if map1 >= 0:
+                    fend2 = i + startfend1 - startfend2
+                    if fend2 >= 0 and fend2 < num_fends2:
+                        map2 = mapping2[fend2]
+                        if map2 >= 0:
+                            signal[map1, map2, 1] -= corrections1[i] * corrections2[fend2]
+                    fend2 = i + startfend1 - startfend2 - 1
+                    if fend2 >= 0 and fend2 < num_fends2:
+                        map2 = mapping2[fend2]
+                        if map2 >= 0:
+                            signal[map1, map2, 1] -= corrections1[i] * corrections2[fend2]
+                    fend2 = i + startfend1 - startfend2 + 1
+                    if fend2 >= 0 and fend2 < num_fends2:
+                        map2 = mapping2[fend2]
+                        if map2 >= 0:
+                            signal[map1, map2, 1] -= corrections1[i] * corrections2[fend2]
+                    if (i + startfend1) % 2 == 0:
+                        fend2 = i + startfend1 - startfend2 + 3
+                        if fend2 >= 0 and fend2 < num_fends2:
+                            map2 = mapping2[fend2]
+                            if map2 >= 0:
+                                signal[map1, map2, 1] -= corrections1[i] * corrections2[fend2]
+                    else:
+                        fend2 = i + startfend1 - startfend2 - 3
+                        if fend2 >= 0 and fend2 < num_fends2:
+                            map2 = mapping2[fend2]
+                            if map2 >= 0:
+                                signal[map1, map2, 1] -= corrections1[i] * corrections2[fend2]
+    return None
+
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
