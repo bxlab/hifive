@@ -1753,7 +1753,6 @@ class HiC(object):
                                                         bin_counts,
                                                         all_indices,
                                                         num_bins,
-                                                        bin_indices[1:] - bin_indices[:-1],
                                                         bin_divs,
                                                         distance_div,
                                                         distance_bins)
@@ -1962,7 +1961,10 @@ class HiC(object):
         indices = chrom * (num_chroms - 1) - (chrom * (chrom + 1) / 2) - 1
         indices += self.fends['fends']['chr'][trans_data[:, 1]]
         del chrom
-        counts = trans_data[:, 2] / (self.corrections[trans_data[:, 0]] * self.corrections[trans_data[:, 1]])
+        if self.corrections is None:
+            counts = trans_data[:, 2]
+        else:
+            counts = trans_data[:, 2] / (self.corrections[trans_data[:, 0]] * self.corrections[trans_data[:, 1]])
         del trans_data
         actual = numpy.bincount(indices, weights=counts, minlength=possible.shape[0])
         self.trans_means = actual / numpy.maximum(1.0, possible.astype(numpy.float32))
