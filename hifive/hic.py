@@ -2248,10 +2248,10 @@ class HiC(object):
                                                         mapping2, minobservations=minobservations,
                                                         searchdistance=searchdistance, removefailed=removefailed,
                                                         silent=self.silent)
-            if returnmapping:
-                data = [binned, mapping1, mapping2]
-            else:
-                data = binned
+                if returnmapping:
+                    data = [binned, mapping1, mapping2]
+                else:
+                    data = binned
         if not image_file is None:
             if 'symmetricscaling' not in kwargs:
                 if datatype == 'enrichment':
