@@ -1146,12 +1146,6 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     else:
         if start1 is None and startfend1 is None:
             startfend1 = hic.fends['chr_indices'][chrint1]
-            while startfend1 < hic.fends['chr_indices'][chrint1 + 1] and hic.filter[startfend1] == 0:
-                startfend1 += 1
-            if startfend1 == hic.fends['chr_indices'][chrint1 + 1]:
-                if not silent:
-                    print >> sys.stderr, ("Insufficient data.\n"),
-                return None
             start1 = hic.fends['fends']['mid'][startfend1]
             if binsize > 0:
                 start1 = (start1 / binsize) * binsize
@@ -1163,8 +1157,6 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
             startfend1 = _find_fend_from_coord(hic, chrint1, start1)
         if (stop1 is None or stop1 == 0) and stopfend1 is None:
             stopfend1 = hic.fends['chr_indices'][chrint1 + 1]
-            while stopfend1 > hic.fends['chr_indices'][chrint1] and hic.filter[stopfend1 - 1] == 0:
-                stopfend1 -= 1
             stop1 = hic.fends['fends']['mid'][stopfend1 - 1]
             if binsize > 0:
                 stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
@@ -1184,12 +1176,6 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
     else:
         if start2 is None and startfend2 is None:
             startfend2 = hic.fends['chr_indices'][chrint2]
-            while startfend2 < hic.fends['chr_indices'][chrint2 + 1] and hic.filter[startfend2] == 0:
-                startfend2 += 1
-            if startfend2 == hic.fends['chr_indices'][chrint2 + 1]:
-                if not silent:
-                    print >> sys.stderr, ("Insufficient data.\n"),
-                return None
             start2 = hic.fends['fends']['mid'][startfend2]
             if binsize > 0:
                 start2 = (start2 / binsize) * binsize
@@ -1201,8 +1187,6 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
             startfend2 = _find_fend_from_coord(hic, chrint2, start2)
         if (stop2 is None or stop2 == 0) and stopfend2 is None:
             stopfend2 = hic.fends['chr_indices'][chrint2 + 1]
-            while stopfend2 > hic.fends['chr_indices'][chrint2] and hic.filter[stopfend2 - 1] == 0:
-                stopfend2 -= 1
             stop2 = hic.fends['fends']['mid'][stopfend2 - 1]
             if binsize > 0:
                 stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
