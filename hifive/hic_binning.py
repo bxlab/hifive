@@ -156,9 +156,9 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     mids = hic.fends['fends']['mid'][startfend:stopfend]
     # if binbounds are defined, use them to set fend mapping
     if binbounds is not None:
-        start_indices = numpy.searchsorted(mids[valid], binbounds[:, 0], side='right') - 1
-        stop_indices = numpy.searchsorted(mids[valid], binbounds[:, 1], side='right')
-        # only fends that fall in define bins are valid
+        start_indices = numpy.searchsorted(binbounds[:, 0], mids[valid], side='right') - 1
+        stop_indices = numpy.searchsorted(binbounds[:, 1], mids[valid], side='right')
+        # only fends that fall in defined bins are valid
         where = numpy.where(start_indices == stop_indices)[0]
         valid = valid[where]
         mapping[valid] = start_indices[where]
@@ -173,18 +173,22 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             else:
                 num_bins = stopfend - startfend
                 mapping[valid] = valid
+            # find binbounds
+            binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
+            if skipfiltered:
+                binbounds[:, 0] = hic.fends['fends']['start'][startfend:stopfend][valid]
+                binbounds[:, 1] = hic.fends['fends']['stop'][startfend:stopfend][valid]
+            else:
+                binbounds[:, 0] = hic.fends['fends']['start'][startfend:stopfend]
+                binbounds[:, 1] = hic.fends['fends']['stop'][startfend:stopfend]
         else:
             # assign binned fends based on midpoint
             mapping[valid] = (mids[valid] - start) / binsize
             num_bins = (stop - start) / binsize
-        # find binbounds
-        binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
-        binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
-        binbounds[:, 1] = numpy.arange(1, num_bins + 1) * binsize + start
-        #for i, j in enumerate(mapping):
-        #    if binbounds[j, 0] == -1:
-        #        binbounds[j, 0] = mids[i]
-        #    binbounds[j, 1] = mids[i] + 1
+            # find binbounds
+            binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
+            binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
+            binbounds[:, 1] = numpy.arange(1, num_bins + 1) * binsize + start
     # if correction is requested, determine the appropriate type
     distance_parameters = None
     chrom_mean = 0.0
@@ -675,7 +679,7 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
         lastbin = numpy.searchsorted(mids, binbounds[i, 1])
         mapping[firstbin:lastbin] = i
         fend_ranges[i, 0] = data_mapping[firstbin, 2]
-        fend_ranges[i, 1] = data_mapping[lastbin, 3]
+        fend_ranges[i, 1] = data_mapping[lastbin - 1, 3]
     # Create requested array
     if arraytype == 'compact':
         max_bin = (stop - start) / binsize + 1
