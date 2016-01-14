@@ -9,8 +9,7 @@ import hic
 import fivec_binning
 import hic_binning
 import plotting
-import tads
-#import modeling
+import hic_domains
 
 from hic import HiC
 from fivec import FiveC
@@ -18,6 +17,8 @@ from fend import Fend
 from fragment import Fragment
 from hic_data import HiCData
 from fivec_data import FiveCData
+from hic_domains import TAD
+from hic_domains import Compartment
 
 from .version import version as __version__
 

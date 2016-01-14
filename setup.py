@@ -172,14 +172,13 @@ def get_extension_modules(include_dirs):
                                 "hifive/libraries/_normal.cpp"],
                                 include_dirs=include_dirs, language="c++",
                                 extra_compile_args=[]))
-    # TAD functions
-    extensions.append(Extension("hifive.libraries._hic_tads", ["hifive/libraries/_hic_tads.pyx"],
+    # Domain functions
+    extensions.append(Extension("hifive.libraries._hic_domains", ["hifive/libraries/_hic_domains.pyx"],
                                 include_dirs=include_dirs, language="c++",
                                 extra_compile_args=[]))
-    # Modeling functions
-    #extensions.append(Extension("hifive.libraries._modeling", ["hifive/libraries/_modeling.pyx"],
-    #                            include_dirs=include_dirs, language="c++",
-    #                            extra_compile_args=[]))
+    extensions.append(Extension("hifive.libraries._hmm", ["hifive/libraries/_hmm.pyx"],
+                                include_dirs=include_dirs, language="c++",
+                                extra_compile_args=[]))
     return extensions
 
 if __name__ == "__main__":
