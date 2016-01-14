@@ -31,14 +31,6 @@ from libraries.hmm import HMM
 import hic_binning
 
 
-unit.set(defaultunit="cm")
-text.set(mode="latex")
-text.preamble(r"\usepackage{times}")
-text.preamble(r"\usepackage{sansmath}")
-text.preamble(r"\sansmath")
-text.preamble(r"\renewcommand*\familydefault{\sfdefault}")
-painter = graph.axis.painter.regular( labeldist=0.1, labelattrs=[text.size(-3)], titleattrs=[text.size(-3)] )
-
 class TAD( object ):
     """
     """
@@ -280,6 +272,13 @@ class TAD( object ):
     def plot_DI_tads(self, out_fname):
         if 'pyx' not in sys.modules:
             return None
+        unit.set(defaultunit="cm")
+        text.set(mode="latex")
+        text.preamble(r"\usepackage{times}")
+        text.preamble(r"\usepackage{sansmath}")
+        text.preamble(r"\sansmath")
+        text.preamble(r"\renewcommand*\familydefault{\sfdefault}")
+        painter = graph.axis.painter.regular( labeldist=0.1, labelattrs=[text.size(-3)], titleattrs=[text.size(-3)] )
         pages = []
         for chrom in self.DIs:
             start = self.DIs[chrom]['position'][0]
