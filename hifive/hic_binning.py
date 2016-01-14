@@ -179,8 +179,13 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             num_bins = (stop - start) / binsize
         # find binbounds
         binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
-        binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
-        binbounds[:, 1] = numpy.arange(1, num_bins + 1) * binsize + start
+        if binsize > 0:
+            binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
+            binbounds[:, 1] = numpy.arange(1, num_bins + 1) * binsize + start
+        else:
+            fends = hic.fends['fends'][startfend:stopfend]
+            binbounds[valid, 0] = fends['start'][valid]
+            binbounds[valid, 1] = fends['stop'][valid]
         #for i, j in enumerate(mapping):
         #    if binbounds[j, 0] == -1:
         #        binbounds[j, 0] = mids[i]
@@ -878,8 +883,8 @@ def find_cis_subregion_signal(hic, chrom, binsize=10000, binbounds1=None, binbou
                 stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
             stopfend1 = _find_fend_from_coord(hic, chrint, stop1)
     if not binbounds1 is None:
-        start2 = binbounds1[0, 0]
-        stop2 = binbounds1[-1, 1]
+        start2 = binbounds2[0, 0]
+        stop2 = binbounds2[-1, 1]
         startfend2 = _find_fend_from_coord(hic, chrint, start2)
         stopfend2 = _find_fend_from_coord(hic, chrint, stop2)
     else:
@@ -1176,9 +1181,9 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
             if binsize > 0:
                 stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
             stopfend1 = _find_fend_from_coord(hic, chrint1, stop1)
-    if not binbounds1 is None:
-        start2 = binbounds1[0, 0]
-        stop2 = binbounds1[-1, 1]
+    if not binbounds2 is None:
+        start2 = binbounds2[0, 0]
+        stop2 = binbounds2[-1, 1]
         startfend2 = _find_fend_from_coord(hic, chrint2, start2)
         stopfend2 = _find_fend_from_coord(hic, chrint2, stop2)
     else:
