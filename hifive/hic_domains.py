@@ -16,6 +16,7 @@ API Documentation
 import sys
 
 import numpy
+import scipy
 import h5py
 try:
     from mpi4py import MPI
@@ -322,7 +323,7 @@ class TAD( object ):
 class Compartment( object ):
     """
     """
-    def __init__(self, hic, binsize, chroms=[], out_fname=None):
+    def __init__(self, hic, binsize, chroms=[], out_fname=None, silent=False):
         self.hic = hic
         self.binsize = binsize
         if 'mpi4py' in sys.modules.keys():
@@ -350,22 +351,23 @@ class Compartment( object ):
                 if storage is None or ("%s.correlations" % chrom not in storage and
                                        "%s.enrichments" % chrom not in storage):
                     needed.append(chrom)
-                if len(needed) > 0:
-                    node_ranges = numpy.round(numpy.linspace(0, len(needed), self.num_procs)).astype(numpy.int32)
-                    for i in range(1, self.num_procs):
-                        self.comm.send(needed[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
-                    node_needed = needed[:node_ranges[1]]
-                else:
-                    for i in range(1, self.num_procs):
-                        self.comm.send([], dest=i, tag=11)
+            if len(needed) > 0:
+                node_ranges = numpy.round(numpy.linspace(0, len(needed), self.num_procs + 1)).astype(numpy.int32)
+                for i in range(1, self.num_procs):
+                    self.comm.send(needed[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+                node_needed = needed[:node_ranges[1]]
+            else:
+                node_needed = []
+                for i in range(1, self.num_procs):
+                    self.comm.send([], dest=i, tag=11)
         else:
             node_needed = self.comm.recv(source=0, tag=11)
         data = {}
         self.positions = {}
         chr_indices = hic.fends['chr_indices'][...]
         for chrom in node_needed:
-            if self.rank == 0:
-                print >> sys.stderr, ("\Heatmapping %s%s") % (chrom, ' '*20),
+            if self.rank == 0 and not self.silent:
+                print >> sys.stderr, ("\r%s\rHeatmapping %s") % (' '*80, chrom),
             chrint = hic.chr2int[chrom]
             startfend = chr_indices[chrint]
             while hic.filter[startfend] == 0:
@@ -376,9 +378,10 @@ class Compartment( object ):
                 stopfend -= 1
             stop = ((hic.fends['fends']['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
             temp = hic.cis_heatmap(chrom, binsize=binsize / 2, start=start, stop=stop, datatype='enrichment',
-                                   arraytype='upper', returnmapping=True)
-            temp1 = hic_binning.bin_cis_array(temp[0], temp[1], binsize, arraytype='upper', returnmapping=True)
-            hic_binning.dynamically_bin_cis_array(temp[0], temp[1], temp1[0], temp1[1], minobservation=5)
+                                   arraytype='upper', returnmapping=True, silent=True)
+            temp1 = hic_binning.bin_cis_array(temp[0], temp[1], binsize, arraytype='upper', returnmapping=True,
+                                              silent=True)
+            hic_binning.dynamically_bin_cis_array(temp[0], temp[1], temp1[0], temp1[1], minobservation=5, silent=True)
             indices = numpy.triu_indices(temp1[1].shape[0], 1)
             hm = numpy.zeros((temp1[1].shape[0], temp1[1].shape[0], 2), dtype=numpy.float32)
             hm[indices[0], indices[1], :] = temp1[0]
@@ -390,13 +393,13 @@ class Compartment( object ):
             self.positions[chrom] = temp1[1][valid, :]
             data[chrom] = hm[:, :, 0]
         if self.rank == 0:
-            for i in range(1, num_procs):
+            for i in range(1, self.num_procs):
                 data.update(self.comm.recv(source=i, tag=11))
                 self.positions.update(self.comm.recv(source=i, tag=11))
             if storage is not None:
                 for chrom in data:
                     storage.create_dataset(name="%s.enrichments" % chrom, data=data[chrom])
-                    storage.create_dataset(name="%s.positons" % chrom, data=self.positions[chrom])
+                    storage.create_dataset(name="%s.positions" % chrom, data=self.positions[chrom])
         else:
             self.comm.send(data, dest=0, tag=11)
             del data
@@ -404,26 +407,30 @@ class Compartment( object ):
         if self.rank == 0:
             for chrom in chroms:
                 if chrom not in data and "%s.correlations" % chrom not in storage:
-                    data[chrom] = storage["%s.correlations" % chrom][...]
+                    data[chrom] = storage["%s.enrichments" % chrom][...]
+                if chrom not in self.positions:
                     self.positions[chrom] = storage["%s.positions" % chrom][...]
             correlations = {}
             for chrom in data:
-                print >> sys.stderr, ("\rCorrelating %s%s") % (chrom, ' '*20),
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rCorrelating %s") % (' '*80, chrom),
                 cdata = numpy.copy(data[chrom])
-                for i in range(1, num_procs):
-                    comm.send(1, dest=i, tag=11)
-                    comm.send(cdata, dest=i, tag=11)
+                for i in range(1, self.num_procs):
+                    self.comm.send(1, dest=i, tag=11)
+                    self.comm.send(cdata, dest=i, tag=11)
                 corr = numpy.zeros(cdata.shape, dtype=numpy.float32)
                 self.find_correlations(cdata, corr)
                 if storage is not None:
                     storage.create_dataset(name="%s.correlations" % chrom, data=corr)
                 correlations[chrom] = corr
+            for i in range(1, self.num_procs):
+                self.comm.send(0, dest=i, tag=11)
         else:
-            task = comm.recv(source=0, tag=11)
+            task = self.comm.recv(source=0, tag=11)
             while task == 1:
-                data = comm.recv(source=0, tag=11)
+                data = self.comm.recv(source=0, tag=11)
                 self.find_correlations(data)
-                task = comm.recv(source=0, tag=11)
+                task = self.comm.recv(source=0, tag=11)
         if self.rank == 0:
             self.eigenv = {}
             for chrom in chroms:
@@ -431,6 +438,8 @@ class Compartment( object ):
                     correlations[chrom] = storage["%s.correlations" % chrom][...]
                 self.eigenv[chrom] = scipy.sparse.linalg.eigs(correlations[chrom], k=1)[1][:, 0]
             self.find_clusters()
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\r") % (' '*80),
 
     def find_correlations(self, data, correlations=None):
         node_ranges = numpy.round(numpy.linspace(0, data.shape[0], self.num_procs + 1)).astype(numpy.int32)
