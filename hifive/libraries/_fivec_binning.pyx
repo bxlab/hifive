@@ -139,7 +139,7 @@ def find_cis_compact_expected(
                         value += binning_corrections[index]
                 # if finding distance, enrichment, or expected, correct for distance
                 if gamma != 0.0:
-                    distance = log(mids[frag2] - mids[frag1])
+                    distance = log(<double>(mids[frag2] - mids[frag1]))
                     value += region_mean - distance * gamma
                 if strand1 == 0:
                     signal[map1, -1 - map2, 1] += exp(value)
@@ -197,7 +197,7 @@ def find_cis_upper_expected(
                         value += binning_corrections[index2]
                 # if finding distance, enrichment, or expected, correct for distance
                 if gamma != 0.0:
-                    distance = log(mids[frag2] - mids[frag1])
+                    distance = log(<double>(mids[frag2] - mids[frag1]))
                     value += region_mean - distance * gamma
                 signal[index + map2, 1] += exp(value)
     return None
@@ -562,7 +562,7 @@ def binning_bin_observed(
                 bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
                 index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
             counts[index] += 1
-            log_dist = log(distance)
+            log_dist = log(<double>distance)
             signal = region_means[regions[frag1]] - log_dist * gamma
             log_count = log(data[i, 2])
             if not corrections is None:

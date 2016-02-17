@@ -193,26 +193,24 @@ def plot_full_array(data, maxscore=None, minscore=None, symmetricscaling=True, l
         scaled[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
         scaled[where[0], where[1], 0] -= 1.0
     scaled = numpy.minimum(1.0, numpy.maximum(-1.0, scaled))
-    where1 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] >= 0))
-    where2 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] < 0))
-    temp0 = scaled[where1[0], where1[1], 0]
-    temp1 = 1.0 - temp0
-    scaled[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
-        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
-        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
-        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
-    temp0 = -scaled[where2[0], where2[1], 0]
-    temp1 = 1.0 - temp0
-    scaled[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
-        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
-        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
-        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
-    scaled = numpy.round(scaled).astype(numpy.uint32)
     img = numpy.empty((xdim, ydim), dtype=numpy.uint32)
     img.shape = (ydim, xdim)
     img[:, :] = int('ff999999', 16)
-    where = numpy.where(scaled[:, :, 1] > 0)
-    img[where[1], where[0]] = scaled[where[0], where[1], 0]
+    where1 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] >= 0))
+    temp0 = scaled[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    img[where1[1], where1[0]] = (255 * 256 ** 3 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])).astype(numpy.int64) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])).astype(numpy.int64) * 256 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])).astype(numpy.int64) * 256 ** 2)
+    del where1
+    where2 = numpy.where((scaled[:, :, 1] == 1) * (scaled[:, :, 0] < 0))
+    temp0 = -scaled[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    img[where2[1], where2[0]] = (255 * 256 ** 3 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])).astype(numpy.int64) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])).astype(numpy.int64) * 256 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])).astype(numpy.int64) * 256 ** 2)
     pilImage = Image.frombuffer('RGBA', (xdim, ydim), img, 'raw', 'RGBA', 0, 1)
     if not silent:
         print >> sys.stderr, ("Done\n"),

@@ -303,3 +303,72 @@ def find_arrowhead_path(
                     scores[i] = score
                     path[i] = j
     return None
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_band_score(
+        np.ndarray[DTYPE_t, ndim=3] hm,
+        np.ndarray[DTYPE_t, ndim=2] scores,
+        int minband,
+        int maxband,
+        int band):
+    cdef int i, j, k
+    cdef double observed, expected
+    cdef int num_bins = hm.shape[0]
+    cdef int hminband = minband / 2
+    cdef int hmaxband = maxband / 2
+    cdef int width = hmaxband - hminband
+    with nogil:
+        """
+        observed = 0.0
+        expected = 0.0
+        for j in range(width):
+            for k in range(maxband - width, maxband):
+                observed += hm[j, k - j - 1, 0]
+                expected += hm[j, k - j - 1, 1]
+        if observed > 0.0:#expected > 0.0:
+            scores[hmaxband, band] = log(observed / expected)
+        for i in range(hmaxband + 1, num_bins - hmaxband + 1):
+            for j in range(i - hmaxband, i - hminband):
+                observed -= hm[j - 1, i + hminband - j - 1, 0]
+                observed += hm[j, i + hmaxband - j - 2, 0]
+                expected -= hm[j - 1, i + hminband - j - 1, 1]
+                expected += hm[j, i + hmaxband - j - 2, 1]
+            for j in range(i + hminband, i + hmaxband - 1):
+                observed -= hm[i - hmaxband - 1, j - i + hmaxband, 0]
+                expected -= hm[i - hmaxband - 1, j - i + hmaxband, 1]
+                observed += hm[i - hminband - 1, j - i + hminband, 0]
+                expected += hm[i - hminband - 1, j - i + hminband, 1]
+            if observed > 0.0:#expected > 0.0:
+                scores[i, band] = log(observed / expected)
+        """
+        for i in range(hmaxband, num_bins - hmaxband + 1):
+            observed = 0.0
+            expected = 0.0
+            for j in range(i - hmaxband, i - hminband):
+                for k in range(i + hminband, i + hmaxband):
+                    observed += hm[j, k - j - 1, 0]
+                    expected += hm[j, k - j - 1, 1]
+            if observed > 0.0:#expected > 0.0:
+                scores[i, band] = log(observed / expected)
+    return None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

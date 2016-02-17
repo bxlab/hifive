@@ -59,7 +59,7 @@ def find_distance_bin_sums(
             if fend1 != previous_fend:
                 j = 0
                 previous_fend = fend1
-            log_dist = log(mids[fend2] - mids[fend1])
+            log_dist = log(<double>(mids[fend2] - mids[fend1]))
             while log_dist > cutoffs[j]:
                 j += 1
             count_sum[j] += counts[i]
@@ -74,7 +74,7 @@ def find_distance_bin_sums(
                 else:
                     if rev_mapping[fend2] - rev_mapping[fend1] == 1:
                         continue
-                log_dist = log(mids[fend2] - mids[fend1])
+                log_dist = log(<double>(mids[fend2] - mids[fend1]))
                 while log_dist > cutoffs[j]:
                     j += 1
                 bin_size[j, 1] += 1
@@ -115,7 +115,7 @@ def find_binary_distance_bin_sums(
             if fend1 != previous_fend:
                 j = 0
                 previous_fend = fend1
-            log_dist = log(mids[fend2] - mids[fend1])
+            log_dist = log(<double>(mids[fend2] - mids[fend1]))
             while log_dist > cutoffs[j]:
                 j += 1
             counts[j, 0] += 1
@@ -129,7 +129,7 @@ def find_binary_distance_bin_sums(
                 else:
                     if rev_mapping[fend2] - rev_mapping[fend1] == 1:
                         continue
-                log_dist = log(mids[fend2] - mids[fend1])
+                log_dist = log(<double>(mids[fend2] - mids[fend1]))
                 while log_dist > cutoffs[j]:
                     j += 1
                 counts[j, 1] += 1
@@ -161,7 +161,7 @@ def find_remapped_distance_means(
         j = 0
         for i in range(num_pairs):
             index0 = indices0[i]
-            distance = log(mids[indices1[i]] - mids[index0])
+            distance = log(<double>(mids[indices1[i]] - mids[index0]))
             if index0 != previous_index:
                 previous_index = index0
                 j = 0

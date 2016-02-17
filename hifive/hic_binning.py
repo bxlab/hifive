@@ -185,19 +185,10 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             # assign binned fends based on midpoint
             mapping[valid] = (mids[valid] - start) / binsize
             num_bins = (stop - start) / binsize
-        # find binbounds
-        binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
-        if binsize > 0:
+            # find binbounds
+            binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
             binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
             binbounds[:, 1] = numpy.arange(1, num_bins + 1) * binsize + start
-        else:
-            fends = hic.fends['fends'][startfend:stopfend]
-            binbounds[valid, 0] = fends['start'][valid]
-            binbounds[valid, 1] = fends['stop'][valid]
-        #for i, j in enumerate(mapping):
-        #    if binbounds[j, 0] == -1:
-        #        binbounds[j, 0] = mids[i]
-        #    binbounds[j, 1] = mids[i] + 1
     # if correction is requested, determine the appropriate type
     distance_parameters = None
     chrom_mean = 0.0
@@ -337,6 +328,18 @@ def _compact_to_upper(array):
         stop = min(m, n - i - 1)
         start = i * n - i * (i + 1) / 2
         new_array[start:(start + stop), :] = array[i, :stop, :]
+    return new_array
+
+def _upper_to_compact(array, maxbins=0):
+    n = int(numpy.round(0.5 + (array.shape[0] * 2 + 0.25) ** 0.5))
+    if maxbins == 0:
+        maxbins = n
+    new_array = numpy.zeros((n, maxbins, 2), dtype=numpy.float32)
+    pos = 0
+    for i in range(n - 1):
+        m = min(maxbins, array.shape[0] - pos)
+        new_array[i, :m, :] = array[pos:(pos + m), :]
+        pos += n - i - 1
     return new_array
 
 def find_cis_signal2(hic, chrom, binsize=10000, binbounds=None, start=None, stop=None, startfend=None, stopfend=None,
@@ -732,7 +735,7 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
         return binned_array
 
 def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, minobservations=10,
-                              searchdistance=0, removefailed=True, **kwargs):
+                              searchdistance=0, removefailed=True, skipfiltered=False, **kwargs):
     """
     Expand bins in 'binned' to include additional data provided in 'unbinned' as necessary to meet 'minobservations', or 'searchdistance' criteria.
 
@@ -750,6 +753,8 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     :type searchdistance: int.
     :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
     :type removefailed: bool.
+    :param skipfiltered: If true, bins with no valid fends are not dynamically binned.
+    :type skipfiltered: bool.
     :returns: None
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -788,17 +793,21 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     if unbinned_type == 'upper':
         if binned_type == 'upper':
             _hic_binning.dynamically_bin_upper_from_upper(unbinned, unbinnedmids, binned, binedges,
-                                                      mids, minobservations, searchdistance, int(removefailed))
+                                                      mids, minobservations, searchdistance, int(removefailed),
+                                                      int(skipfiltered))
         else:
             _hic_binning.dynamically_bin_compact_from_upper(unbinned, unbinnedmids, binned, binedges,
-                                                        mids, minobservations, searchdistance, int(removefailed))
+                                                        mids, minobservations, searchdistance, int(removefailed),
+                                                        int(skipfiltered))
     else:
         if binned_type == 'upper':
             _hic_binning.dynamically_bin_upper_from_compact(unbinned, unbinnedmids, binned, binedges,
-                                                        mids, minobservations, searchdistance, int(removefailed))
+                                                        mids, minobservations, searchdistance, int(removefailed),
+                                                        int(skipfiltered))
         else:
             _hic_binning.dynamically_bin_compact_from_compact(unbinned, unbinnedmids, binned, binedges,
-                                                          mids, minobservations, searchdistance, int(removefailed))
+                                                          mids, minobservations, searchdistance, int(removefailed),
+                                                          int(skipfiltered))
     if not silent:
         print >> sys.stderr, ("Done\n"),
     return None

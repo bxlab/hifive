@@ -212,7 +212,7 @@ def find_cis_compact_expected(
                                 value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
                     # if finding distance, enrichment, or expected, correct for distance
                     if not parameters is None:
-                        distance = log(mids[fend2] - mids[fend1])
+                        distance = log(<double>(mids[fend2] - mids[fend1]))
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
@@ -262,7 +262,7 @@ def find_cis_compact_expected(
                                 value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
                     # if finding distance, enrichment, or expected, correct for distance
                     if not parameters is None:
-                        distance = log(mids[fend2] - mids[fend1])
+                        distance = log(<double>(mids[fend2] - mids[fend1]))
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
@@ -375,7 +375,7 @@ def find_cis_upper_expected(
                                 value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
                     # if finding distance, enrichment, or expected, correct for distance
                     if not parameters is None:
-                        distance = log(mids[fend2] - mids[fend1])
+                        distance = log(<double>(mids[fend2] - mids[fend1]))
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
@@ -428,7 +428,7 @@ def find_cis_upper_expected(
                                 value *= binning_corrections[fend_indices[afend2, j, 1] + fend_indices[afend1, j, 0]]
                     # if finding distance, enrichment, or expected, correct for distance
                     if not parameters is None:
-                        distance = log(mids[fend2] - mids[fend1])
+                        distance = log(<double>(mids[fend2] - mids[fend1]))
                         while distance > parameters[k, 0]:
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
@@ -596,9 +596,9 @@ def find_cis_subregion_expected(
                     if not parameters is None:
                         distance = mids2[fend2] - mids1[fend1]
                         if distance > 0:
-                            distance = log(distance)
+                            distance = log(<double>distance)
                         else:
-                            distance = log(-distance)
+                            distance = log(<double>(-distance))
                         k = 0
                         while distance > parameters[k, 0]:
                             k += 1
@@ -751,7 +751,8 @@ def dynamically_bin_upper_from_upper(
         np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
         int minobservations,
         int maxsearch,
-        int removefailed):
+        int removefailed,
+        int skipinvalid):
     cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index, index2
     cdef long long int num_bins = bounds.shape[0]
     cdef long long int num_fends = ub_mids.shape[0]
@@ -759,8 +760,10 @@ def dynamically_bin_upper_from_upper(
         for x in range(num_bins - 1):
             index = x * num_bins - x * (x + 1) / 2 - x - 1
             for y in range(x + 1, num_bins):
+                if skipinvalid == 1 and binned[index + y, 1] == 0.0:
+                    continue
                 # if bin already meets our criteria, skip
-                if binned[index + y, 0] >= minobservations:
+                if binned[index + y, 0] >= minobservations or binned[index + y, 1] == 0:
                     continue
                 # otherwise, set bordering unbinned positions according to bounds
                 lX = bounds[x, 0]
@@ -848,7 +851,8 @@ def dynamically_bin_compact_from_upper(
         np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
         int minobservations,
         int maxsearch,
-        int removefailed):
+        int removefailed,
+        int skipinvalid):
     cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index
     cdef long long int num_bins = bounds.shape[0]
     cdef long long int max_bin = binned.shape[1]
@@ -856,6 +860,8 @@ def dynamically_bin_compact_from_upper(
     with nogil:
         for x in range(num_bins - 1):
             for y in range(x + 1, min(x + max_bin, num_bins)):
+                if skipinvalid == 1 and binned[x, y - x - 1, 1] == 0.0:
+                    continue
                 # if bin already meets our criteria, skip
                 if binned[x, y - x - 1, 0] >= minobservations:
                     continue
@@ -945,7 +951,8 @@ def dynamically_bin_upper_from_compact(
         np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
         int minobservations,
         int maxsearch,
-        int removefailed):
+        int removefailed,
+        int skipinvalid):
     cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index
     cdef long long int num_bins = bounds.shape[0]
     cdef long long int num_fends = ub_mids.shape[0]
@@ -954,6 +961,8 @@ def dynamically_bin_upper_from_compact(
         for x in range(num_bins - 1):
             index = x * num_bins - x * (x + 1) / 2 - x - 1
             for y in range(x + 1, num_bins):
+                if skipinvalid == 1 and binned[index + y, 1] == 0.0:
+                    continue
                 # if bin already meets our criteria, skip
                 if binned[index + y, 0] >= minobservations:
                     continue
@@ -1039,7 +1048,8 @@ def dynamically_bin_compact_from_compact(
         np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
         int minobservations,
         int maxsearch,
-        int removefailed):
+        int removefailed,
+        int skipinvalid):
     cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist
     cdef long long int num_bins = bounds.shape[0]
     cdef long long int max_bin = binned.shape[1]
@@ -1047,7 +1057,9 @@ def dynamically_bin_compact_from_compact(
     cdef long long int max_fend = unbinned.shape[1]
     with nogil:
         for x in range(num_bins - 1):
-            for y in range(x + 1, min(x + max_bin, num_bins)):
+            for y in range(x + 1, min(x + max_bin + 1, num_bins)):
+                if skipinvalid == 1 and binned[x, y - x - 1, 1] == 0.0:
+                    continue
                 # if bin already meets our criteria, skip
                 if binned[x, y - x - 1, 0] >= minobservations:
                     continue
@@ -1102,7 +1114,7 @@ def dynamically_bin_compact_from_compact(
                             lY_dist = b_mids[y] - ub_mids[lY - 1]
                         else:
                             lY_dist = 1000000000
-                        for i in range(max(lX, lY - max_fend - 1), min(uX + 1, lY)):
+                        for i in range(lX, min(uX + 1, lY)):
                             binned[x, y - x - 1, 0] += unbinned[i, lY - i - 1, 0]
                             binned[x, y - x - 1, 1] += unbinned[i, lY - i - 1, 1]
                     if min_dist == uY_dist:
@@ -1894,7 +1906,7 @@ def find_mrh_cis_expected(
                     if dt_int < 2:
                         value = 1.0
                     else:                            
-                        distance = log(mids[j] - mids[i])
+                        distance = log(<double>(mids[j] - mids[i]))
                         while distance > distance_parameters[l, 0]:
                             l += 1
                         value = exp(distance * distance_parameters[l, 1] + distance_parameters[l, 2] + chrom_mean)
@@ -1911,7 +1923,7 @@ def find_mrh_cis_expected(
                     if dt_int < 2:
                         value = 1.0
                     else:                            
-                        distance = log(mids[j] - mids[i])
+                        distance = log(<double>(mids[j] - mids[i]))
                         while distance > distance_parameters[l, 0]:
                             l += 1
                         value = exp(distance * distance_parameters[l, 1] + distance_parameters[l, 2] + chrom_mean)

@@ -30,6 +30,7 @@ except:
 import libraries._hic_domains as _hic_domains
 from libraries.hmm import HMM
 import hic_binning
+import plotting
 
 
 class TAD( object ):
@@ -153,7 +154,8 @@ class TAD( object ):
         if not self.silent:
             print >> sys.stderr, ("\r%s\rFinished finding TADs\n") % (' ' * 80),
 
-    def find_DI_TADs(self, binsize=20000, step=2500, window=500000, smoothing=6, chroms=[]):
+    def find_DI_TADs(self, binsize=20000, step=2500, window=500000, minsize=25000, maxsize=1500000, smoothing=6,
+                     joindomains=True, chroms=[]):
         self.binsize = int(binsize)
         self.step = int(step)
         self.window = int(window)
@@ -178,11 +180,6 @@ class TAD( object ):
             if temp is None:
                 continue
             num_bins = temp[0].shape[1]
-            step0 = []
-            step1 = []
-            for i in range(steps):
-                step0.append(numpy.arange(i, num_bins - steps + 1 + i))
-                step1.append(numpy.arange(1 + i, num_bins - steps + 2 + i))
             scores = []
             positions = []
             for i in range(num_bins, temp[0].shape[0] - num_bins - steps + 1):
@@ -191,10 +188,13 @@ class TAD( object ):
                 observed1 = 0
                 expected1 = 0.0
                 for j in range(steps):
-                    observed0 += numpy.sum(temp[0][i + j, step0[steps - j - 1], 0])
-                    expected0 += numpy.sum(temp[0][i + j, step0[steps - j - 1], 1])
-                    observed1 += numpy.sum(temp[0][i - step1[j], step0[j], 0])
-                    expected1 += numpy.sum(temp[0][i - step1[j], step0[j], 1])
+                    temp1 = numpy.arange(steps - j - 1, num_bins - j)
+                    observed0 += numpy.sum(temp[0][i + j, temp1, 0])
+                    expected0 += numpy.sum(temp[0][i + j, temp1, 1])
+                    temp1 = numpy.arange(i + steps - num_bins - 1, i)
+                    temp2 = i + j - temp1 - 1
+                    observed1 += numpy.sum(temp[0][temp1, temp2, 0])
+                    expected1 += numpy.sum(temp[0][temp1, temp2, 1])
                 if observed0 > 0 and observed1 > 0:
                     scores.append(numpy.log(observed0 * expected1 / (observed1 * expected0)))
                     positions.append((temp[1][i, 0] + temp[1][i + steps - 1, 1]) / 2)
@@ -227,16 +227,15 @@ class TAD( object ):
         neg_mean = neg_sum / neg_count
         neg_var = (neg_2sum / neg_count - neg_mean ** 2.0)
         seed = 2001
-        pi = [0.45, 0.45, 0.1]
-        transitions = [[1.0 - self.step / 250000., self.step / 250000., 0.0],
-                       [self.step / 500000., 1.0 - self.step / 250000., self.step / 500000.],
-                       [self.step / 50000., 0.0, 1.0 - self.step / 50000.]]
-        distributions = [[[0.33, pos_mean * 1.25, pos_var / 2.0],
-                          [0.33, pos_mean * 0.75, pos_var / 2.0]],
-                          [[0.33, pos_mean * 0.25, pos_var / 2.0],
-                          [0.33, neg_mean * 0.25, neg_var / 2.0]],
-                          [[0.33, neg_mean * 1.25, neg_var / 2.0],
-                          [0.33, neg_mean * 0.75, neg_var / 2.0]]]
+        pi = [0.5, 0.5]
+        transitions = [[0.98, 0.02],
+                       [0.02, 0.98]]
+        distributions = [[[0.33, pos_mean * 1.25, pos_var / 3.0],
+                          [0.33, pos_mean * 0.75, pos_var / 3.0],
+                          [0.33, pos_mean * 0.25, pos_var / 3.0]],
+                          [[0.33, neg_mean * 1.25, neg_var / 3.0],
+                          [0.33, neg_mean * 0.75, neg_var / 3.0],
+                          [0.33, neg_mean * 0.25, neg_var /3.0]]]
         hmm = HMM(
             seed=seed,
             num_states=2,
@@ -248,9 +247,8 @@ class TAD( object ):
         for chrom in chroms:
             if chrom not in self.DIs:
                 continue
-            states = hmm.find_path(self.DIs[chrom]['score'])[0]
-            start = None
             tads = []
+            states = hmm.find_path(self.DIs[chrom]['score'])[0]
             i = 1
             while i < states.shape[0]:
                 while i < states.shape[0] and not (states[i - 1] != 0 and states[i] == 0):
@@ -262,13 +260,73 @@ class TAD( object ):
                     i += 1
                 if i < states.shape[0]:
                     stop = self.DIs[chrom]['position'][i - 1] + self.step / 2
-                    tads.append([start, stop])
+                    if stop - start >= minsize:
+                        tads.append([start, stop])
                     start = None
             self.TADs[chrom] = numpy.array(tads, dtype=numpy.int32)
             where = numpy.where(self.TADs[chrom][1:, 0] < self.TADs[chrom][:-1, 1])[0]
             mids = (self.TADs[chrom][where, 1] + self.TADs[chrom][where + 1, 0]) / 2
             self.TADs[chrom][where, 1] = mids
             self.TADs[chrom][where + 1, 0] = mids
+            if joindomains:
+                temp = self.hic.cis_heatmap(chrom, binsize=self.step, maxdistance=maxsize, datatype='enrichment',
+                                            arraytype='compact', returnmapping=True)
+                num_tads = self.TADs[chrom].shape[0]
+                new_num_tads = 0
+                current_tads = numpy.zeros((num_tads, 3), dtype=numpy.float32)
+                starts = numpy.searchsorted(temp[1][:, 0], self.TADs[chrom][:, 0])
+                stops = numpy.searchsorted(temp[1][:, 0], self.TADs[chrom][:, 1], side='right')
+                for i in range(num_tads):
+                    for j in range(starts[i], stops[i] - 1):
+                        current_tads[i, :2] += numpy.sum(temp[0][j, :(stops[i] - j - 1), :], axis=0)
+                current_tads[:, 2] = numpy.log(current_tads[:, 0] / current_tads[:, 1])
+                while new_num_tads != num_tads:
+                    print num_tads
+                    num_tads = self.TADs[chrom].shape[0]
+                    join_scores = numpy.zeros((num_tads - 1, 3), dtype=numpy.float32)
+                    for i in range(num_tads - 1):
+                        if (stops[i] - starts[i]) * self.step > maxsize:
+                            continue
+                        for j in range(starts[i], stops[i]):
+                            join_scores[i, :2] += numpy.sum(temp[0][j, (stops[i] - j - 1):(stops[i + 1] - j - 1), :], axis=0)
+                    where = numpy.where(join_scores[:, 0] > 0)[0]
+                    join_scores[where, 2] = numpy.log(join_scores[where, 0] / join_scores[where, 1])
+                    new_tads = []
+                    new_starts = []
+                    new_stops = []
+                    new_scores = []
+                    i = 0
+                    while i < num_tads:
+                        if ((i < num_tads - 1 and (stops[i] - starts[i]) * self.step <= maxsize) and
+                            ((stops[i] - i == 0 and join_scores[i, 2] >= max((current_tads[i, 2] +
+                                current_tads[i + 1, 2]) / 2., join_scores[i + 1, 2])) or
+                            (i > 0 and i < num_tads - 2 and join_scores[i, 2] >=
+                                max((current_tads[i, 2] + current_tads[i + 1, 2]) / 2., join_scores[i + 1, 2],
+                                join_scores[i - 1, 2])) or
+                            (i == num_tads - 2 and join_scores[i, 2] >= max((current_tads[i, 2] + current_tads[i + 1, 2]) / 2.,
+                                join_scores[i - 1, 2])))):
+                            new_tads.append([self.TADs[chrom][i, 0], self.TADs[chrom][i + 1, 1]])
+                            new_starts.append(starts[i])
+                            new_stops.append(stops[i + 1])
+                            new_scores.append([current_tads[i, 0] + current_tads[i + 1, 0] + join_scores[i, 0],
+                                                current_tads[i, 1] + current_tads[i + 1, 1] + join_scores[i, 1], 0])
+                            new_scores[-1][-1] = numpy.log(new_scores[-1][0] / new_scores[-1][1])
+                            i += 2
+                        else :
+                            new_tads.append([self.TADs[chrom][i, 0], self.TADs[chrom][i, 1]])
+                            new_starts.append(starts[i])
+                            new_stops.append(stops[i])
+                            new_scores.append(current_tads[i, :])
+                            i += 1
+                        #for i in range(num_tads - 1):
+                        #    print current_tads[i, 2], join_scores[i,2]
+                        #print current_tads[-1,2]
+                    new_num_tads = len(new_tads)
+                    self.TADs[chrom] = numpy.array(new_tads, dtype=numpy.int32)
+                    current_tads = numpy.array(new_scores, dtype=numpy.float32)
+                    starts = numpy.array(new_starts, dtype=numpy.int32)
+                    stops = numpy.array(new_stops, dtype=numpy.int32)
+
 
     def plot_DI_tads(self, out_fname):
         if 'pyx' not in sys.modules:
@@ -305,7 +363,7 @@ class TAD( object ):
                 g.stroke(path.line(X0, 1.25, X0, 3.75), [style.linewidth.THIN, style.linestyle.dotted])
                 if i == self.TADs[chrom].shape[0] - 1 or self.TADs[chrom][i, 1] != self.TADs[chrom][i + 1, 0]:
                     g.stroke(path.line(X1, 1.25, X1, 3.75), [style.linewidth.THIN, style.linestyle.dotted])
-            pages.append(document.page(self.plot_tads(chrom)))
+            pages.append(document.page(g))
         doc = document.document(pages)
         doc.writePDFfile(out_fname)    
 
@@ -524,3 +582,66 @@ class Compartment( object ):
                 print >> outfile, "%s\t%i\t%i\t%i" % (chrom, self.positions[chrom][j, 0], self.positions[chrom][k, 1],
                                                       self.clusters[chrom][j])
         outfile.close()
+
+class Boundary( object ):
+    """
+    """
+
+    def __init__(self, hic, silent=False):
+        self.hic = hic
+        self.silent = silent
+
+    def find_band_boundaries(self, minband=10000, maxband=82000, bandstep=4000, step=1000, minwidth=6000,
+                             maxwidth=40000, chroms=[]):
+        minband = (minband / step) * step
+        maxband = (maxband / step) * step
+        n = (maxband - minband) / bandstep + 1
+        self.bands = numpy.zeros((n, 2), dtype=numpy.int32)
+        self.bands[:, 0] = numpy.arange(n) * bandstep + minband
+        self.bands[:, 1] = self.bands[:, 0] + (numpy.round(10 ** (numpy.linspace(numpy.log10(minwidth),
+                           numpy.log10(maxwidth), n))).astype(numpy.int32) / (step * 2)) * step * 2
+        self.step = step
+        self.band_scores = {}
+        if isinstance(chroms, str):
+            chroms = [chroms]
+        if len(chroms) == 0:
+            chroms = list(self.hic.fends['chromosomes'][...])
+        for chrom in chroms:
+            temp = self.find_band_scores(chrom)
+            if temp is not None:
+                self.band_scores[chrom] = temp
+            temp = numpy.zeros((self.band_scores[chrom].shape[0], self.band_scores[chrom].shape[1], 2), dtype=numpy.float32)
+            where = numpy.where(numpy.logical_not(numpy.isnan(self.band_scores[chrom])))
+            temp[where[0], where[1], 0] = self.band_scores[chrom][where]
+            temp[where[0], where[1], 1] = 1
+            img = plotting.plot_full_array(temp[:, ::-1, :], symmetricscaling=False, logged=False)
+            img.save('test.png')
+
+    def __getitem__(self, key):
+        """Dictionary-like lookup."""
+        if key in self.__dict__:
+            return self.__dict__[key]
+        else:
+            return None
+
+    def __setitem__(self, key, value):
+        """Dictionary-like value setting."""
+        self.__dict__[key] = value
+        return None
+
+    def find_band_scores(self, chrom):
+        temp = self.hic.cis_heatmap(chrom, binsize=self.step, datatype='fend', arraytype='compact',
+                                    maxdistance=self.bands[-1, 1], returnmapping=True)
+        if temp is None:
+            return None
+        hm, mapping = temp
+        scores = numpy.zeros((mapping.shape[0] + 1, self.bands.shape[0]), dtype=numpy.float32)
+        scores.fill(numpy.nan)
+        for i in range(scores.shape[1]):
+            _hic_domains.find_band_score(hm, scores, self.bands[i, 0] / self.step, self.bands[i, 1] / self.step, i)
+        return scores
+
+
+
+
+
