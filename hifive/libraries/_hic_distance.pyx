@@ -80,7 +80,7 @@ def find_distance_bin_sums(
                 bin_size[j, 1] += 1
                 logdistance_sum[j] += log_dist
             for fend2 in range(min(fend1 + 4, num_fends), num_fends):
-                log_dist = log(mids[fend2] - mids[fend1])
+                log_dist = log(<double>(mids[fend2] - mids[fend1]))
                 while log_dist > cutoffs[j]:
                     j += 1
                 bin_size[j, 1] += 1
@@ -135,7 +135,7 @@ def find_binary_distance_bin_sums(
                 counts[j, 1] += 1
                 logdistance_sum[j] += log_dist
             for fend2 in range(min(fend1 + 4, num_fends), num_fends):
-                log_dist = log(mids[fend2] - mids[fend1])
+                log_dist = log(<double>(mids[fend2] - mids[fend1]))
                 while log_dist > cutoffs[j]:
                     j += 1
                 counts[j, 1] += 1

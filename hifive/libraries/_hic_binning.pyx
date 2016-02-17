@@ -2010,11 +2010,12 @@ def make_trans_mrh_toplevel(
         np.ndarray[DTYPE_int_t, ndim=1] bin_position,
         int minobservations):
     cdef long long int i, j, k, l, index
-    cdef double value
+    cdef double value, log_2
     cdef int n_bins = obs_indices.shape[0] - 1
     cdef int m_bins = obs_indices2.shape[0] - 1
     cdef double nan = numpy.nan
     with nogil:
+        log_2 = log(2.0)
         index = 0
         for i in range(n_bins):
             for j in range(m_bins):
@@ -2028,7 +2029,7 @@ def make_trans_mrh_toplevel(
                     for k in range(obs_indices[i], obs_indices[i + 1]):
                         for l in range(obs_indices2[j], obs_indices2[j + 1]):
                             value += expected[k, l]
-                    current_level_data[index] = log2(current_level_data[index] / value)
+                    current_level_data[index] = log(current_level_data[index] / value) / log_2
                 else:
                     current_level_data[index] = nan
                 index += 1
@@ -2046,11 +2047,12 @@ def make_cis_mrh_toplevel(
         np.ndarray[DTYPE_int_t, ndim=1] bin_position,
         int minobservations):
     cdef long long int i, j, k, l, index
-    cdef double value
+    cdef double value, log_2
     cdef long long int n_bins = obs_indices.shape[0] - 1
     cdef double nan = numpy.nan
     with nogil:
         index = 0
+        log_2 = log(2.0)
         for i in range(n_bins):
             for j in range(i, n_bins):
                 bin_position[index] = i * n_bins + j
@@ -2063,7 +2065,7 @@ def make_cis_mrh_toplevel(
                     for k in range(obs_indices[i], obs_indices[i + 1]):
                         for l in range(obs_indices[j], obs_indices[j + 1]):
                             value += expected[k, l]
-                    current_level_data[index] = log2(current_level_data[index] / value)
+                    current_level_data[index] = log(current_level_data[index] / value) / log_2
                 else:
                     current_level_data[index] = nan
                 index += 1
@@ -2089,11 +2091,12 @@ def make_trans_mrh_midlevel(
         int minobservations,
         int pos):
     cdef long long int i, j, k, l, m, valid, shape, pos2, index, start1, stop1, start2, stop2, value1
-    cdef double value2
+    cdef double value2, log_2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
         pos2 = 0
+        log_2 = log(2.0)
         for i in range(num_prev_data):
             if prev_level_data[i] == nan:
                 prev_level_indices[i] = -1
@@ -2116,7 +2119,7 @@ def make_trans_mrh_midlevel(
                                 value1 += observed[l, m]
                                 value2 += expected[l, m]
                         if value1 >= minobservations:
-                            current_level_data[pos2] = log2(value1 / value2)
+                            current_level_data[pos2] = log(value1 / value2) / log_2
                             bin_position[pos2] = j * m_bins + k
                             shape += index
                             valid += 1
@@ -2149,11 +2152,12 @@ def make_cis_mrh_midlevel(
         int minobservations,
         int pos):
     cdef long long int i, j, k, l, m, valid, pos2, shape, index, start1, stop1, start2, stop2, value1
-    cdef double value2
+    cdef double value2, log_2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
         pos2 = 0
+        log_2 = log(2.0)
         for i in range(num_prev_data):
             if prev_level_data[i] == nan:
                 prev_level_indices[i] = -1
@@ -2180,7 +2184,7 @@ def make_cis_mrh_midlevel(
                                 value1 += observed[l, m]
                                 value2 += expected[l, m]
                         if value1 >= minobservations:
-                            current_level_data[pos2] = log2(value1 / value2)
+                            current_level_data[pos2] = log(value1 / value2) / log_2
                             bin_position[pos2] = j * n_bins + k
                             shape += index
                             valid += 1
@@ -2217,10 +2221,11 @@ def make_trans_mrh_lowerlevel(
         int pos):
     cdef long long int i, j, k, l, m, valid, pos2, shape, index, index1, index2
     cdef long long int start1, stop1, start2, stop2, start, mid, stop, value1
-    cdef double value2
+    cdef double value2, log_2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
+        log_2 = log(2.0)
         pos2 = 0
         for i in range(num_prev_data):
             if prev_level_data[i] == nan:
@@ -2260,7 +2265,7 @@ def make_trans_mrh_lowerlevel(
                                 value2 = correction_sums[j] * correction_sums2[k]
                             else:
                                 value2 = 1.0
-                            current_level_data[pos2] = log2(value1 / value2)
+                            current_level_data[pos2] = log(value1 / value2) / log_2
                             bin_position[pos2] = j * m_bins + k
                             shape += index
                             valid += 1
@@ -2297,11 +2302,12 @@ def make_cis_mrh_lowerlevel(
         int pos):
     cdef long long int i, j, k, l, m, valid, pos2, shape, index, index1, index2
     cdef long long int start1, stop1, start2, stop2, start, mid, stop, value1
-    cdef double value2
+    cdef double value2, log_2
     cdef long long int num_prev_data = prev_level_data.shape[0]
     cdef double nan = numpy.nan
     with nogil:
         pos2 = 0
+        log_2 = log(2.0)
         for i in range(num_prev_data):
             if prev_level_data[i] == nan:
                 prev_level_indices[i] = -1
@@ -2366,7 +2372,7 @@ def make_cis_mrh_lowerlevel(
                                         value2 -= corrections[l] * corrections[m]
                             else:
                                 value2 = 1.0
-                            current_level_data[pos2] = log2(value1 / value2)
+                            current_level_data[pos2] = log(value1 / value2) / log_2
                             bin_position[pos2] = j * n_bins + k
                             shape += index
                             valid += 1
