@@ -564,7 +564,7 @@ def binning_bin_observed(
             counts[index] += 1
             log_dist = log(<double>distance)
             signal = region_means[regions[frag1]] - log_dist * gamma
-            log_count = log(data[i, 2])
+            log_count = log(<double>data[i, 2])
             if not corrections is None:
                 log_count -= corrections[frag1] - corrections[frag2]
             sums[index, 0] += log_count - signal
@@ -578,7 +578,7 @@ def binning_bin_observed(
                 bin2 = max(all_indices[frag1, j], all_indices[frag2, j])
                 index += ((num_bins[j] - 1) * bin1 - bin1 * (bin1 - 1) / 2 + bin2) * bin_divs[j]
             counts[index] += 1
-            log_count = log(trans_data[i, 2])
+            log_count = log(<double>trans_data[i, 2])
             if not corrections is None:
                 log_count -= corrections[frag1] - corrections[frag2]
             sums[index, 0] += log_count - trans_mean
