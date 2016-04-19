@@ -140,7 +140,8 @@ def setup_package():
         pass
     else:
         include_dirs = [numpy.get_include()]
-        metadata['packages'] = find_packages(exclude=['examples', 'test', 'ez_setup.py'], where='')
+        metadata['packages'] = find_packages(exclude=['examples', 'test', 'ez_setup.py'], where='./')
+        print metadata['packages']
         metadata['ext_modules'] = get_extension_modules(include_dirs)
 
     setup(**metadata)

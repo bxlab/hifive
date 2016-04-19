@@ -163,6 +163,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         valid = valid[where]
         mapping[valid] = start_indices[where]
         num_bins = binbounds.shape[0]
+        binsize = 1
     else:
         # if fends are unbinned
         if binsize == 0:
@@ -304,7 +305,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
     if returnmapping:
         bin_mapping = numpy.zeros((num_bins, 4), dtype=numpy.int32)
         bin_mapping[:, :2] = binbounds
-        if binsize == 0:
+        if binbounds is None and binsize == 0:
             if skipfiltered:
                 bin_mapping[:, 2] = valid + startfend
             else:

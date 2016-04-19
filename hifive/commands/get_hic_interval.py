@@ -19,15 +19,23 @@ def run(args):
     if not args.image is None and args.pdf and "pyx" not in sys.modules.keys():
         parser.error("-p/--pdf requires the package 'pyx'")
     hic = HiC(args.project, 'r', silent=args.silent)
-    if args.stop == 0:
+    if args.stop == 0 or args.stop is None:
         maxstop = hic.fends['fends']['stop'][hic.fends['chr_indices'][hic.chr2int[args.chrom] + 1] - 1]
     else:
         maxstop = args.stop
+    if args.stop is None:
+        args.stop = maxstop
+    if args.start is None:
+        args.start = hic.fends['fends']['start'][hic.fends['chr_indices'][hic.chr2int[args.chrom]]]
     if not args.chrom2 is None:
-        if args.stop2 == 0:
+        if args.stop2 == 0 or args.stop2 is None:
             maxstop2 = hic.fends['fends']['stop'][hic.fends['chr_indices'][hic.chr2int[args.chrom2] + 1] - 1]
         else:
             maxstop2 = args.stop2
+        if args.stop2 is None:
+            args.stop2 = maxstop2
+        if args.start2 is None:
+            args.start2 = hic.fends['fends']['start'][hic.fends['chr_indices'][hic.chr2int[args.chrom2]]]
     else:
         if args.maxdist is None:
             args.maxdist = 0
@@ -104,6 +112,7 @@ def run(args):
                                                                            numpy.log2(data[i, j, 0] / data[i, j, 1]))
     output.close()
     if not args.image is None:
+        width = max(5.0, (args.stop - args.start) / 1000000.)
         if args.datatype == 'enrichment':
             symmetricscaling = True
         else:
@@ -114,65 +123,67 @@ def run(args):
             img, minscore, maxscore = plot_full_array(data, returnscale=True, symmetricscaling=symmetricscaling,
                                                       silent=args.silent, **kwargs)
             offset = 0.0
-            height = 5.0
-            width = 5.0 / data.shape[1] * data.shape[0]
+            height = (width / data.shape[0]) * data.shape[1]
         elif arraytype == 'compact':
             if args.rotate:
                 img, minscore, maxscore = plot_diagonal_from_compact_array(data, returnscale=True,
                                           symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
-                offset = 2.5 / (data.shape[0] * 2 - 2)
-                height = 2.5
+                offset = width / 2. / (data.shape[0] * 2 - 2)
+                height = width / (data.shape[0] * 2.0 - 2) * data.shape[1]
             else:
                 img, minscore, maxscore = plot_compact_array(data, returnscale=True,
                                           symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
                 offset = 0.0
-                height = 5.0
+                height = width
         else:
             if args.rotate:
                 img, minscore, maxscore = plot_diagonal_from_upper_array(data, returnscale=True,
                                           symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
-                offset = 2.5 / (mapping.shape[0] * 2 - 2)
-                height = 2.5
+                offset = width / 2. / (mapping.shape[0] * 2 - 2)
+                height = width / 2.
             else:
                 img, minscore, maxscore = plot_upper_array(data, returnscale=True,
                                           symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
                 offset = 0.0
-                height = 5.0
+                height = width
         if args.pdf:
             c = canvas.canvas()
             if args.chrom2 is None:
-                c1 = canvas.canvas([canvas.clip(path.rect(0, 0, 5, 5))])
-                c1.insert(bitmap.bitmap(-offset, -offset, img, width=5.0))
+                c1 = canvas.canvas([canvas.clip(path.rect(0, 0, width, height))])
+                c1.insert(bitmap.bitmap(-offset, -offset, img, width=width))
             else:
                 c1 = canvas.canvas([canvas.clip(path.rect(0, 0, width, height))])
                 c1.insert(bitmap.bitmap(-offset, -offset, img, width=width))
             c.insert(c1)
             if args.ticks and args.binsize > 0:
                 if args.chrom2 is None:
-                    c.stroke(path.line(0, 0, 5.0, 0))
+                    c.stroke(path.line(0, 0, width, 0))
                     xmin = (mapping[0, 0] + mapping[0, 1]) / 2
                     xmax = (mapping[-1, 0] + mapping[-1, 1]) / 2
-                    order = int(floor(log10(xmax - xmin))) - 1
-                    step = int(floor((xmax - xmin) / (10.0 ** order * 5.0))) * 10 ** order
+                    #order = int(floor(log10(xmax - xmin))) - 1
+                    #step = int(floor((xmax - xmin) / (10.0 ** order))) * 10 ** order
+                    
+                    order = int(floor(log10((xmax - xmin) / (width * 2.0))))
+                    step = int(floor((xmax - xmin) / (width * 2.0) / (10.0 ** order))) * 10 ** order
                     values = numpy.arange(((xmin - 1) / step + 1) * step, (xmax / step) * step + 1, step)
                     ticks = (values - float(mapping[0, 0] + mapping[0, 1]) / 2) / (mapping[-1, 0] -
-                                                                                   mapping[0, 0]) * 5.0
+                                                                                   mapping[0, 0]) * width
                     for i in range(values.shape[0]):
                         c.stroke(path.line(ticks[i], 0, ticks[i], -0.25), [style.linewidth.Thin])
                         c.text(ticks[i], -0.3, "%0.2e" % values[i],
                                [text.valign.middle, text.halign.left, text.size(-2), trafo.rotate(-90)])
                     if not args.rotate:
-                        c.stroke(path.line(5.0, 0, 5.0, 5.0))
+                        c.stroke(path.line(width, 0, width, height))
                         for i in range(values.shape[0]):
-                            c.stroke(path.line(5.0, 5.0 - ticks[i], 5.25, 5.0 - ticks[i]), [style.linewidth.Thin])
-                            c.text(5.3, 5.0 - ticks[i], "%0.2e" % values[i], [text.valign.middle, text.halign.left,
+                            c.stroke(path.line(width, height - ticks[i], width + 0.25, height - ticks[i]), [style.linewidth.Thin])
+                            c.text(width + 0.3, height - ticks[i], "%0.2e" % values[i], [text.valign.middle, text.halign.left,
                                                                               text.size(-2)])
                 else:
                     c.stroke(path.line(0, 0, width, 0))
                     xmin = (mapping1[0, 0] + mapping1[0, 1]) / 2
                     xmax = (mapping1[-1, 0] + mapping1[-1, 1]) / 2
-                    order = int(floor(log10(xmax - xmin))) - 1
-                    step = int(floor((xmax - xmin) / (10.0 ** order * width))) * 10 ** order
+                    order = int(floor(log10((xmax - xmin) / (width * 2.0))))
+                    step = int(floor((xmax - xmin) / (width * 2.0) / (10.0 ** order))) * 10 ** order
                     values = numpy.arange(((xmin - 1) / step + 1) * step, (xmax / step) * step + 1, step)
                     ticks = (values - float(mapping1[0, 0] + mapping1[0, 1]) / 2) / (mapping1[-1, 0] -
                                                                                      mapping1[0, 0]) * width
@@ -183,8 +194,8 @@ def run(args):
                     c.stroke(path.line(0, 0, width, 0))
                     xmin = (mapping2[0, 0] + mapping2[0, 1]) / 2
                     xmax = (mapping2[-1, 0] + mapping2[-1, 1]) / 2
-                    order = int(floor(log10(xmax - xmin))) - 1
-                    step = int(floor((xmax - xmin) / (10.0 ** order * height))) * 10 ** order
+                    order = int(floor(log10((xmax - xmin) / (width * 2.0))))
+                    step = int(floor((xmax - xmin) / (width * 2.0) / (10.0 ** order))) * 10 ** order
                     values = numpy.arange(((xmin - 1) / step + 1) * step, (xmax / step) * step + 1, step)
                     ticks = (values - float(mapping2[0, 0] + mapping2[0, 1]) / 2) / (mapping2[-1, 0] -
                                                                                      mapping2[0, 0]) * height
@@ -209,10 +220,10 @@ def run(args):
                     logged = kwargs['logged']
                 else:
                     logged = True
-                c.insert(plot_key(min_score=minscore, max_score=maxscore, height=0.25, width=width,
+                c.insert(plot_key(min_score=minscore, max_score=maxscore, height=0.25, width=min(5., width),
                                   orientation='top', num_ticks=5, min_color=min_color,
                                   mid_color=mid_color, max_color=max_color,
-                                  log_display=False), [trafo.translate(0, height + 0.25)])
+                                  log_display=False), [trafo.translate(width * 0.5 - min(2.5, width * 0.5), height + 0.25)])
                 if logged:
                     label = "Log2 "
                 else:
