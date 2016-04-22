@@ -567,7 +567,7 @@ def find_binned_cis_upper_expected(
                     continue
                 index = map1 * (num_bins - 1) - map1 * (map1 - 1) / 2
                 k = 0
-                for fend2 in range(fend1, num_bins):
+                for fend2 in range(fend1, num_fends):
                     map2 = mapping[fend2]
                     if map2 == -1 or mids[fend2] - mids[fend1] > maxdistance:
                         continue
@@ -583,7 +583,8 @@ def find_binned_cis_upper_expected(
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                     signal[index + map2, 1] += value
-                signal[index + j, 1] /= 2
+            for j in range(num_bins):
+                signal[j * num_bins - j * (j - 1) / 2, 1] /= 2.0
         else:
             for j in range(num_bins):
                 index = j * (num_bins - 1) - j * (j - 1) / 2

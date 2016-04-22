@@ -727,6 +727,8 @@ def add_hic_interval_subparser(subparsers):
     parser.add_argument("-d", "--data-type", dest="datatype", default="fend",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fend", "distance", "enrichment", "expected"])
+    parser.add_argument("-M", "--matrix", dest="matrix", default=False, action="store_true",
+        help="Store output as a tab-separated matrix of values.")
     parser.add_argument("-y", "--dynamically-bin", dest="dynamic", default=False, action="store_true",
         help="Dynamically bin heatmap.")
     parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,

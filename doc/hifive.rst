@@ -456,8 +456,8 @@ hic-interval
 ::
 
   > hifive hic-interval [-h] -c CHROM [-s START] [-e STOP] [-b BINSIZE]
-        [-m MAXDIST] [-d {raw,fend,distance,enrichment,expected}] [-y]
-        [-x EXPBINSIZE] [-f MINOBS] [-a SEARCH] [-v] [-i IMAGE] [-p]
+        [-m MAXDIST] [-d {raw,fend,distance,enrichment,expected}] [-M]
+        [-y] [-x EXPBINSIZE] [-f MINOBS] [-a SEARCH] [-v] [-i IMAGE] [-p]
         [-r] [-t] [-l] [-k KEYWORDS] [-q] project output
 
 Arguments:
@@ -467,7 +467,7 @@ Arguments:
 
 Options:
 
--h/--help, -c/--chromosome, -s/--start, -e/--stop, -b/--binsize, -m/--max-distance, -d/--datatype, -y/--dynamically-bin, -x/--expansion-binsize, -f/--minobservations, -a/--search-distance, -v/--remove-failed, -i/--image, -p/--pdf, -r/--rotate, -t/--ticks, -l/--legend, -k/--keyword, -q/--quiet
+-h/--help, -c/--chromosome, -s/--start, -e/--stop, -b/--binsize, -m/--max-distance, -d/--datatype, -M/--matrix, -y/--dynamically-bin, -x/--expansion-binsize, -f/--minobservations, -a/--search-distance, -v/--remove-failed, -i/--image, -p/--pdf, -r/--rotate, -t/--ticks, -l/--legend, -k/--keyword, -q/--quiet
 
 .. _hic_combine_replicates:
 
@@ -588,10 +588,11 @@ HiC Interaction Binning Options
 
 HiC Heatmap Options:
 
--b, --binsize int        The width of bins (in basepairs) to partition data into. A value of zero indicates that each bin is to correspond with a single fend. [10000]
--t, --trans              Calculate and include trans interactions in heatmaps.
--c, --chromosomes str    A comma-separated list if chromosome names to include in the heatmaps. [all chromosomes]
--d, --datatype str       Type of data to produce for the heatmaps. Valid options are raw, fend (only fend corrections applied), distance (only distance-dependence signal removed), enrichment (both fend correction and distance-dependence signal removed), and expected (only predicted signal). [fend]
+-b, --binsize int           The width of bins (in basepairs) to partition data into. A value of zero indicates that each bin is to correspond with a single fend. [10000]
+-t, --trans                 Calculate and include trans interactions in heatmaps.
+-c, --chromosomes str       A comma-separated list if chromosome names to include in the heatmaps. [all chromosomes]
+-d, --datatype str          Type of data to produce for the heatmaps. Valid options are raw, fend (only fend corrections applied), distance (only distance-dependence signal removed), enrichment (both fend correction and distance-dependence signal removed), and expected (only predicted signal). [fend]
+-M, --matrix                 Store output as a tab-separated matrix of values.
 -y, --dynamically-bin        Dynamically bin heatmap.
 -x, --expansion-binsize int  The size of bins, in base pairs, to group data into for expanding under-populated bins. [10000]
 -f, --minobservations int    The minimum number of observed reads in a bin for it to be considered valid. [20]

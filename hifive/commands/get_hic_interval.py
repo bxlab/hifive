@@ -82,35 +82,69 @@ def run(args):
                                         minobservations=args.minobs, searchdistance=args.search,
                                         removefailed=args.remove)
     output = open(args.output, 'w')
-    if args.chrom2 is None:
-        diag = int(hic.binned is None)
-        if arraytype == 'upper':
-            pos = 0
-            for i in range(mapping.shape[0] - 1 + diag):
-                for j in range(i + 1 - diag, mapping.shape[0]):
-                    if data[pos, 0] > 0.0 and data[pos, 1] > 0.0:
-                        print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
-                                                                               mapping[i, 1], args.chrom,
-                                                                               mapping[j, 0], mapping[j, 1],
-                                                                               numpy.log2(data[pos, 0] / data[pos, 1]))
-                    pos += 1
+    if args.matrix:
+        if args.chrom2 is None:
+            diag = int(hic.binned is not None)
+            if arraytype == 'upper':
+                temp = numpy.zeros((mapping.shape[0], mapping.shape[0]), dtype=numpy.float64)
+                indices = numpy.triu_indices(mapping.shape[0], 1 - diag)
+                where = numpy.where(data[:, 1] > 0)[0]
+                temp[indices[0][where], indices[1][where]] = data[where, 0] / data[where, 1]
+                temp[indices[1][where], indices[0][where]] += data[where, 0] / data[where, 1]
+            else:
+                temp = numpy.zeros((mapping.shape[0], mapping.shape[0]), dtype=numpy.float64)
+                for i in range(mapping.shape[0] - 1 + diag):
+                    where = numpy.where(data[i, :, 1] > 0)[0]
+                    temp[i, where + i + 1 - diag] = data[i, where, 0] / data[i, where, 1]
+                indices = numpy.triu_indices(mapping.shape[0], 1 - diag)
+                temp[indices[1], indices[0]] += temp[indices]
         else:
-            for i in range(mapping.shape[0] - 1 + diag):
-                for pos in range(min(mapping.shape[0] - i - 1 + diag, data.shape[1])):
-                    j = i + pos + 1 - diag
-                    if data[i, pos, 0] > 0.0 and data[i, pos, 1] > 0.0:
-                        print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
-                                                                               mapping[i, 1], args.chrom,
-                                                                               mapping[j, 0], mapping[j, 1],
-                                                                               numpy.log2(data[i, pos, 0] /
-                                                                                data[i, pos, 1]))
+            temp = numpy.zeros((data.shape[0], data.shape[1]), dtype=numpy.float64)
+            where = numpy.where(data[:, :, 1] > 0)
+            temp[where] = data[where[0], where[1], 0] / data[where[0], where[1], 1]
+        if args.datatype == 'raw':
+            for i in range(temp.shape[0]):
+                tempout = []
+                for j in range(temp.shape[1]):
+                    tempout.append("%i" % temp[i, j])
+                print >> output, '\t'.join(tempout)
+        else:
+            for i in range(temp.shape[0]):
+                tempout = []
+                for j in range(temp.shape[1]):
+                    tempout.append("%0.6f" % temp[i, j])
+                print >> output, '\t'.join(tempout)
     else:
-        for i in range(mapping1.shape[0]):
-            for j in range(mapping2.shape[0]):
-                if data[i, j, 0] > 0.0 and data[i, j, 1] > 0.0:
-                    print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping1[i, 0], mapping1[i, 1],
-                                                                           args.chrom2, mapping2[j, 0], mapping2[j, 1],
-                                                                           numpy.log2(data[i, j, 0] / data[i, j, 1]))
+        if args.chrom2 is None:
+            diag = int(hic.binned is None)
+            if arraytype == 'upper':
+                pos = 0
+                for i in range(mapping.shape[0] - 1 + diag):
+                    for j in range(i + 1 - diag, mapping.shape[0]):
+                        if data[pos, 0] > 0.0 and data[pos, 1] > 0.0:
+                            print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
+                                                                           mapping[i, 1], args.chrom,
+                                                                           mapping[j, 0], mapping[j, 1],
+                                                                           numpy.log2(data[pos, 0] / data[pos, 1]))
+                        pos += 1
+            else:
+                for i in range(mapping.shape[0] - 1 + diag):
+                    for pos in range(min(mapping.shape[0] - i - 1 + diag, data.shape[1])):
+                        j = i + pos + 1 - diag
+                        if data[i, pos, 0] > 0.0 and data[i, pos, 1] > 0.0:
+                            print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
+                                                                            mapping[i, 1], args.chrom,
+                                                                            mapping[j, 0], mapping[j, 1],
+                                                                            numpy.log2(data[i, pos, 0] /
+                                                                            data[i, pos, 1]))
+        else:
+            for i in range(mapping1.shape[0]):
+                for j in range(mapping2.shape[0]):
+                    if data[i, j, 0] > 0.0 and data[i, j, 1] > 0.0:
+                        print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom,
+                                                                        mapping1[i, 0], mapping1[i, 1],
+                                                                        args.chrom2, mapping2[j, 0], mapping2[j, 1],
+                                                                        numpy.log2(data[i, j, 0] / data[i, j, 1]))
     output.close()
     if not args.image is None:
         width = max(5.0, (args.stop - args.start) / 1000000.)
