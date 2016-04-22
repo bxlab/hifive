@@ -83,10 +83,11 @@ def run(args):
                                         removefailed=args.remove)
     output = open(args.output, 'w')
     if args.chrom2 is None:
+        diag = int(hic.binned is None)
         if arraytype == 'upper':
             pos = 0
-            for i in range(mapping.shape[0] - 1):
-                for j in range(i + 1, mapping.shape[0]):
+            for i in range(mapping.shape[0] - 1 + diag):
+                for j in range(i + 1 - diag, mapping.shape[0]):
                     if data[pos, 0] > 0.0 and data[pos, 1] > 0.0:
                         print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
                                                                                mapping[i, 1], args.chrom,
@@ -94,9 +95,9 @@ def run(args):
                                                                                numpy.log2(data[pos, 0] / data[pos, 1]))
                     pos += 1
         else:
-            for i in range(mapping.shape[0] - 1):
-                for pos in range(min(mapping.shape[0] - i - 1, data.shape[1])):
-                    j = i + pos + 1
+            for i in range(mapping.shape[0] - 1 + diag):
+                for pos in range(min(mapping.shape[0] - i - 1 + diag, data.shape[1])):
+                    j = i + pos + 1 - diag
                     if data[i, pos, 0] > 0.0 and data[i, pos, 1] > 0.0:
                         print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
                                                                                mapping[i, 1], args.chrom,
@@ -127,23 +128,27 @@ def run(args):
         elif arraytype == 'compact':
             if args.rotate:
                 img, minscore, maxscore = plot_diagonal_from_compact_array(data, returnscale=True,
-                                          symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
-                offset = width / 2. / (data.shape[0] * 2 - 2)
+                                          symmetricscaling=symmetricscaling, silent=args.silent,
+                                          diagonal_included=diag, **kwargs)
+                offset = width / 2. / (data.shape[0] * 2 - 1 + diag)
                 height = width / (data.shape[0] * 2.0 - 2) * data.shape[1]
             else:
                 img, minscore, maxscore = plot_compact_array(data, returnscale=True,
-                                          symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
+                                          symmetricscaling=symmetricscaling, silent=args.silent,
+                                          diagonal_included=diag, **kwargs)
                 offset = 0.0
                 height = width
         else:
             if args.rotate:
                 img, minscore, maxscore = plot_diagonal_from_upper_array(data, returnscale=True,
-                                          symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
-                offset = width / 2. / (mapping.shape[0] * 2 - 2)
+                                          symmetricscaling=symmetricscaling, silent=args.silent,
+                                          diagonal_included=diag, **kwargs)
+                offset = width / 2. / (mapping.shape[0] * 2 - 1 + diag)
                 height = width / 2.
             else:
                 img, minscore, maxscore = plot_upper_array(data, returnscale=True,
-                                          symmetricscaling=symmetricscaling, silent=args.silent, **kwargs)
+                                          symmetricscaling=symmetricscaling, silent=args.silent,
+                                          diagonal_included=diag, **kwargs)
                 offset = 0.0
                 height = width
         if args.pdf:

@@ -27,7 +27,15 @@ def run(args):
         chroms = args.chroms.split(',')
         if len(chroms) == 1 and chroms[0] == '':
             chroms = []
+    if args.matrix is not None and args.binned is None:
+        if rank == 0:
+            print sys.stderr, ("Loading data from matrices is only supported for binned data.")
+        return 1
     if args.algorithm.count('binning') > 0:
+        if args.binned is not None:
+            if rank == 0:
+                print sys.stderr, ("This normalization algorithm is not currently supported for binned data.")
+            return 1
         model = args.model.split(',')
         modelbins = args.modelbins.split(',')
         parameters = args.parameters.split(',')
@@ -49,7 +57,7 @@ def run(args):
         data_fname = "%s.hcd" % args.prefix
         project_fname = "%s.hcp" % args.prefix
     if rank == 0:
-        fends = Fend(fend_fname, 'w', silent=args.silent)
+        fends = Fend(fend_fname, 'w', binned=args.binned, silent=args.silent)
         if args.bed is None:
             fends.load_fends(args.fend, genome_name=args.genome, re_name=args.re, format="fend")
         else:
@@ -63,6 +71,8 @@ def run(args):
             data.load_data_from_raw(fend_fname, args.raw, args.insert, args.skipdups)
         elif not args.mat is None: 
             data.load_data_from_mat(fend_fname, args.mat, args.insert)
+        elif not args.matrix is None:
+            data.load_binned_data_from_matrices(fend_fname, args.matrix)
         data.save()
         del data
         for i in range(1, num_procs):

@@ -11,4 +11,6 @@ def run(args):
         data.load_data_from_raw(args.fend, args.raw, args.insert, args.skipdups)
     elif not args.mat is None: 
         data.load_data_from_mat(args.fend, args.mat, args.insert)
+    elif not args.matrix is None:
+        data.load_binned_data_from_matrices(args.fend, args.matrix)
     data.save()
