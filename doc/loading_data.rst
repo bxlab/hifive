@@ -66,3 +66,8 @@ MAT files are in a tabular text format previously defined for `HiCPipe <http://w
 
 .. note::
     In order to maintain compatibility with HiCPipe, both tabular fend files and MAT files are 1-indexed, rather than the standard 0-indexed used everywhere else with HiFive.
+
+MATRIX Files
+------------
+
+Matrix files are tab-separated files that contain a square matrix of values corresponding to binned read counts. These files can contain labels with the first line containing a tab followed by a tab-separated list of bin labels and each subsequent line containing a label followed by bin values. Labels should be in a format such that the bin position occurs after the '|' character and in the form chrX:XXXX-XXXX (e.g. interval1|myexpriment|chr3:1000000-1040000). If no labels are provided, bins are assumed to be begin at the zero coordinate. Each chromosome or chromosome pair (inter-chromosomal interactions) should be in a separate file with the chrosome name appearing before the first '.' in the filename (e.g. chr1.matrix). Inter-chromosomal matrix files should be named with the chromosome names separated by '_by_' (e.g. chr1_by_chr2.matrix).

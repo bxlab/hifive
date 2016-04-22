@@ -43,7 +43,8 @@ def find_distance_bin_sums(
         np.ndarray[DTYPE_64_t, ndim=1] count_sum not None,
         np.ndarray[DTYPE_64_t, ndim=1] logdistance_sum not None,
         int start,
-        int stop):
+        int stop,
+        int binned):
     cdef long long int i, j, temp, fend1, fend2, previous_fend
     cdef double log_dist
     cdef long long int num_data = indices.shape[0]
@@ -59,33 +60,42 @@ def find_distance_bin_sums(
             if fend1 != previous_fend:
                 j = 0
                 previous_fend = fend1
-            log_dist = log(<double>(mids[fend2] - mids[fend1]))
+            log_dist = log(<double>(max(1, mids[fend2] - mids[fend1])))
             while log_dist > cutoffs[j]:
                 j += 1
             count_sum[j] += counts[i]
             bin_size[j, 0] += 1
         for fend1 in range(start, stop):
             j = 0
-            for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
-                if rev_mapping[fend1] % 2 == 0:
-                    temp = rev_mapping[fend2] - rev_mapping[fend1]
-                    if temp == 1 or temp == 3:
-                        continue
-                else:
-                    if rev_mapping[fend2] - rev_mapping[fend1] == 1:
-                        continue
-                log_dist = log(<double>(mids[fend2] - mids[fend1]))
-                while log_dist > cutoffs[j]:
-                    j += 1
-                bin_size[j, 1] += 1
-                logdistance_sum[j] += log_dist
-            for fend2 in range(min(fend1 + 4, num_fends), num_fends):
-                log_dist = log(<double>(mids[fend2] - mids[fend1]))
-                while log_dist > cutoffs[j]:
-                    j += 1
-                bin_size[j, 1] += 1
-                logdistance_sum[j] += log_dist
+            if binned == 0:
+                for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
+                    if rev_mapping[fend1] % 2 == 0:
+                        temp = rev_mapping[fend2] - rev_mapping[fend1]
+                        if temp == 1 or temp == 3:
+                            continue
+                    else:
+                        if rev_mapping[fend2] - rev_mapping[fend1] == 1:
+                            continue
+                    log_dist = log(<double>(mids[fend2] - mids[fend1]))
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    bin_size[j, 1] += 1
+                    logdistance_sum[j] += log_dist
+                for fend2 in range(min(fend1 + 4, num_fends), num_fends):
+                    log_dist = log(<double>(mids[fend2] - mids[fend1]))
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    bin_size[j, 1] += 1
+                    logdistance_sum[j] += log_dist
+            else:
+                for fend2 in range(fend1, num_fends):
+                    log_dist = log(<double>(max(1, mids[fend2] - mids[fend1])))
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    bin_size[j, 1] += 1
+                    logdistance_sum[j] += log_dist
     return None
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -99,7 +109,8 @@ def find_binary_distance_bin_sums(
         np.ndarray[DTYPE_int64_t, ndim=2] counts not None,
         np.ndarray[DTYPE_64_t, ndim=1] logdistance_sum not None,
         int start,
-        int stop):
+        int stop,
+        int binned):
     cdef long long int i, j, temp, fend1, fend2, previous_fend
     cdef double log_dist
     cdef long long int num_data = indices.shape[0]
@@ -115,31 +126,39 @@ def find_binary_distance_bin_sums(
             if fend1 != previous_fend:
                 j = 0
                 previous_fend = fend1
-            log_dist = log(<double>(mids[fend2] - mids[fend1]))
+            log_dist = log(<double>(max(1, mids[fend2] - mids[fend1])))
             while log_dist > cutoffs[j]:
                 j += 1
             counts[j, 0] += 1
         for fend1 in range(start, stop):
             j = 0
-            for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
-                if rev_mapping[fend1] % 2 == 0:
-                    temp = rev_mapping[fend2] - rev_mapping[fend1]
-                    if temp == 1 or temp == 3:
-                        continue
-                else:
-                    if rev_mapping[fend2] - rev_mapping[fend1] == 1:
-                        continue
-                log_dist = log(<double>(mids[fend2] - mids[fend1]))
-                while log_dist > cutoffs[j]:
-                    j += 1
-                counts[j, 1] += 1
-                logdistance_sum[j] += log_dist
-            for fend2 in range(min(fend1 + 4, num_fends), num_fends):
-                log_dist = log(<double>(mids[fend2] - mids[fend1]))
-                while log_dist > cutoffs[j]:
-                    j += 1
-                counts[j, 1] += 1
-                logdistance_sum[j] += log_dist
+            if binned == 0:
+                for fend2 in range(fend1 + 1, min(fend1 + 4, num_fends)):
+                    if rev_mapping[fend1] % 2 == 0:
+                        temp = rev_mapping[fend2] - rev_mapping[fend1]
+                        if temp == 1 or temp == 3:
+                            continue
+                    else:
+                        if rev_mapping[fend2] - rev_mapping[fend1] == 1:
+                            continue
+                    log_dist = log(<double>(mids[fend2] - mids[fend1]))
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    counts[j, 1] += 1
+                    logdistance_sum[j] += log_dist
+                for fend2 in range(min(fend1 + 4, num_fends), num_fends):
+                    log_dist = log(<double>(mids[fend2] - mids[fend1]))
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    counts[j, 1] += 1
+                    logdistance_sum[j] += log_dist
+            else:
+                for fend2 in range(fend1, num_fends):
+                    log_dist = log(<double>(max(1, mids[fend2] - mids[fend1])))
+                    while log_dist > cutoffs[j]:
+                        j += 1
+                    counts[j, 1] += 1
+                    logdistance_sum[j] += log_dist
     return None
 
 
@@ -161,7 +180,7 @@ def find_remapped_distance_means(
         j = 0
         for i in range(num_pairs):
             index0 = indices0[i]
-            distance = log(<double>(mids[indices1[i]] - mids[index0]))
+            distance = log(<double>(max(1, mids[indices1[i]] - mids[index0])))
             if index0 != previous_index:
                 previous_index = index0
                 j = 0

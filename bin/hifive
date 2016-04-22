@@ -418,6 +418,8 @@ def add_fends_subparser(subparsers):
         help="Fend file in HiCPipe-compatible tabular format, optionally containing fend characteristics (GC content and/or mappability).")
     infile_group.add_argument("-B", "--bed", dest="bed", type=str, default=None,
         help="Bed file containing either RE fragment boundary data or RE cutsites.")
+    parser.add_argument("--binned", dest="binned", type=int, default=None,
+        help="Interval to bin data into.")
     parser.add_argument("-r", "--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
     parser.add_argument("-g", "--genome", dest="genome", required=False, default=None, type=str,
@@ -437,6 +439,8 @@ def add_hicdataset_subparser(subparsers):
         help="A tab-separated text file containing pairs of read ends (chr1 pos1 strand1 chr2 pos2 strand2), one per line. For multiple files, this option can be passed multiple times.")
     infile_group.add_argument("-M", "--mat", dest="mat", action='store',
         help="A HiCPipe-style tabular MAT file containing fend pair counts.")
+    infile_group.add_argument("-X", "--matrix", dest="matrix", action='append',
+        help="Binned matrix containing summed fend interactions.")
     parser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
         help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
     parser.add_argument("--skip-duplicate-filtering", dest="skipdups", required=False, default=False,
@@ -525,6 +529,8 @@ def add_complete_hic_group(subparser):
         help="Fend file in HiCPipe-compatible tabular format, optionally containing fend characteristics (GC content and/or mappability).")
     fendfile_group.add_argument("-B", "--bed", dest="bed", type=str, default=None,
         help="Bed file containing either RE fragment boundary data or RE cutsites.")
+    subparser.add_argument("--binned", dest="binned", type=int, default=None,
+        help="Interval to bin data into.")
     subparser.add_argument("--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
     subparser.add_argument("--genome", dest="genome", required=False, default=None, type=str,
@@ -536,6 +542,8 @@ def add_complete_hic_group(subparser):
         help="A tab-separated text file containing pairs of read ends (chr1 pos1 strand1 chr2 pos2 strand2), one per line. For multiple files, this option can be passed multiple times.")
     infile_group.add_argument("-M", "--mat", dest="mat", type=str, action='store',
         help="A HiCPipe-style tabular MAT file containing fend pair counts.")
+    infile_group.add_argument("-X", "--matrix", dest="matrix", action='append',
+        help="Binned matrix containing summed fend interactions.")
     subparser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
         help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
     subparser.add_argument("--skip-duplicate-filtering", dest="skipdups", required=False, default=False,

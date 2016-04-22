@@ -45,7 +45,7 @@ def find_cis_compact_observed(
     cdef long long int fend1, fend2, i, j, k, map1, map2, start1, start2, stop1, stop2
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
-        for fend1 in range(num_fends - 1):
+        for fend1 in range(num_fends - 1 + diag):
             map1 = mapping[fend1]
             if map1 == -1:
                 continue
@@ -107,7 +107,7 @@ def find_cis_upper_observed(
     cdef long long int num_bins = int(0.5 + pow(0.25 + 2 * signal.shape[0], 0.5)) - diag
     cdef int diag2 = diag * 2
     with nogil:
-        for fend1 in range(num_fends - 1):
+        for fend1 in range(num_fends - 1 + diag):
             map1 = mapping[fend1]
             if map1 == -1:
                 continue
@@ -490,6 +490,109 @@ def find_cis_upper_expected(
                         signal[index, 1] -= corrections[fend1] * corrections[fend1] / 2.0
     return None
 
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_binned_cis_compact_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_t, ndim=2] parameters,
+        np.ndarray[DTYPE_t, ndim=3] signal not None,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
+        double chrom_mean,
+        int startfend,
+        int maxdistance):
+    cdef long long int fend1, fend2, j, k, map1, map2, num_bins, max_bin
+    cdef double distance, value
+    cdef long long int num_fends = mapping.shape[0]
+    if not correction_sums is None:
+        num_bins = correction_sums.shape[0]
+        max_bin = signal.shape[1]
+    with nogil:
+        if correction_sums is None:
+            for fend1 in range(num_fends):
+                map1 = mapping[fend1]
+                if map1 == -1:
+                    continue
+                k = 0
+                for fend2 in range(fend1, min(num_fends, fend1 + max_bin)):
+                    map2 = mapping[fend2]
+                    if map2 == -1 or mids[fend2] - mids[fend1] > maxdistance:
+                        continue
+                     # give starting expected value
+                    value = 1.0
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections is None:
+                        value *= corrections[fend1] * corrections[fend2]
+                    # if finding distance, enrichment, or expected, correct for distance
+                    if not parameters is None:
+                        distance = log(<double>(max(1, mids[fend2] - mids[fend1])))
+                        while distance > parameters[k, 0]:
+                            k += 1
+                        value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                    signal[map1, map2 - map1, 1] += value
+                signal[map1, map1, 1] /= 2
+        else:
+            for j in range(num_bins):
+                for k in range(j, min(num_bins, j + max_bin)):
+                    signal[j, k - j, 1] += correction_sums[j] * correction_sums[k]
+                signal[j, 0, 1] /= 2.0
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_binned_cis_upper_expected(
+        np.ndarray[DTYPE_int_t, ndim=1] mapping not None,
+        np.ndarray[DTYPE_t, ndim=1] corrections,
+        np.ndarray[DTYPE_int_t, ndim=1] mids,
+        np.ndarray[DTYPE_t, ndim=2] parameters,
+        np.ndarray[DTYPE_t, ndim=2] signal not None,
+        np.ndarray[DTYPE_t, ndim=1] correction_sums,
+        double chrom_mean,
+        int startfend,
+        int maxdistance):
+    cdef long long int fend1, fend2, j, k, map1, map2, index, num_bins, max_bin
+    cdef double distance, value
+    cdef long long int num_fends = mapping.shape[0]
+    num_bins = int(-0.5 + pow(0.25 + 2 * signal.shape[0], 0.5))
+    with nogil:
+        if correction_sums is None:
+            for fend1 in range(num_fends):
+                map1 = mapping[fend1]
+                if map1 == -1:
+                    continue
+                index = map1 * (num_bins - 1) - map1 * (map1 - 1) / 2
+                k = 0
+                for fend2 in range(fend1, num_bins):
+                    map2 = mapping[fend2]
+                    if map2 == -1 or mids[fend2] - mids[fend1] > maxdistance:
+                        continue
+                     # give starting expected value
+                    value = 1.0
+                    # if finding fend, enrichment, or expected, and using express or probability bias correction, correct for fend
+                    if not corrections is None:
+                        value *= corrections[fend1] * corrections[fend2]
+                    # if finding distance, enrichment, or expected, correct for distance
+                    if not parameters is None:
+                        distance = log(<double>(max(1, mids[fend2] - mids[fend1])))
+                        while distance > parameters[k, 0]:
+                            k += 1
+                        value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
+                    signal[index + map2, 1] += value
+                signal[index + j, 1] /= 2
+        else:
+            for j in range(num_bins):
+                index = j * (num_bins - 1) - j * (j - 1) / 2
+                for k in range(j, num_bins):
+                    signal[index + k, 1] = correction_sums[j] * correction_sums[k]
+                signal[index + j, 1] /= 2.0
+    return None
+
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
@@ -752,215 +855,16 @@ def dynamically_bin_upper_from_upper(
         int minobservations,
         int maxsearch,
         int removefailed,
-        int skipinvalid):
+        int skipinvalid,
+        int diag):
     cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index, index2
     cdef long long int num_bins = bounds.shape[0]
     cdef long long int num_fends = ub_mids.shape[0]
+    cdef long long int diag2 = diag * 2
     with nogil:
-        for x in range(num_bins - 1):
-            index = x * num_bins - x * (x + 1) / 2 - x - 1
-            for y in range(x + 1, num_bins):
-                if skipinvalid == 1 and binned[index + y, 1] == 0.0:
-                    continue
-                # if bin already meets our criteria, skip
-                if binned[index + y, 0] >= minobservations or binned[index + y, 1] == 0:
-                    continue
-                # otherwise, set bordering unbinned positions according to bounds
-                lX = bounds[x, 0]
-                uX = bounds[x, 1] - 1
-                lY = bounds[y, 0]
-                uY = bounds[y, 1] - 1
-                # find distance in each direction
-                if lX > 0:
-                    lX_dist = b_mids[x] - ub_mids[lX - 1]
-                else:
-                    lX_dist = 1000000000
-                if uX < num_fends - 1:
-                    uX_dist = ub_mids[uX + 1] - b_mids[x]
-                else:
-                    uX_dist = 1000000000
-                if lY > 0:
-                    lY_dist = b_mids[y] - ub_mids[lY - 1]
-                else:
-                    lY_dist = 1000000000
-                if uY < num_fends - 1:
-                    uY_dist = ub_mids[uY + 1] - b_mids[y]
-                else:
-                    uY_dist = 1000000000
-                # determine min distance
-                min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                # keep searching while less than maxsearch and minobservations
-                while (maxsearch == 0 or min_dist < maxsearch) and binned[index + y, 0] < minobservations:
-                    # find min dist, update distance, and add new row or col of observations
-                    if min_dist == lX_dist:
-                        lX -= 1
-                        if lX > 0:
-                            lX_dist = b_mids[x] - ub_mids[lX - 1]
-                        else:
-                            lX_dist = 1000000000
-                        index2 = lX * num_fends - lX * (lX + 1) / 2 - lX - 1
-                        for i in range(max(lX + 1, lY), uY + 1):
-                            binned[index + y, 0] += unbinned[index2 + i, 0]
-                            binned[index + y, 1] += unbinned[index2 + i, 1]
-                    elif min_dist == uX_dist:
-                        uX += 1
-                        if uX < num_fends - 1:
-                            uX_dist = ub_mids[uX + 1] - b_mids[x]
-                        else:
-                            uX_dist = 1000000000
-                        index2 = uX * num_fends - uX * (uX + 1) / 2 - uX - 1
-                        for i in range(max(uX + 1, lY), uY + 1):
-                            binned[index + y, 0] += unbinned[index2 + i, 0]
-                            binned[index + y, 1] += unbinned[index2 + i, 1]
-                    elif min_dist == lY_dist:
-                        lY -= 1
-                        if lY > 0:
-                            lY_dist = b_mids[y] - ub_mids[lY - 1]
-                        else:
-                            lY_dist = 1000000000
-                        for i in range(lX, min(uX + 1, lY)):
-                            index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                            binned[index + y, 0] += unbinned[index2 + lY, 0]
-                            binned[index + y, 1] += unbinned[index2 + lY, 1]
-                    elif min_dist == uY_dist:
-                        uY += 1
-                        if uY < num_fends - 1:
-                            uY_dist = ub_mids[uY + 1] - b_mids[y]
-                        else:
-                            uY_dist = 1000000000
-                        for i in range(lX, min(uX + 1, uY)):
-                            index2 = i * num_fends - i * (i + 1) / 2 - i - 1
-                            binned[index + y, 0] += unbinned[index2 + uY, 0]
-                            binned[index + y, 1] += unbinned[index2 + uY, 1]
-                    # determine min distance
-                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                if binned[index + y, 0] < minobservations and removefailed == 1:
-                    binned[index + y, 0] = 0
-                    binned[index + y, 1] = 0
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def dynamically_bin_compact_from_upper(
-        np.ndarray[DTYPE_t, ndim=2] unbinned not None,
-        np.ndarray[DTYPE_int_t, ndim=1] ub_mids not None,
-        np.ndarray[DTYPE_t, ndim=3] binned not None,
-        np.ndarray[DTYPE_int_t, ndim=2] bounds not None,
-        np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
-        int minobservations,
-        int maxsearch,
-        int removefailed,
-        int skipinvalid):
-    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index
-    cdef long long int num_bins = bounds.shape[0]
-    cdef long long int max_bin = binned.shape[1]
-    cdef long long int num_fends = ub_mids.shape[0]
-    with nogil:
-        for x in range(num_bins - 1):
-            for y in range(x + 1, min(x + max_bin, num_bins)):
-                if skipinvalid == 1 and binned[x, y - x - 1, 1] == 0.0:
-                    continue
-                # if bin already meets our criteria, skip
-                if binned[x, y - x - 1, 0] >= minobservations:
-                    continue
-                # otherwise, set boarding unbinned positions according to bounds
-                lX = bounds[x, 0]
-                uX = bounds[x, 1] - 1
-                lY = bounds[y, 0]
-                uY = bounds[y, 1] - 1
-                # find distance in each direction
-                if lX > 0:
-                    lX_dist = b_mids[x] - ub_mids[lX - 1]
-                else:
-                    lX_dist = 1000000000
-                if uX < num_fends - 1:
-                    uX_dist = ub_mids[uX + 1] - b_mids[x]
-                else:
-                    uX_dist = 1000000000
-                if lY > 0:
-                    lY_dist = b_mids[y] - ub_mids[lY - 1]
-                else:
-                    lY_dist = 1000000000
-                if uY < num_fends - 1:
-                    uY_dist = ub_mids[uY + 1] - b_mids[y]
-                else:
-                    uY_dist = 1000000000
-                # determine min distance
-                min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                # keep searching while less than maxsearch and minobservations
-                while (maxsearch == 0 or min_dist < maxsearch) and binned[x, y - x - 1, 0] < minobservations:
-                    # find min dist, update distance, and add new row or col of observations
-                    if min_dist == lX_dist:
-                        lX -= 1
-                        if lX > 0:
-                            lX_dist = b_mids[x] - ub_mids[lX - 1]
-                        else:
-                            lX_dist = 1000000000
-                        index = lX * num_fends - lX * (lX + 1) / 2 - lX - 1
-                        for i in range(max(lX + 1, lY), uY + 1):
-                            binned[x, y - x - 1, 0] += unbinned[index + i, 0]
-                            binned[x, y - x - 1, 1] += unbinned[index + i, 1]
-                    if min_dist == uX_dist:
-                        uX += 1
-                        if uX < num_fends - 1:
-                            uX_dist = ub_mids[uX + 1] - b_mids[x]
-                        else:
-                            uX_dist = 1000000000
-                        index = uX * num_fends - uX * (uX + 1) / 2 - uX - 1
-                        for i in range(max(uX + 1, lY), uY + 1):
-                            binned[x, y - x - 1, 0] += unbinned[index + i, 0]
-                            binned[x, y - x - 1, 1] += unbinned[index + i, 1]
-                    if min_dist == lY_dist:
-                        lY -= 1
-                        if lY > 0:
-                            lY_dist = b_mids[y] - ub_mids[lY - 1]
-                        else:
-                            lY_dist = 1000000000
-                        for i in range(lX, min(uX + 1, lY)):
-                            index = i * num_fends - i * (i + 1) / 2 - i - 1
-                            binned[x, y - x - 1, 0] += unbinned[index + lY, 0]
-                            binned[x, y - x - 1, 1] += unbinned[index + lY, 1]
-                    if min_dist == uY_dist:
-                        uY += 1
-                        if uY < num_fends - 1:
-                            uY_dist = ub_mids[uY + 1] - b_mids[y]
-                        else:
-                            uY_dist = 1000000000
-                        for i in range(lX, min(uX + 1, uY)):
-                            index = i * num_fends - i * (i + 1) / 2 - i - 1
-                            binned[x, y - x - 1, 0] += unbinned[index + uY, 0]
-                            binned[x, y - x - 1, 1] += unbinned[index + uY, 1]
-                    # determine min distance
-                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                if binned[x, y - x - 1, 0] < minobservations and removefailed == 1:
-                    binned[x, y - x - 1, 0] = 0
-                    binned[x, y - x - 1, 1] = 0
-    return None
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.cdivision(True)
-def dynamically_bin_upper_from_compact(
-        np.ndarray[DTYPE_t, ndim=3] unbinned not None,
-        np.ndarray[DTYPE_int_t, ndim=1] ub_mids not None,
-        np.ndarray[DTYPE_t, ndim=2] binned not None,
-        np.ndarray[DTYPE_int_t, ndim=2] bounds not None,
-        np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
-        int minobservations,
-        int maxsearch,
-        int removefailed,
-        int skipinvalid):
-    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index
-    cdef long long int num_bins = bounds.shape[0]
-    cdef long long int num_fends = ub_mids.shape[0]
-    cdef long long int max_fend = unbinned.shape[1]
-    with nogil:
-        for x in range(num_bins - 1):
-            index = x * num_bins - x * (x + 1) / 2 - x - 1
-            for y in range(x + 1, num_bins):
+        for x in range(num_bins - 1 + diag):
+            index = x * (num_bins - 1) - x * (x + 1 - diag2) / 2 - 1 + diag
+            for y in range(x + 1 - diag, num_bins):
                 if skipinvalid == 1 and binned[index + y, 1] == 0.0:
                     continue
                 # if bin already meets our criteria, skip
@@ -999,36 +903,40 @@ def dynamically_bin_upper_from_compact(
                             lX_dist = b_mids[x] - ub_mids[lX - 1]
                         else:
                             lX_dist = 1000000000
-                        for i in range(max(lX + 1, lY), min(uY + 1, lX + max_fend + 1)):
-                            binned[index + y, 0] += unbinned[lX, i - lX - 1, 0]
-                            binned[index + y, 1] += unbinned[lX, i - lX - 1, 1]
+                        index2 = lX * (num_fends - 1) - lX * (lX + 1 - diag2) / 2 - 1 + diag
+                        for i in range(max(lX + 1 - diag, lY), uY + 1):
+                            binned[index + y, 0] += unbinned[index2 + i, 0]
+                            binned[index + y, 1] += unbinned[index2 + i, 1]
                     if min_dist == uX_dist:
                         uX += 1
                         if uX < num_fends - 1:
                             uX_dist = ub_mids[uX + 1] - b_mids[x]
                         else:
                             uX_dist = 1000000000
-                        for i in range(max(uX + 1, lY), min(uY + 1, uX + max_fend + 1)):
-                            binned[index + y, 0] += unbinned[uX, i - uX - 1, 0]
-                            binned[index + y, 1] += unbinned[uX, i - uX - 1, 1]
+                        index2 = uX * (num_fends - 1) - uX * (uX + 1 - diag2) / 2 - 1 + diag
+                        for i in range(max(uX + 1 - diag, lY), uY + 1):
+                            binned[index + y, 0] += unbinned[index2 + i, 0]
+                            binned[index + y, 1] += unbinned[index2 + i, 1]
                     if min_dist == lY_dist:
                         lY -= 1
                         if lY > 0:
                             lY_dist = b_mids[y] - ub_mids[lY - 1]
                         else:
                             lY_dist = 1000000000
-                        for i in range(max(lX, lY - max_fend - 1), min(uX + 1, lY)):
-                            binned[index + y, 0] += unbinned[i, lY - i - 1, 0]
-                            binned[index + y, 1] += unbinned[i, lY - i - 1, 1]
+                        for i in range(lX, min(uX + 1, lY + diag)):
+                            index2 = i * (num_fends - 1) - i * (i + 1 - diag2) / 2 - 1 + diag
+                            binned[index + y, 0] += unbinned[index2 + lY, 0]
+                            binned[index + y, 1] += unbinned[index2 + lY, 1]
                     if min_dist == uY_dist:
                         uY += 1
                         if uY < num_fends - 1:
                             uY_dist = ub_mids[uY + 1] - b_mids[y]
                         else:
                             uY_dist = 1000000000
-                        for i in range(max(lX, uY - max_fend - 1), min(uX + 1, uY)):
-                            binned[index + y, 0] += unbinned[i, uY - i - 1, 0]
-                            binned[index + y, 1] += unbinned[i, uY - i - 1, 1]
+                        for i in range(lX, min(uX + 1, uY + diag)):
+                            index2 = i * (num_fends - 1) - i * (i + 1 - diag2) / 2 - 1 + diag
+                            binned[index + y, 0] += unbinned[index2 + uY, 0]
+                            binned[index + y, 1] += unbinned[index2 + uY, 1]
                     # determine min distance
                     min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
                 if binned[index + y, 0] < minobservations and removefailed == 1:
@@ -1040,8 +948,8 @@ def dynamically_bin_upper_from_compact(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-def dynamically_bin_compact_from_compact(
-        np.ndarray[DTYPE_t, ndim=3] unbinned not None,
+def dynamically_bin_compact_from_upper(
+        np.ndarray[DTYPE_t, ndim=2] unbinned not None,
         np.ndarray[DTYPE_int_t, ndim=1] ub_mids not None,
         np.ndarray[DTYPE_t, ndim=3] binned not None,
         np.ndarray[DTYPE_int_t, ndim=2] bounds not None,
@@ -1049,19 +957,20 @@ def dynamically_bin_compact_from_compact(
         int minobservations,
         int maxsearch,
         int removefailed,
-        int skipinvalid):
-    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist
+        int skipinvalid,
+        int diag):
+    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index
     cdef long long int num_bins = bounds.shape[0]
     cdef long long int max_bin = binned.shape[1]
     cdef long long int num_fends = ub_mids.shape[0]
-    cdef long long int max_fend = unbinned.shape[1]
+    cdef long long int diag2 = diag * 2
     with nogil:
-        for x in range(num_bins - 1):
-            for y in range(x + 1, min(x + max_bin + 1, num_bins)):
-                if skipinvalid == 1 and binned[x, y - x - 1, 1] == 0.0:
+        for x in range(num_bins - 1 + diag):
+            for y in range(x + 1 - diag, min(x + max_bin + 1 - diag, num_bins)):
+                if skipinvalid == 1 and binned[x, y - x - 1 + diag, 1] == 0.0:
                     continue
                 # if bin already meets our criteria, skip
-                if binned[x, y - x - 1, 0] >= minobservations:
+                if binned[x, y - x - 1 + diag, 0] >= minobservations:
                     continue
                 # otherwise, set boarding unbinned positions according to bounds
                 lX = bounds[x, 0]
@@ -1088,7 +997,7 @@ def dynamically_bin_compact_from_compact(
                 # determine min distance
                 min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
                 # keep searching while less than maxsearch and minobservations
-                while (maxsearch == 0 or min_dist < maxsearch) and binned[x, y - x - 1, 0] < minobservations:
+                while (maxsearch == 0 or min_dist < maxsearch) and binned[x, y - x - 1 + diag, 0] < minobservations:
                     # find min dist, update distance, and add new row or col of observations
                     if min_dist == lX_dist:
                         lX -= 1
@@ -1096,41 +1005,242 @@ def dynamically_bin_compact_from_compact(
                             lX_dist = b_mids[x] - ub_mids[lX - 1]
                         else:
                             lX_dist = 1000000000
-                        for i in range(max(lX + 1, lY), min(uY + 1, lX + max_fend + 1)):
-                            binned[x, y - x - 1, 0] += unbinned[lX, i - lX - 1, 0]
-                            binned[x, y - x - 1, 1] += unbinned[lX, i - lX - 1, 1]
+                        index = lX * (num_fends - 1) - lX * (lX + 1 - diag2) / 2 - 1 + diag
+                        for i in range(max(lX + 1 - diag, lY), uY + 1):
+                            binned[x, y - x - 1 + diag, 0] += unbinned[index + i, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[index + i, 1]
                     if min_dist == uX_dist:
                         uX += 1
                         if uX < num_fends - 1:
                             uX_dist = ub_mids[uX + 1] - b_mids[x]
                         else:
                             uX_dist = 1000000000
-                        for i in range(max(uX + 1, lY), min(uY + 1, uX + max_fend + 1)):
-                            binned[x, y - x - 1, 0] += unbinned[uX, i - uX - 1, 0]
-                            binned[x, y - x - 1, 1] += unbinned[uX, i - uX - 1, 1]
+                        index = uX * (num_fends - 1) - uX * (uX + 1 - diag2) / 2 - 1 + diag
+                        for i in range(max(uX + 1 - diag, lY), uY + 1):
+                            binned[x, y - x - 1 + diag, 0] += unbinned[index + i, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[index + i, 1]
                     if min_dist == lY_dist:
                         lY -= 1
                         if lY > 0:
                             lY_dist = b_mids[y] - ub_mids[lY - 1]
                         else:
                             lY_dist = 1000000000
-                        for i in range(lX, min(uX + 1, lY)):
-                            binned[x, y - x - 1, 0] += unbinned[i, lY - i - 1, 0]
-                            binned[x, y - x - 1, 1] += unbinned[i, lY - i - 1, 1]
+                        for i in range(lX, min(uX + 1, lY + diag)):
+                            index = i * (num_fends - 1) - i * (i + 1 - diag2) / 2 - 1 + diag
+                            binned[x, y - x - 1 + diag, 0] += unbinned[index + lY, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[index + lY, 1]
                     if min_dist == uY_dist:
                         uY += 1
                         if uY < num_fends - 1:
                             uY_dist = ub_mids[uY + 1] - b_mids[y]
                         else:
                             uY_dist = 1000000000
-                        for i in range(max(lX, uY - max_fend - 1), min(uX + 1, uY)):
-                            binned[x, y - x - 1, 0] += unbinned[i, uY - i - 1, 0]
-                            binned[x, y - x - 1, 1] += unbinned[i, uY - i - 1, 1]
+                        for i in range(lX, min(uX + 1, uY + diag)):
+                            index = i * (num_fends - 1) - i * (i + 1 - diag2) / 2 - 1 + diag
+                            binned[x, y - x - 1 + diag, 0] += unbinned[index + uY, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[index + uY, 1]
                     # determine min distance
                     min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
-                if binned[x, y - x - 1, 0] < minobservations and removefailed == 1:
-                    binned[x, y - x - 1, 0] = 0
-                    binned[x, y - x - 1, 1] = 0
+                if binned[x, y - x - 1 + diag, 0] < minobservations and removefailed == 1:
+                    binned[x, y - x - 1 + diag, 0] = 0
+                    binned[x, y - x - 1 + diag, 1] = 0
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def dynamically_bin_upper_from_compact(
+        np.ndarray[DTYPE_t, ndim=3] unbinned not None,
+        np.ndarray[DTYPE_int_t, ndim=1] ub_mids not None,
+        np.ndarray[DTYPE_t, ndim=2] binned not None,
+        np.ndarray[DTYPE_int_t, ndim=2] bounds not None,
+        np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
+        int minobservations,
+        int maxsearch,
+        int removefailed,
+        int skipinvalid,
+        int diag):
+    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist, index
+    cdef long long int num_bins = bounds.shape[0]
+    cdef long long int num_fends = ub_mids.shape[0]
+    cdef long long int max_fend = unbinned.shape[1]
+    cdef long long int diag2 = diag * 2
+    with nogil:
+        for x in range(num_bins - 1 + diag):
+            index = x * (num_bins - 1) - x * (x + 1 - diag2) / 2 - 1 + diag
+            for y in range(x + 1 - diag, num_bins):
+                if skipinvalid == 1 and binned[index + y, 1] == 0.0:
+                    continue
+                # if bin already meets our criteria, skip
+                if binned[index + y, 0] >= minobservations:
+                    continue
+                # otherwise, set boarding unbinned positions according to bounds
+                lX = bounds[x, 0]
+                uX = bounds[x, 1] - 1
+                lY = bounds[y, 0]
+                uY = bounds[y, 1] - 1
+                # find distance in each direction
+                if lX > 0:
+                    lX_dist = b_mids[x] - ub_mids[lX - 1]
+                else:
+                    lX_dist = 1000000000
+                if uX < num_fends - 1:
+                    uX_dist = ub_mids[uX + 1] - b_mids[x]
+                else:
+                    uX_dist = 1000000000
+                if lY > 0:
+                    lY_dist = b_mids[y] - ub_mids[lY - 1]
+                else:
+                    lY_dist = 1000000000
+                if uY < num_fends - 1:
+                    uY_dist = ub_mids[uY + 1] - b_mids[y]
+                else:
+                    uY_dist = 1000000000
+                # determine min distance
+                min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                # keep searching while less than maxsearch and minobservations
+                while (maxsearch == 0 or min_dist < maxsearch) and binned[index + y, 0] < minobservations:
+                    # find min dist, update distance, and add new row or col of observations
+                    if min_dist == lX_dist:
+                        lX -= 1
+                        if lX > 0:
+                            lX_dist = b_mids[x] - ub_mids[lX - 1]
+                        else:
+                            lX_dist = 1000000000
+                        for i in range(max(lX + 1 - diag, lY), min(uY + 1, lX + max_fend + 1 - diag)):
+                            binned[index + y, 0] += unbinned[lX, i - lX - 1 + diag, 0]
+                            binned[index + y, 1] += unbinned[lX, i - lX - 1 + diag, 1]
+                    if min_dist == uX_dist:
+                        uX += 1
+                        if uX < num_fends - 1:
+                            uX_dist = ub_mids[uX + 1] - b_mids[x]
+                        else:
+                            uX_dist = 1000000000
+                        for i in range(max(uX + 1 - diag, lY), min(uY + 1, uX + max_fend + 1 - diag)):
+                            binned[index + y, 0] += unbinned[uX, i - uX - 1 + diag, 0]
+                            binned[index + y, 1] += unbinned[uX, i - uX - 1 + diag, 1]
+                    if min_dist == lY_dist:
+                        lY -= 1
+                        if lY > 0:
+                            lY_dist = b_mids[y] - ub_mids[lY - 1]
+                        else:
+                            lY_dist = 1000000000
+                        for i in range(max(lX, lY - max_fend - 1 + diag), min(uX + 1, lY + diag)):
+                            binned[index + y, 0] += unbinned[i, lY - i - 1 + diag, 0]
+                            binned[index + y, 1] += unbinned[i, lY - i - 1 + diag, 1]
+                    if min_dist == uY_dist:
+                        uY += 1
+                        if uY < num_fends - 1:
+                            uY_dist = ub_mids[uY + 1] - b_mids[y]
+                        else:
+                            uY_dist = 1000000000
+                        for i in range(max(lX, uY - max_fend - 1 + diag), min(uX + 1, uY + diag)):
+                            binned[index + y, 0] += unbinned[i, uY - i - 1 + diag, 0]
+                            binned[index + y, 1] += unbinned[i, uY - i - 1 + diag, 1]
+                    # determine min distance
+                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                if binned[index + y, 0] < minobservations and removefailed == 1:
+                    binned[index + y, 0] = 0
+                    binned[index + y, 1] = 0
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def dynamically_bin_compact_from_compact(
+        np.ndarray[DTYPE_t, ndim=3] unbinned not None,
+        np.ndarray[DTYPE_int_t, ndim=1] ub_mids not None,
+        np.ndarray[DTYPE_t, ndim=3] binned not None,
+        np.ndarray[DTYPE_int_t, ndim=2] bounds not None,
+        np.ndarray[DTYPE_int_t, ndim=1] b_mids not None,
+        int minobservations,
+        int maxsearch,
+        int removefailed,
+        int skipinvalid,
+        int diag):
+    cdef long long int x, y, i, lX, lX_dist, uX, uX_dist, lY, lY_dist, uY, uY_dist, min_dist
+    cdef long long int num_bins = bounds.shape[0]
+    cdef long long int max_bin = binned.shape[1]
+    cdef long long int num_fends = ub_mids.shape[0]
+    cdef long long int max_fend = unbinned.shape[1]
+    with nogil:
+        for x in range(num_bins - 1 + diag):
+            for y in range(x + 1 - diag, min(x + max_bin + 1 - diag, num_bins)):
+                if skipinvalid == 1 and binned[x, y - x - 1 + diag, 1] == 0.0:
+                    continue
+                # if bin already meets our criteria, skip
+                if binned[x, y - x - 1 + diag, 0] >= minobservations:
+                    continue
+                # otherwise, set boarding unbinned positions according to bounds
+                lX = bounds[x, 0]
+                uX = bounds[x, 1] - 1
+                lY = bounds[y, 0]
+                uY = bounds[y, 1] - 1
+                # find distance in each direction
+                if lX > 0:
+                    lX_dist = b_mids[x] - ub_mids[lX - 1]
+                else:
+                    lX_dist = 1000000000
+                if uX < num_fends - 1:
+                    uX_dist = ub_mids[uX + 1] - b_mids[x]
+                else:
+                    uX_dist = 1000000000
+                if lY > 0:
+                    lY_dist = b_mids[y] - ub_mids[lY - 1]
+                else:
+                    lY_dist = 1000000000
+                if uY < num_fends - 1:
+                    uY_dist = ub_mids[uY + 1] - b_mids[y]
+                else:
+                    uY_dist = 1000000000
+                # determine min distance
+                min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                # keep searching while less than maxsearch and minobservations
+                while (maxsearch == 0 or min_dist < maxsearch) and binned[x, y - x - 1 + diag, 0] < minobservations:
+                    # find min dist, update distance, and add new row or col of observations
+                    if min_dist == lX_dist:
+                        lX -= 1
+                        if lX > 0:
+                            lX_dist = b_mids[x] - ub_mids[lX - 1]
+                        else:
+                            lX_dist = 1000000000
+                        for i in range(max(lX + 1 - diag, lY), min(uY + 1, lX + max_fend + 1 - diag)):
+                            binned[x, y - x - 1 + diag, 0] += unbinned[lX, i - lX - 1 + diag, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[lX, i - lX - 1 + diag, 1]
+                    if min_dist == uX_dist:
+                        uX += 1
+                        if uX < num_fends - 1:
+                            uX_dist = ub_mids[uX + 1] - b_mids[x]
+                        else:
+                            uX_dist = 1000000000
+                        for i in range(max(uX + 1 - diag, lY), min(uY + 1, uX + max_fend + 1 - diag)):
+                            binned[x, y - x - 1 + diag, 0] += unbinned[uX, i - uX - 1 + diag, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[uX, i - uX - 1 + diag, 1]
+                    if min_dist == lY_dist:
+                        lY -= 1
+                        if lY > 0:
+                            lY_dist = b_mids[y] - ub_mids[lY - 1]
+                        else:
+                            lY_dist = 1000000000
+                        for i in range(max(lX, lY - max_fend - 1 + diag), min(uX + 1, lY + diag)):
+                            binned[x, y - x - 1 + diag, 0] += unbinned[i, lY - i - 1 + diag, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[i, lY - i - 1 + diag, 1]
+                    if min_dist == uY_dist:
+                        uY += 1
+                        if uY < num_fends - 1:
+                            uY_dist = ub_mids[uY + 1] - b_mids[y]
+                        else:
+                            uY_dist = 1000000000
+                        for i in range(max(lX, uY - max_fend - 1 + diag), min(uX + 1, uY + diag)):
+                            binned[x, y - x - 1 + diag, 0] += unbinned[i, uY - i - 1 + diag, 0]
+                            binned[x, y - x - 1 + diag, 1] += unbinned[i, uY - i - 1 + diag, 1]
+                    # determine min distance
+                    min_dist = min(min(lX_dist, uX_dist), min(lY_dist, uY_dist))
+                if binned[x, y - x - 1 + diag, 0] < minobservations and removefailed == 1:
+                    binned[x, y - x - 1 + diag, 0] = 0
+                    binned[x, y - x - 1 + diag, 1] = 0
     return None
 
 

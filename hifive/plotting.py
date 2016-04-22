@@ -305,7 +305,7 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
     scaled = numpy.round(scaled).astype(numpy.uint32)
     img = numpy.empty((dim, dim), dtype=numpy.uint32)
     img[:, :] = int('ff999999', 16)
-    for i in range(dim - 1):
+    for i in range(dim - 1 + int(diagonal_included)):
         index = i * dim - i * (i + 1 - 2 * int(diagonal_included)) / 2
         where = numpy.where(scaled[index:(index + dim - i - 1 + int(diagonal_included)), 1] > 0)[0]
         img[i, where + i + 1 - int(diagonal_included)] = scaled[where + index, 0]
@@ -770,7 +770,7 @@ def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symm
 
 def plot_diagonal_from_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                                    min_color="0000ff", mid_color="ffffff", max_color="ff0000",
-                                   returnscale=False, **kwargs):
+                                   returnscale=False, diagonal_included=False, **kwargs):
     """
     Fill in and rescale bitmap from a HiC upper array, plotting only the upper triangle rotated 45 degrees counter-clockwise.
 
@@ -792,6 +792,8 @@ def plot_diagonal_from_upper_array(data, maxscore=None, minscore=None, symmetric
     :type max_color: str.
     :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
     :type returnscale: bool.
+    :param diagonal_included: If true, adjust output shape as necessary.
+    :type diagonal_included: bool.
     :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -804,6 +806,7 @@ def plot_diagonal_from_upper_array(data, maxscore=None, minscore=None, symmetric
         return None
     if not silent:
         print >> sys.stderr, ("Plotting rotated compact array..."),
+    diag = int(diagonal_included)
     min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
     max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
@@ -811,43 +814,20 @@ def plot_diagonal_from_upper_array(data, maxscore=None, minscore=None, symmetric
                      (min_color[0] + max_color[0]) / 2.0)
     else:
         mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
-    dim = int(0.5 + (0.25 + data.shape[0] * 2) ** 0.5)
-    rotated = numpy.zeros((dim * 2 - 1, dim + 1, 2), dtype=numpy.float64)
+    dim = int(0.5 + (0.25 + data.shape[0] * 2) ** 0.5) - diag
+    rotated = numpy.zeros((dim * 2 - 1 + diag * 2, dim + diag, 2), dtype=numpy.float64)
     xdim, ydim = rotated.shape[:2]
-    for i in range(dim - 1):
-        start = i * dim - (i * (i + 1) / 2)
-        stop = start + dim - i - 1
+    for i in range(dim - 1 + diag):
+        start = i * dim - (i * (i + 1 - 2 * diag) / 2)
+        stop = start + dim - i - 1 + diag
         span = stop - start
-        rotated[numpy.arange(i * 2 + 1, i * 2 + 1 + span), ydim - numpy.arange(2, 2 + span), :] += data[start:stop, :]
-        rotated[numpy.arange(i * 2 + 2, i * 2 + 2 + span),
-                ydim - numpy.arange(2, 2 + span), :] += data[start:stop, :] * 0.25
-        rotated[numpy.arange(i * 2, i * 2 + span), ydim - numpy.arange(2, 2 + span), :] += data[start:stop, :] * 0.25
-        rotated[numpy.arange(i * 2 + 1, i * 2 + 1 + span),
-                ydim - numpy.arange(3, 3 + span), :] += data[start:stop, :] * 0.25
-        rotated[numpy.arange(i * 2 + 1, i * 2 + 1 + span),
-                ydim - numpy.arange(1, 1 + span), :] += data[start:stop, :] * 0.25
+        rotated[numpy.arange(i * 2 + 1, i * 2 + span + 1), ydim - numpy.arange(span) - 1, :] += data[start:stop, :]
+        rotated[numpy.arange(i * 2, i * 2 + span), ydim - numpy.arange(span) - 1, :] += data[start:stop, :] * 0.25
+        rotated[numpy.arange(i * 2 + 2, i * 2 + span + 2), ydim - numpy.arange(span) - 1, :] += data[start:stop, :] * 0.25
+        rotated[numpy.arange(i * 2 + 1, i * 2 + span + 1), ydim - numpy.arange(span) - 2, :] += data[start:stop, :] * 0.25
+        rotated[numpy.arange(i * 2 + 2, i * 2 + span + 1), ydim - numpy.arange(span - 1) - 1, :] += data[(start + 1):stop, :] * 0.25
     where = numpy.where(rotated[:, :, 1] > 0)
     rotated[where[0], where[1], 0] /= rotated[where[0], where[1], 1]
-    for i in range(1, xdim, 2):
-        if rotated[i, -1, 1] > 0:
-            rotated[i, -1, 0] *= 0.25
-            rotated[i, -1, 0] += 0.75
-    for i in range(2, ydim - 1):
-        if rotated[i - 1, ydim - i - 1, 1] > 0:
-            rotated[i - 1, ydim - i - 1, 0] *= 0.5
-            rotated[i - 1, ydim - i - 1, 0] += 0.5
-        if rotated[-i, ydim - i - 1, 1] > 0:
-            rotated[-i, ydim - i - 1, 0] *= 0.5
-            rotated[-i, ydim - i - 1, 0] += 0.5
-    if rotated[0, -2, 1] > 0:
-        rotated[0, -2, 0] *= 0.25
-        rotated[0, -2, 0] += 0.75
-    if rotated[-1, -2, 1] > 0:
-        rotated[-1, -2, 0] *= 0.25
-        rotated[-1, -2, 0] += 0.75
-    if rotated[dim, 0, 1] > 0:
-        rotated[dim, 0, 0] *= 0.25
-        rotated[dim, 0, 0] += 0.75
     if logged:
         where = numpy.where(rotated[:, :, 0] <= 0)
         rotated[where[0], where[1], 1] = 0
@@ -898,7 +878,7 @@ def plot_diagonal_from_upper_array(data, maxscore=None, minscore=None, symmetric
 
 def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                                      min_color="0000ff", mid_color="ffffff", max_color="ff0000",
-                                     returnscale=False, **kwargs):
+                                     returnscale=False, diagonal_included=False, **kwargs):
     """
     Fill in and rescale bitmap from a HiC compact array, plotting only the upper triangle rotated 45 degrees counter-clockwise.
 
@@ -920,6 +900,8 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
     :type max_color: str.
     :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
     :type returnscale: bool.
+    :param diagonal_included: If true, adjust output shape as necessary.
+    :type diagonal_included: bool.
     :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -932,6 +914,7 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
         return None
     if not silent:
         print >> sys.stderr, ("Plotting rotated compact array..."),
+    diag = int(diagonal_included)
     min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
     max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
     if mid_color is None:
@@ -939,36 +922,22 @@ def plot_diagonal_from_compact_array(data, maxscore=None, minscore=None, symmetr
                      (min_color[0] + max_color[0]) / 2.0)
     else:
         mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
-    rotated = numpy.zeros((data.shape[0] * 2 - 1, data.shape[1] + 2, 2), dtype=numpy.float64)
+    rotated = numpy.zeros((data.shape[0] * 2 - 1 + diag * 2, data.shape[1] + 1, 2), dtype=numpy.float64)
     xdim, ydim = rotated.shape[:2]
     for i in range(data.shape[1]):
-        rotated[(i + 1):(2 * data.shape[0] - i - 1):2, ydim - i - 2, :] += data[:(data.shape[0] - i - 1), i, :]
-        rotated[i:(2 * data.shape[0] - i - 2):2, ydim - i - 2, :] += data[:(data.shape[0] - i - 1), i, :] * 0.25
-        rotated[(i + 2):(2 * data.shape[0] - i):2, ydim - i - 2, :] += data[:(data.shape[0] - i - 1), i, :] * 0.25
-        rotated[(i + 1):(2 * data.shape[0] - i - 1):2, ydim - i - 1, :] += data[:(data.shape[0] - i - 1), i, :] * 0.25
-        rotated[(i + 1):(2 * data.shape[0] - i - 1):2, ydim - i - 3, :] += data[:(data.shape[0] - i - 1), i, :] * 0.25
+        rotated[(i + 1):(2 * data.shape[0] - i - 1 + diag * 2):2, ydim - i - 1, :] += (
+            data[:(data.shape[0] - i - 1 + diag), i, :])
+        rotated[i:(2 * data.shape[0] - i - 2 + diag * 2):2, ydim - i - 1, :] += (
+            data[:(data.shape[0] - i - 1 + diag), i, :]) * 0.25
+        rotated[(i + 2):(2 * data.shape[0] - i + diag * 2):2, ydim - i - 1, :] += (
+            data[:(data.shape[0] - i - 1 + diag), i, :]) * 0.25
+        rotated[(i + 1):(2 * data.shape[0] - i - 1 + diag * 2):2, ydim - i - 2, :] += (
+            data[:(data.shape[0] - i - 1 + diag), i, :]) * 0.25
+        if i > 0:
+            rotated[(i + 1):(2 * data.shape[0] - i - 1 + diag * 2):2, ydim - i, :] += (
+                data[:(data.shape[0] - i - 1 + diag), i, :]) * 0.25
     where = numpy.where(rotated[:, :, 1] > 0)
     rotated[where[0], where[1], 0] /= rotated[where[0], where[1], 1]
-    for i in range(1, xdim, 2):
-        if rotated[i, -1, 1] > 0:
-            rotated[i, -1, 0] *= 0.25
-            rotated[i, -1, 0] += 0.75
-    for i in range(2, ydim - 1):
-        if rotated[i - 1, ydim - i - 1, 1] > 0:
-            rotated[i - 1, ydim - i - 1, 0] *= 0.5
-            rotated[i - 1, ydim - i - 1, 0] += 0.5
-        if rotated[-i, ydim - i - 1, 1] > 0:
-            rotated[-i, ydim - i - 1, 0] *= 0.5
-            rotated[-i, ydim - i - 1, 0] += 0.5
-    if rotated[0, -2, 1] > 0:
-        rotated[0, -2, 0] *= 0.25
-        rotated[0, -2, 0] += 0.75
-    if rotated[-1, -2, 1] > 0:
-        rotated[-1, -2, 0] *= 0.25
-        rotated[-1, -2, 0] += 0.75
-    if rotated[data.shape[0], 0, 1] > 0:
-        rotated[data.shape[0], 0, 0] *= 0.25
-        rotated[data.shape[0], 0, 0] += 0.75
     if logged:
         where = numpy.where(rotated[:, :, 0] <= 0)
         rotated[where[0], where[1], 1] = 0

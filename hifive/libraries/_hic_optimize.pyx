@@ -76,7 +76,8 @@ def calculate_binom_gradients(
             index0 = nonzero_indices0[i]
             index1 = nonzero_indices1[i]
             gradients[index0] -= inv_corrections[index0]
-            gradients[index1] -= inv_corrections[index1]
+            if index1 != index0:
+                gradients[index1] -= inv_corrections[index1]
         for i in range(num_zero_pairs):
             index0 = zero_indices0[i]
             index1 = zero_indices1[i]
@@ -85,7 +86,8 @@ def calculate_binom_gradients(
             correction1 = corrections[index1]
             value = 1.0 / (1.0 - distance_mean * corrections[index0] * corrections[index1])
             gradients[index0] += (distance_mean * corrections[index1]) * value
-            gradients[index1] += (distance_mean * corrections[index0]) * value
+            if index1 != index0:
+                gradients[index1] += (distance_mean * corrections[index0]) * value
     return None
 
 
@@ -137,12 +139,14 @@ def calculate_poisson_gradients(
             index0 = nonzero_indices0[i]
             index1 = nonzero_indices1[i]
             gradients[index0] += nonzero_means[i] * corrections[index0] - counts[i] * inv_corrections[index0]
-            gradients[index1] += nonzero_means[i] * corrections[index1] - counts[i] * inv_corrections[index1]
+            if index1 != index0:
+                gradients[index1] += nonzero_means[i] * corrections[index1] - counts[i] * inv_corrections[index1]
         for i in range(num_zero_pairs):
             index0 = zero_indices0[i]
             index1 = zero_indices1[i]
             gradients[index0] += zero_means[i] * corrections[index0]
-            gradients[index1] += zero_means[i] * corrections[index1]
+            if index1 != index0:
+                gradients[index1] += zero_means[i] * corrections[index1]
     return None
 
 

@@ -82,6 +82,7 @@ class HiC(object):
         self.distance_parameters = None
         self.bin_distance_parameters = None
         self.chromosome_means = None
+        self.binned = None
         self.normalization = 'none'
         self.history = ''
         if mode != 'w':
@@ -144,12 +145,17 @@ class HiC(object):
             self.history += "Error: '%s' not found\n" % fendfilename
             return None
         self.fends = h5py.File(fendfilename, 'r')
+        if 'binned' in self.fends['/'].attrs:
+            self.binned = self.fends['/'].attrs['binned']
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.fends['chromosomes']):
             self.chr2int[chrom] = i
         # create arrays
-        self.filter = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.int32)
+        if self.binned is None:
+            self.filter = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.int32)
+        else:
+            self.filter = numpy.ones(self.fends['bins'].shape[0], dtype=numpy.int32)
         self.history += "Succcess\n"
         return None
 
@@ -227,6 +233,7 @@ class HiC(object):
         self.bin_distance_parameters = None
         self.chromosome_means = None
         self.normalization = 'none'
+        self.binned = None
         self.history = ''
         # load data hdf5 dict 
         datafile = h5py.File(self.file, 'r')
@@ -260,6 +267,8 @@ class HiC(object):
                     print >> sys.stderr, ("Could not find %s. No fends loaded.\n") % (fendfilename),
             else:
                 self.fends = h5py.File(fendfilename, 'r')
+                if 'binned' in self.fends['/'].attrs:
+                    self.binned = self.fends['/'].attrs['binned']
         # create dictionary for converting chromosome names to indices
         self.chr2int = {}
         for i, chrom in enumerate(self.fends['chromosomes']):
@@ -307,17 +316,30 @@ class HiC(object):
         # determine maximum ranges of valid interactions for each fend
         max_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
         min_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
-        _interactions.find_max_fend(max_fend,
-                                    self.fends['fends']['mid'][...],
-                                    self.fends['fends']['chr'][...],
-                                    self.fends['chr_indices'][...],
-                                    0,
-                                    maxdistance)
-        _interactions.find_min_fend(min_fend,
-                                    self.fends['fends']['mid'][...],
-                                    self.fends['fends']['chr'][...],
-                                    self.fends['chr_indices'][...],
-                                    mindistance)
+        if self.binned is None:
+            _interactions.find_max_fend(max_fend,
+                                        self.fends['fends']['mid'][...],
+                                        self.fends['fends']['chr'][...],
+                                        self.fends['chr_indices'][...],
+                                        0,
+                                        maxdistance)
+            _interactions.find_min_fend(min_fend,
+                                        self.fends['fends']['mid'][...],
+                                        self.fends['fends']['chr'][...],
+                                        self.fends['chr_indices'][...],
+                                        mindistance)
+        else:
+            _interactions.find_max_fend(max_fend,
+                                        self.fends['bins']['mid'][...],
+                                        self.fends['bins']['chr'][...],
+                                        self.fends['bin_indices'][...],
+                                        0,
+                                        maxdistance)
+            _interactions.find_min_fend(min_fend,
+                                        self.fends['bins']['mid'][...],
+                                        self.fends['bins']['chr'][...],
+                                        self.fends['bin_indices'][...],
+                                        mindistance)
          # copy needed arrays
         data = self.data['cis_data'][...]
         indices = self.data['cis_indices'][...]
@@ -334,7 +356,10 @@ class HiC(object):
                                              mininteractions)
             current_valid = numpy.sum(self.filter)
         if not self.silent:
-            print >> sys.stderr, ("Removed %i of %i fends\n") % (original_count - current_valid, original_count),
+            if self.binned is None:
+                print >> sys.stderr, ("Removed %i of %i fends\n") % (original_count - current_valid, original_count),
+            else:
+                print >> sys.stderr, ("Removed %i of %i bins\n") % (original_count - current_valid, original_count),
         self.history += "Success\n"
         return None
 
@@ -364,7 +389,10 @@ class HiC(object):
         if not self.silent:
             print >> sys.stderr, ('Finding distance arrays...'),
         # determine max distance range of data
-        chr_indices = self.fends['chr_indices'][...]
+        if self.binned is None:
+            chr_indices = self.fends['chr_indices'][...]
+        else:
+            chr_indices = self.fends['bin_indices'][...]
         if maxsize is None:
             maxsize = 0
         max_dist = 0
@@ -378,8 +406,12 @@ class HiC(object):
                 stop_fend -= 1
             if stop_fend - 1 > start_fend:
                 valid_chroms.append(i)
-                max_dist = max(max_dist,
-                               self.fends['fends']['mid'][stop_fend - 1] - self.fends['fends']['mid'][start_fend])
+                if self.binned is None:
+                    max_dist = max(max_dist,
+                                   self.fends['fends']['mid'][stop_fend - 1] - self.fends['fends']['mid'][start_fend])
+                else:
+                    max_dist = max(max_dist,
+                                   self.fends['bins']['mid'][stop_fend - 1] - self.fends['bins']['mid'][start_fend])
         valid_chroms = numpy.asarray(valid_chroms, dtype=numpy.int32)
         # create cutoff values evenly spaced in log space
         cutoffs = numpy.linspace(numpy.log(max(minsize, 1.0)), numpy.log(max(maxsize, max_dist)),
@@ -398,9 +430,15 @@ class HiC(object):
                 print >> sys.stderr, ('\r%s\rFinding distances for chromosome %s...') % \
                                      (' ' * 80, self.fends['chromosomes'][i]),
             # partition total possible interactions into roughly even-sized groups to spread across nodes
-            total_pairs = num_valid * (num_valid - 1) / 2
+            if self.binned is None:
+                total_pairs = num_valid * (num_valid - 1) / 2
+                pair_sums = numpy.r_[0, num_valid - numpy.arange(1, num_valid + 1)].astype(numpy.int64)
+                mids = self.fends['fends']['mid'][rev_mapping + start_fend]
+            else:
+                total_pairs = num_valid * (num_valid + 1) / 2
+                pair_sums = numpy.r_[0, num_valid - numpy.arange(num_valid)].astype(numpy.int64)
+                mids = self.fends['bins']['mid'][rev_mapping + start_fend]
             node_cutoffs = numpy.linspace(0, total_pairs, self.num_procs + 1).astype(numpy.float64)
-            pair_sums = numpy.r_[0, num_valid - numpy.arange(1, num_valid + 1)].astype(numpy.int64)
             for j in range(1, pair_sums.shape[0]):
                 pair_sums[j] += pair_sums[j - 1]
             node_ranges = numpy.searchsorted(pair_sums, node_cutoffs, side='left')
@@ -414,7 +452,6 @@ class HiC(object):
                 node_stop -= 1
             mapping = numpy.zeros(stop_fend - start_fend, dtype=numpy.int32) - 1
             mapping[rev_mapping] = numpy.arange(num_valid, dtype=numpy.int32)
-            mids = self.fends['fends']['mid'][rev_mapping + start_fend]
             # pull relevant data
             start_index = self.data['cis_indices'][rev_mapping[node_start] + start_fend]
             stop_index = self.data['cis_indices'][max(rev_mapping[node_stop - 1] + 1,
@@ -436,7 +473,8 @@ class HiC(object):
                                              count_sum,
                                              logdistance_sum,
                                              node_start,
-                                             node_stop)
+                                             node_stop,
+                                             int(self.binned is not None))
         if self.rank == 0:
             # exchange arrays
             if not self.silent:
@@ -530,7 +568,10 @@ class HiC(object):
             self.history += "Error: 'find_distance_parameters()' not run yet\n"
             return None
         if self.corrections is None:
-            self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
+            if self.binned is None:
+                self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
+            else:
+                self.corrections = numpy.ones(self.fends['bins'].shape[0], dtype=numpy.float32)
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -538,12 +579,15 @@ class HiC(object):
                 chroms == ''):
             chroms = self.chr2int.keys()
         chrints = numpy.zeros(len(chroms), dtype=numpy.int32)
-        chr_indices = self.fends['chr_indices'][...]
+        if self.binned is None:
+            chr_indices = self.fends['chr_indices'][...]
+        else:
+            chr_indices = self.fends['bin_indices'][...]
         for i in range(len(chroms)):
             chrints[i] = self.chr2int[chroms[i]]
         chroms = list(numpy.array(chroms)[numpy.argsort(chrints)])
         if self.chromosome_means is None:
-            self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
+            self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
         if maxdistance == 0 or maxdistance is None:
             maxdistance = 1999999999
         for chrom in chroms:
@@ -562,7 +606,10 @@ class HiC(object):
             mapping = numpy.zeros(num_fends, dtype=numpy.int32) - 1
             mapping[rev_mapping] = numpy.arange(num_valid).astype(numpy.int32)
             fend_ranges = numpy.zeros((num_valid, 3), dtype=numpy.int64)
-            mids = self.fends['fends']['mid'][rev_mapping + start_fend]
+            if self.binned is None:
+                mids = self.fends['fends']['mid'][rev_mapping + start_fend]
+            else:
+                mids = self.fends['bins']['mid'][rev_mapping + start_fend]
             # find number of downstream interactions for each fend using distance limits
             _interactions.find_fend_ranges(rev_mapping,
                                            mids,
@@ -571,7 +618,8 @@ class HiC(object):
                                            maxdistance,
                                            node_ranges[self.rank],
                                            node_ranges[self.rank + 1],
-                                           start_fend)
+                                           start_fend,
+                                           int(self.binned is not None))
             if self.rank == 0:
                 for i in range(1, self.num_procs):
                     fend_ranges[node_ranges[i]:node_ranges[i + 1], :] = self.comm.recv(source=i, tag=11)
@@ -631,7 +679,8 @@ class HiC(object):
                                                  interactions,
                                                  start,
                                                  stop,
-                                                 start_fend)
+                                                 start_fend,
+                                                 int(self.binned is not None))
             # find priors based on distance depedence function
             nonzero_means = numpy.zeros(nonzero_indices0.shape[0], dtype=numpy.float32)
             if model == 'binomial':
@@ -916,16 +965,20 @@ class HiC(object):
             self.history += "Error: 'find_binning_fend_corrections()' not run yet\n"
             return None
         if self.corrections is None:
-            self.corrections = numpy.ones(self.fends['fends'].shape[0], dtype=numpy.float32)
+            self.corrections = numpy.ones(self.filter.shape[0], dtype=numpy.float32)
         if kr:
             self._find_kr_corrections(mindistance, maxdistance, remove_distance, 
                                       usereads, mininteractions, minchange, chroms, precorrect,
                                       binary)
             return None
         # create needed arrays
-        mids = self.fends['fends']['mid'][...]
+        if self.binned is None:
+            mids = self.fends['fends']['mid'][...]
+            chr_indices = self.fends['chr_indices'][...]
+        else:
+            mids = self.fends['bins']['mid'][...]
+            chr_indices = self.fends['bin_indices'][...]
         filt = numpy.copy(self.filter)
-        chr_indices = self.fends['chr_indices'][...]
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -998,8 +1051,9 @@ class HiC(object):
         if minobs < mininteractions:
             if not self.silent:
                 print >> sys.stderr, ("\nInsufficient interactions for one or more fends.\n"),
-                print >> sys.stderr, ("Try resetting and refiltering fends or expanding distance range.\n"),
-            self.history += "Error: Too few interactions for give settings\n"
+                print >> sys.stderr, ("Try lowering 'minobservations', resetting and refiltering fends,\n"),
+                print >> sys.stderr, ("or expanding distance range.\n"),
+            self.history += "Error: Too few interactions for given settings\n"
             return None
         if self.rank == 0:
             chrints = [self.chr2int[chrom] for chrom in chroms]
@@ -1019,7 +1073,8 @@ class HiC(object):
                                                                chrints,
                                                                useread_int,
                                                                mindistance,
-                                                               maxdistance)
+                                                               maxdistance,
+                                                               int(self.binned is not None))
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 interactions += self.comm.recv(source=i, tag=11)
@@ -1068,7 +1123,10 @@ class HiC(object):
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rPrecalculating distances...") % (' ' * 80),
             mu = 1.0
-            all_chrints = self.fends['fends']['chr'][data[:, 0]]
+            if self.binned is None:
+                all_chrints = self.fends['fends']['chr'][data[:, 0]]
+            else:
+                all_chrints = self.fends['bins']['chr'][data[:, 0]]
             chrint_indices = numpy.r_[0, numpy.bincount(all_chrints)]
             for i in range(1, chrint_indices.shape[0]):
                 chrint_indices[i] += chrint_indices[i - 1]
@@ -1091,9 +1149,9 @@ class HiC(object):
                                                                self.chromosome_means[i])
             if not trans_data is None:
                 total_possible = numpy.sum(filt).astype(numpy.int64) ** 2
-                for i in range(self.fends['chr_indices'].shape[0] - 1):
-                    start = self.fends['chr_indices'][i]
-                    stop = self.fends['chr_indices'][i + 1]
+                for i in range(chr_indices.shape[0] - 1):
+                    start = chr_indices[i]
+                    stop = chr_indices[i + 1]
                     total_possible -= numpy.sum(filt[start:stop].astype(numpy.int64)) ** 2
                 if self.rank == 0:
                     if binary:
@@ -1165,7 +1223,7 @@ class HiC(object):
                 if iteration >= iterations or change[0] < minchange:
                     cont = False
                 if not self.silent:
-                    print >> sys.stderr, ("\n%s\rFinding fend corrections  Iteration: %i  Cost: %f  Change: %f") % (' ' * 80,
+                    print >> sys.stderr, ("\r%s\rFinding fend corrections  Iteration: %i  Cost: %f  Change: %f") % (' ' * 80,
                                           iteration, cost, change),
                 for i in range(1, self.num_procs):
                     self.comm.Send(corrections, dest=i, tag=13)
@@ -1176,7 +1234,7 @@ class HiC(object):
                 cont = self.comm.recv(source=0, tag=11)
         # calculate chromosome mean
         if self.chromosome_means is None:
-            self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
+            self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
         for chrom in chroms:
             chrint = self.chr2int[chrom]
             valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0] + chr_indices[chrint]
@@ -1210,27 +1268,34 @@ class HiC(object):
             chroms.sort()
         all_chroms = list(chroms)
         filt = numpy.copy(self.filter)
+        if self.binned is None:
+            chr_indices = self.fends['chr_indices'][...]
+        else:
+            chr_indices = self.fends['bin_indices'][...]
         if maxdistance == 0 or maxdistance is None:
             maxdistance = 99999999999
         if usereads != 'cis':
             for chrom, i in self.chr2int.iteritems():
                 if chrom not in chroms:
-                    filt[self.fends['chr_indices'][i]:self.fends['chr_indices'][i + 1]] = 0
+                    filt[chr_indices[i]:chr_indices[i + 1]] = 0
             chroms = ['all']
         for chrom in chroms:
             if chrom == 'all':
                 startfend = 0
-                stopfend = self.fends['chr_indices'][-1]
+                stopfend = chr_indices[-1]
                 chrfilt = filt
             else:
                 chrint = self.chr2int[chrom]
-                startfend = self.fends['chr_indices'][chrint]
-                stopfend = self.fends['chr_indices'][chrint + 1]
+                startfend = chr_indices[chrint]
+                stopfend = chr_indices[chrint + 1]
                 chrfilt = filt[startfend:stopfend]
             # create needed arrays
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
-            mids = self.fends['fends']['mid'][startfend:stopfend]
+            if self.binned is None:
+                mids = self.fends['fends']['mid'][startfend:stopfend]
+            else:
+                mids = self.fends['bins']['mid'][startfend:stopfend]
             if usereads in ['cis', 'all']:
                 start_index = self.data['cis_indices'][startfend]
                 stop_index = self.data['cis_indices'][stopfend]
@@ -1290,8 +1355,9 @@ class HiC(object):
             if minobs < mininteractions:
                 if not self.silent:
                     print >> sys.stderr, ("\nInsufficient interactions for one or more fends.\n"),
-                    print >> sys.stderr, ("Try resetting and refiltering fends or expanding distance range.\n"),
-                self.history += "Error: Too few interactions for give settings\n"
+                    print >> sys.stderr, ("Try lowering 'minobservations', resetting and refiltering fends,\n"),
+                    print >> sys.stderr, ("or expanding distance range.\n"),
+                self.history += "Error: Too few interactions for given settings\n"
                 return None
             # precalculate interaction distance means for all included interactions
             if not data is None:
@@ -1316,9 +1382,12 @@ class HiC(object):
                 if usereads != 'cis':
                     trans_mean = numpy.sum(trans_counts).astype(numpy.float64)
                     interactions = rev_mapping.shape[0] ** 2
-                    all_chrints = self.fends['fends']['chr'][rev_mapping]
+                    if self.binned is None:
+                        all_chrints = self.fends['fends']['chr'][rev_mapping]
+                    else:
+                        all_chrints = self.fends['bins']['chr'][rev_mapping]
                     interactions -= numpy.sum(numpy.bincount(all_chrints,
-                                     minlength=self.fends['chr_indices'].shape[0]) ** 2)
+                                     minlength=chr_indices.shape[0]) ** 2)
                     trans_mean /= interactions
                     trans_means = numpy.empty(trans_data.shape[0], dtype=numpy.float32).fill(trans_mean)
                     if not data is None:
@@ -1493,8 +1562,7 @@ class HiC(object):
             self.corrections[rev_mapping + startfend] = 1.0 / corrections
         # calculate chromosome mean
         if self.chromosome_means is None:
-            self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
-        chr_indices = self.fends['chr_indices'][...]
+            self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
         for chrom in all_chroms:
             chrint = self.chr2int[chrom]
             valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0] + chr_indices[chrint]
@@ -1575,6 +1643,11 @@ class HiC(object):
             if not self.silent:
                 print >> sys.stderr, ("The number of items in the 'model' parameter must be the same as the number in the 'num_bins' parameter.\n"),
             self.history += "Error: mismatch between lengths of 'num_bins' and 'model'\n"
+            return None
+        if self.binned is not None:
+            if not self.silent:
+                print >> sys.stderr, ("This normalization approach is not currently implemented for binned data.\n"),
+            self.history += "Error: 'binned' data not currently supported\n"
             return None
         # make sure usereads has a valid value
         if usereads not in ['cis', 'trans', 'all']:
@@ -2096,7 +2169,7 @@ class HiC(object):
             expansion, exp_mapping = hic_binning.find_cis_signal(self, chrom, start=estart, stop=estop,
                                                                  startfend=startfend, stopfend=stopfend,
                                                                  binsize=expansion_binsize, binbounds=None,
-                                                                 datatype=datatype, arraytype=dynamic_arraytype,
+                                                                 datatype=datatype, arraytype='compact',#dynamic_arraytype,
                                                                  maxdistance=maxdistance, returnmapping=True,
                                                                  silent=self.silent)
             binned, mapping = hic_binning.find_cis_signal(self, chrom, start=start, stop=stop, startfend=startfend,
@@ -2106,12 +2179,13 @@ class HiC(object):
                                                           silent=self.silent)
             hic_binning.dynamically_bin_cis_array(expansion, exp_mapping, binned, mapping,
                                                   minobservations=minobservations, searchdistance=searchdistance,
-                                                  removefailed=removefailed, silent=self.silent)
+                                                  removefailed=removefailed, silent=self.silent,
+                                                  diagonal_included=(self.binned is not None))
             if arraytype == 'full':
-                indices = numpy.triu_indices(mapping.shape[0], 1)
+                indices = numpy.triu_indices(mapping.shape[0], int(self.binned is None))
                 full_binned = numpy.zeros((mapping.shape[0], mapping.shape[0], 2), dtype=numpy.float32)
                 full_binned[indices[0], indices[1], :] = binned
-                full_binned[indices[1], indices[0], :] = binned
+                full_binned[indices[1], indices[0], :] += binned
                 binned = full_binned
             if returnmapping:
                 data = [binned, mapping]
@@ -2128,11 +2202,13 @@ class HiC(object):
             else:
                 binned = data
             if arraytype == 'compact':
-                img = plotting.plot_compact_array(binned, silent=self.silent, **kwargs)
+                img = plotting.plot_compact_array(binned, silent=self.silent,
+                                                  diagonal_included=(self.binned is not None), **kwargs)
             elif arraytype == 'full':
                 img = plotting.plot_full_array(binned, silent=self.silent, **kwargs)
             else:
-                img = plotting.plot_upper_array(binned, silent=self.silent, **kwargs)
+                img = plotting.plot_upper_array(binned, silent=self.silent,
+                                                diagonal_included=(self.binned is not None), **kwargs)
             img.save(image_file, format='png')
         return data
 
