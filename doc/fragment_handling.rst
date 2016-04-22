@@ -33,3 +33,10 @@ Fends associated with HiC data can be loaded from either a BED file or a HiCPipe
   HiCPipe-style fend files are 1-indexed, meaning that the first fragment and first fend both are labeled with a 1. This convention is used in HiFive only for these files to maintain compatibility with HiCPipe files.
 
 The header line should contain the exact labels as seen above since HiFive uses them to determine which columns contain what information. In addition to the above characteristics, the tabular fend file may also contain the columns 'frag_gc' and 'map_score'. These fend characteristic values are used in HiFive's :ref:`binning algorithm`, although are not needed for either probability or express normalization.
+
+
+====================
+Pre-binned HiC Data
+====================
+
+As more HiC data is released as pre-binned matrices do to size and processing time constraints, there is a need to be able to easily and efficiently handle such a format. HiFive allows this pre-binned data to be loaded and analyzed using both the Probability and Express algorithms, along with all binning and plotting manipulations. In order to do this, the :class:`Fend <hifive.fend.Fend>` object must be create specifying the resolution of this binning using the 'binned' value either through the HiFive executable or when initializing a fend object from the library directly. Any subsequent analysis is automatically adjusted to handle the data as binned without additional intervention of the user. The one exception is if calling library functions directly the 'diagonal_included' argument needs to be passed to plotting functions as they do not have access to the HiC object and therefore cannot determine whether pre-binning has been used.

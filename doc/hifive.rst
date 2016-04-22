@@ -318,7 +318,7 @@ fends
 
 ::
 
-  > hifive fends [-h] (-F FEND | -B BED) [-r RE] [-g GENOME] [-q] output
+  > hifive fends [-h] (-F FEND | -B BED) [--binned] [-r RE] [-g GENOME] [-q] output
 
 Arguments:
 
@@ -326,7 +326,7 @@ Arguments:
 
 Options:
 
--h/--help, -F/--fend, -B/--bed, -r/--re, -g/--genome, -q/--quiet
+-h/--help, -F/--fend, -B/--bed, --binned, -r/--re, -g/--genome, -q/--quiet
 
 .. _hic_data:
 
@@ -335,7 +335,7 @@ hic-data
 
 ::
 
-  > hifive hic-data [-h] (-S BAM BAM | -R RAW | -M MAT) [-i INSERT] [-q]
+  > hifive hic-data [-h] (-S BAM BAM | -R RAW | -M MAT | -X MATRIX) [-i INSERT] [-q]
         fend output
 
 Arguments:
@@ -345,7 +345,7 @@ Arguments:
 
 Options:
 
--h/--help, -S/--bam, -R/--raw, -M/--mat, -i/--insert, -q/--quiet
+-h/--help, -S/--bam, -R/--raw, -M/--mat, -X/--matrix, -i/--insert, -q/--quiet
 
 .. _hic_project:
 
@@ -406,9 +406,9 @@ This command is MPI-compatible.
 ::
 
    > [mpirun -np NP] hifive hic-complete <SUBCOMMAND> [-h]
-                        (-F FEND | -B BED) [-r RE] [-g GENOME]
-                        (-S BAM BAM | -R RAW | -M MAT) [-i INSERT]
-                        [-f MININT] [-m MINDIST] [-x MAXDIST]
+                        (-F FEND | -B BED) [--binned] [-r RE] [-g GENOME]
+                        (-S BAM BAM | -R RAW | -M MAT | -X matrix)
+                        [-i INSERT] [-f MININT] [-m MINDIST] [-x MAXDIST]
                         [-j MINBIN] [-n NUMBINS] [-c CHROMS]
                         (-o OUTPUT OUTPUT OUTPUT | -P PREFIX) [-q]
                         [normalization options]
@@ -417,7 +417,7 @@ HiFive's complete HiC analysis subcommand allows the user to select the normaliz
 
 Options:
 
--h/--help, -F/--fend, -B/--bed, -r/--re, -g/--genome, -S/--bam, -R/--RAW, -M/--mat, -f/--min-interactions, -m/--min-distance, -x/--max-distance, -j/--min-binsize, -n/--num-bins, -c/--chromosomes, -o/--output, -P/--prefix -q/--quiet
+-h/--help, -F/--fend, -B/--bed, --binned, -r/--re, -g/--genome, -S/--bam, -R/--RAW, -M/--mat, -X/--matrix, -f/--min-interactions, -m/--min-distance, -x/--max-distance, -j/--min-binsize, -n/--num-bins, -c/--chromosomes, -o/--output, -P/--prefix -q/--quiet
 
 Subcommands:
 
@@ -522,15 +522,17 @@ HiC Fend Options:
 
 -F, --fend FILE   A tabular file in a format compatible with HiCPipe containing fragment and fend indices, fragment length, start or end position, and any additional fragment features desired (see `Loading HiC Fends <fragment handling.html>`_ for more information).
 -B, --bed FILE    A BED file containing either restriction enzyme fragment coordinates or retriction enzyme cutsite coordinates. Fragment features may be included in columns after the strand column. Features should be formatted with one feature per column and two values per feature separated by a comma. If the coordinates are of RE fragment boundaries, the feature values should correspond to the upstream end of the fragment followed by the downstream end of the fragment. If the coordinates are of RE cutsites, the values should correspond to the sequence just upstream of the cutsite followed by the sequence just downstream of the cutsite. If additional features are included, the bed file must have a header line identifying the features.
+--binned int      Indicates what size bins to break genome into. If None is passed, fend-level resolution is kept.
 -r, --re str      The name of the restriction enzyme.
 -g, --genome str  The name of the genome.
 
 HiC Data Options:
 
--S, --bam FILES   A pair of BAM filenames separated by spaces corresponding to the two independently-mapped ends of a set of reads. Multiple file pairs may be passed by calling this argument more than once. This option is mutually exclusive with -R/--raw and -M/--mat.
--R, --raw FILE    A tabular file containing pairs of mapped read positions (see `Loading HiC Data <loading_data.html>`_ for more information).
--M, --mat FILE    A tabular file containing pairs of fend indices and their corresponding numbers of reads (see `Loading HiC Data <loading_data.html>`_ for more information).
--i, --insert int  The maximum allowable insert size, as measured by the sum of both read end mapping positions to the nearest RE cutsite in the direction of alignment.
+-S, --bam FILES    A pair of BAM filenames separated by spaces corresponding to the two independently-mapped ends of a set of reads. Multiple file pairs may be passed by calling this argument more than once. This option is mutually exclusive with -R/--raw and -M/--mat.
+-R, --raw FILE     A tabular file containing pairs of mapped read positions (see `Loading HiC Data <loading_data.html>`_ for more information).
+-M, --mat FILE     A tabular file containing pairs of fend indices and their corresponding numbers of reads (see `Loading HiC Data <loading_data.html>`_ for more information).
+-X, --matrix FILE  A tab-separated binned matrix containing summed fend interactions.
+-i, --insert int   The maximum allowable insert size, as measured by the sum of both read end mapping positions to the nearest RE cutsite in the direction of alignment.
 
 HiC Project Options:
 
