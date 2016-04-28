@@ -160,7 +160,7 @@ class HiCData(object):
         :type fendfilename: str.
         :param filelist: A list containing all of the file names of mapped read text files to be included in the dataset. If only one file is needed, this may be passed as a string.
         :type filelist: list
-        :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
+        :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value. If data was produced without a restriction enzyme (fend object has no fend data, only bin data), this integer specifies the maximum intra-chromosomal insert size that strandedness is considered for filtering. Fragments below the maxinsert size are only kept if they occur on the same orientation strand. This filtering is skipped is maxinsert is None.
         :type maxinsert: int.
         :param skip_duplicate_filtering: Do not remove PCR duplicates. This allows much lower memoer requirements since files can be processed in chunks.
         :type skip_duplicate_filtering: bool.
@@ -188,6 +188,14 @@ class HiCData(object):
                                        os.path.dirname(self.file)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
+        if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
+            self.binned = True
+        else:
+            self.binned = False
+        if 'fends' in self.fends and self.fends['fends'] is not None:
+            self.re = True
+        else:
+            self.re = False
         self.history = self.fends['/'].attrs['history'] + self.history
         self.chr2int = {}
         chroms = self.fends['chromosomes'][...]
@@ -236,71 +244,26 @@ class HiCData(object):
                 chrint2 = self.chr2int[temp[3]]
                 start1 = int(temp[1])
                 start2 = int(temp[4])
+                if temp[2] == '-':
+                    start1 = -start1
+                if temp[5] == '-':
+                    start2 = -start2
                 if chrint1 == chrint2:
-                    if start1 < start2:
-                        if temp[2] == '-':
-                            start1 = -start1
-                        if temp[5] == '-':
-                            start2 = -start2
-                        key = (start1, start2)
-                        if key not in data[chrint2][chrint1]:
-                            if skip_duplicate_filtering:
-                                data[chrint2][chrint1][key] = 1
-                            else:
-                                data[chrint2][chrint1][key] = None
-                        else:
-                            if skip_duplicate_filtering:
-                                data[chrint2][chrint1][key] += 1
-                            else:
-                                self.stats['pcr_duplicates'] += 1
+                    if abs(start1) > abs(start2):
+                        start1, start2 = start2, start1
+                elif chrint2 < chrint1:
+                    chrint1, chrint2, start1, start2 = chrint2, chrint1, start2, start1
+                key = (start1, start2)
+                if key not in data[chrint2][chrint1]:
+                    if skip_duplicate_filtering:
+                        data[chrint2][chrint1][key] = 1
                     else:
-                        if temp[2] == '-':
-                            start1 = -start1
-                        if temp[5] == '-':
-                            start2 = -start2
-                        key = (start2, start1)
-                        if key not in data[chrint1][chrint2]:
-                            if skip_duplicate_filtering:
-                                data[chrint1][chrint2][key] = 1
-                            else:
-                                data[chrint1][chrint2][key] = None
-                        else:
-                            if skip_duplicate_filtering:
-                                data[chrint1][chrint2][key] += 1
-                            else:
-                                self.stats['pcr_duplicates'] += 1
-                elif chrint1 < chrint2:
-                    if temp[2] == '-':
-                        start1 = -start1
-                    if temp[5] == '-':
-                        start2 = -start2
-                    key = (start1, start2)
-                    if key not in data[chrint2][chrint1]:
-                        if skip_duplicate_filtering:
-                            data[chrint2][chrint1][key] = 1
-                        else:
-                            data[chrint2][chrint1][key] = None
-                    else:
-                        if skip_duplicate_filtering:
-                            data[chrint2][chrint1][key] += 1
-                        else:
-                            self.stats['pcr_duplicates'] += 1
+                        data[chrint2][chrint1][key] = None
                 else:
-                    if temp[2] == '-':
-                        start1 = -start1
-                    if temp[5] == '-':
-                        start2 = -start2
-                    key = (start2, start1)
-                    if key not in data[chrint1][chrint2]:
-                        if skip_duplicate_filtering:
-                            data[chrint1][chrint2][key] = 1
-                        else:
-                            data[chrint1][chrint2][key] = None
+                    if skip_duplicate_filtering:
+                        data[chrint2][chrint1][key] += 1
                     else:
-                        if skip_duplicate_filtering:
-                            data[chrint1][chrint2][key] += 1
-                        else:
-                            self.stats['pcr_duplicates'] += 1
+                        self.stats['pcr_duplicates'] += 1
                 a += 1
                 if skip_duplicate_filtering and a >= 10000000:
                     for i in range(len(data)):
@@ -313,7 +276,10 @@ class HiCData(object):
                                 k += 1
                             data[i][j] = temp
                             new_reads += numpy.sum(data[i][j][:, 2])
-                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    if self.re:
+                        self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    else:
+                        self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
                     if not self.silent:
                         print >> sys.stderr, ("\r%s\rLoading data from %s...") % (' '*50, fname.split('/')[-1]),
                     for i in range(len(data)):
@@ -338,7 +304,10 @@ class HiCData(object):
                             new_reads += data[i][j].shape[0]
                 # map data to fends, filtering as needed
                 if new_reads > 0 and (a > 0 or not skip_duplicate_filtering):
-                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    if self.re:
+                        self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    else:
+                        self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
             total_reads += new_reads
             if not self.silent:
                 print >> sys.stderr, ("\r%s\r%i validly-mapped reads pairs loaded.\n") % (' ' * 50, new_reads),
@@ -346,7 +315,8 @@ class HiCData(object):
             self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends']
         else:
             self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends'] + self.stats['pcr_duplicates']
-        self._clean_fend_pairs(fend_pairs)
+        if self.re:
+            self._clean_fend_pairs(fend_pairs)
         total_fend_pairs = 0
         for i in range(len(fend_pairs)):
             for j in range(len(fend_pairs[i])):
@@ -360,7 +330,7 @@ class HiCData(object):
             print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i valid fend pairs\n") %\
                              (total_reads, total_fend_pairs),
         # write fend pairs to h5dict
-        if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
+        if self.re and self.binned:
             self._parse_binned_fend_pairs(fend_pairs)
         else:
             self._parse_fend_pairs(fend_pairs)
@@ -386,7 +356,7 @@ class HiCData(object):
                      * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
                      * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-chroosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream fend, and the third column contains the number of reads observed for that fend pair.
                      * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :].
-                     * **frags** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
+                     * **fends** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
                      * **maxinsert** (*int.*) - An interger denoting the maximum included distance sum between both read ends and their downstream RE site.
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
@@ -407,6 +377,14 @@ class HiCData(object):
                                        os.path.dirname(self.file)), os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
+        if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
+            self.binned = True
+        else:
+            self.binned = False
+        if 'fends' in self.fends and self.fends['fends'] is not None:
+            self.re = True
+        else:
+            self.re = False
         self.history = self.fends['/'].attrs['history'] + self.history
         self.chr2int = {}
         chroms = self.fends['chromosomes'][...]
@@ -506,54 +484,21 @@ class HiCData(object):
                 chr1, start1 = unpaired[read.qname]
                 chr2 = idx2int[read.tid]
                 if chr1 == chr2:
-                    if abs(start1) < abs(start2):
-                        key = (start1, start2)
-                        if key not in data[chr2][chr1]:
-                            if skip_duplicate_filtering:
-                                data[chr2][chr1][(start1, start2)] = 1
-                            else:
-                                data[chr2][chr1][(start1, start2)] = None
-                        else:
-                            if skip_duplicate_filtering:
-                                data[chr2][chr1][(start1, start2)] += 1
-                            else:
-                                self.stats['pcr_duplicates'] += 1
+                    if abs(start1) > abs(start2):
+                        start1, start2 = start2, start1
+                elif chr2 < chr1:
+                    chr1, chr2, start1, start2 = chr2, chr1, start2, start1
+                key = (start1, start2)
+                if key not in data[chr2][chr1]:
+                    if skip_duplicate_filtering:
+                        data[chr2][chr1][key] = 1
                     else:
-                        key = (start2, start1)
-                        if key not in data[chr1][chr2]:
-                            if skip_duplicate_filtering:
-                                data[chr1][chr2][(start2, start1)] = 1
-                            else:
-                                data[chr1][chr2][(start2, start1)] = None
-                        else:
-                            if skip_duplicate_filtering:
-                                data[chr1][chr2][(start2, start1)] += 1
-                            else:
-                                self.stats['pcr_duplicates'] += 1
-                elif chr1 < chr2:
-                    key = (start1, start2)
-                    if key not in data[chr2][chr1]:
-                        if skip_duplicate_filtering:
-                            data[chr2][chr1][(start1, start2)] = 1
-                        else:
-                            data[chr2][chr1][(start1, start2)] = None
-                    else:
-                        if skip_duplicate_filtering:
-                            data[chr2][chr1][(start1, start2)] += 1
-                        else:
-                            self.stats['pcr_duplicates'] += 1
+                        data[chr2][chr1][key] = None
                 else:
-                    key = (start2, start1)
-                    if key not in data[chr1][chr2]:
-                        if skip_duplicate_filtering:
-                            data[chr1][chr2][(start2, start1)] = 1
-                        else:
-                            data[chr1][chr2][(start2, start1)] = None
+                    if skip_duplicate_filtering:
+                        data[chr2][chr1][key] += 1
                     else:
-                        if skip_duplicate_filtering:
-                            data[chr1][chr2][(start2, start1)] = 1
-                        else:
-                            self.stats['pcr_duplicates'] += 1
+                        self.stats['pcr_duplicates'] += 1
                 a += 1
                 if skip_duplicate_filtering and a >= 10000000:
                     for i in range(len(data)):
@@ -566,7 +511,10 @@ class HiCData(object):
                                 k += 1
                             data[i][j] = temp
                             new_reads += numpy.sum(data[i][j][:, 2])
-                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    if self.re:
+                        self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    else:
+                        self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
                     if not self.silent:
                         print >> sys.stderr, ("\r%s\rLoading data from %s...") % (' '*50, filepair[1].split('/')[-1]),
                     for i in range(len(data)):
@@ -591,19 +539,20 @@ class HiCData(object):
                             data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
                             new_reads += data[i][j].shape[0]
                 if new_reads > 0 and (a > 0 or not skip_duplicate_filtering):
-                    self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    if self.re:
+                        self._find_fend_pairs(data, fend_pairs, skip_duplicate_filtering)
+                    else:
+                        self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rRead %i validly-mapped read pairs.\n") % (' ' * 50, new_reads),
             total_reads += new_reads
-            # map data to fends, filtering as needed
-            if new_reads > 0:
-                self._find_fend_pairs(data, fend_pairs)
             del data
         if skip_duplicate_filtering:
             self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends']
         else:
             self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends'] + self.stats['pcr_duplicates']
-        self._clean_fend_pairs(fend_pairs)
+        if self.re:
+            self._clean_fend_pairs(fend_pairs)
         total_fend_pairs = 0
         for i in range(len(fend_pairs)):
             for j in range(len(fend_pairs[i])):
@@ -616,14 +565,14 @@ class HiCData(object):
         if not self.silent:
             print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i valid fend pairs\n") %\
                                  (total_reads, total_fend_pairs),
-        if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
+        if self.re and self.binned:
             self._parse_binned_fend_pairs(fend_pairs)
         else:
             self._parse_fend_pairs(fend_pairs)
         self.history += "Success\n"
         return None
 
-    def load_data_from_mat(self, fendfilename, filename, maxinsert=0):
+    def load_data_from_mat(self, fendfilename, filename):
         """
         Read interaction counts from a :mod:`HiCPipe`-compatible 'mat' text file and place in h5dict.
 
@@ -631,8 +580,6 @@ class HiCData(object):
         :type fendfilename: str.
         :param filename: File name of a 'mat' file containing fend pair and interaction count data.
         :type filename: str.
-        :param maxinsert: A cutoff for filtering paired end reads whose total distance to their respective restriction sites exceeds this value.
-        :type maxinsert: int.
         :returns: None
 
         :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
@@ -640,12 +587,11 @@ class HiCData(object):
                      * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
                      * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-chroosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream fend, and the third column contains the number of reads observed for that fend pair.
                      * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :].
-                     * **frags** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
-                     * **maxinsert** (*int.*) - An interger denoting the maximum included distance sum between both read ends and their downstream RE site.
+                     * **fends** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_data_from_mat(fendfilename='%s', filename='%s', maxinsert=%i) - " % (fendfilename, filename, maxinsert)
+        self.history += "HiCData.load_data_from_mat(fendfilename='%s', filename='%s') - " % (fendfilename, filename)
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
@@ -654,8 +600,19 @@ class HiCData(object):
             return None
         self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
                                        os.path.dirname(self.file)), os.path.basename(fendfilename))
-        self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
+        self.maxinsert = None
+        if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
+            self.binned = True
+        else:
+            self.binned = False
+        if 'fends' in self.fends and self.fends['fends'] is not None:
+            self.re = True
+        else:
+            self.re = False
+            # if fend file indicates no re fragment data, assume this is a binned mat file
+            self._load_binned_data_from_mat()
+            return None
         self.history = self.fends['/'].attrs['history'] + self.history
         # load data from mat file. This assumes that the mat data was mapped
         # using the same fend numbering as in the fend file.
@@ -710,10 +667,80 @@ class HiCData(object):
         if not self.silent:
             print >> sys.stderr, ("%i valid fend pairs loaded.\n") % (total_fend_pairs),
         # write fend pairs to h5dict
-        if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
+        if self.re and self.binned:
             self._parse_binned_fend_pairs(fend_pairs)
         else:
             self._parse_fend_pairs(fend_pairs)
+        self.history += "Success\n"
+        return None
+
+    def _load_binned_data_from_mat(self, filename):
+        """
+        Read binned interaction counts from a 'mat' text file and place in h5dict.
+
+        :param filename: File name of a 'mat' file containing bin pair and interaction count data.
+        :type filename: str.
+        :returns: None
+
+        :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
+                     * **cis_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero intra-chromosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend, the second column contains the idnex of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'cis_data'. For example, all of the downstream cis interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
+                     * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-chroosomal fend pairings observed in the data. The first column contains the fend index (from the 'fends' array in the fend object) of the upstream fend (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream fend, and the third column contains the number of reads observed for that fend pair.
+                     * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of fends + 1. Each position contains the first entry for the correspondingly-indexed fend in the first column of 'trans_data'. For example, all of the downstream trans interactions for the fend at index 5 in the fend object 'fends' array are in cis_data[cis_indices[5]:cis_indices[6], :].
+                     * **fends** (*ndarray*) - A filestream to the hdf5 fend file such that all saved fend attributes can be accessed through this class attribute.
+
+        Data in a binned 'mat' format should include three tab-separaterd columns: bin1, bin2, and count. The bin values should correspond to the bin indices in the fend object.
+
+        When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
+        """
+        # load data from mat file. This assumes that the mat data was mapped
+        # using the same bin numbering as in the fend file.
+        chr_indices = self.fends['bin_indices'][...]
+        bin_pairs = []
+        for i in range(chr_indices.shape[0] - 1):
+            bin_pairs.append([])
+            for j in range(i + 1): 
+                bin_pairs[i].append({})
+        if not self.silent:
+            print >> sys.stderr, ("Loading data from mat file..."),
+        self.matfile = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                                  os.path.dirname(self.file)), os.path.basename(filename))
+        input = open(filename, 'r')
+        total_reads = 0
+        for line in input:
+            temp = line.strip('\n').split('\t')
+            try:
+                bin1 = int(temp[0])
+            except ValueError:
+                continue
+            bin2 = int(temp[1])
+            count = int(temp[2])
+            total_reads += count
+            chr1 = numpy.searchsorted(chr_indices, bin1, side='right') - 1
+            chr2 = numpy.searchsorted(chr_indices, bin2, side='right') - 1
+            if chr2 < chr1:
+                bin_pairs[chr1][chr2][(bin2 - chr_indices[chr2], bin1 - chr_indices[chr1])] = count
+            elif chr1 < chr2:
+                bin_pairs[chr2][chr1][(bin1 - chr_indices[chr1], bin2 - chr_indices[chr2])] = count
+            elif bin1 < bin2:
+                bin_pairs[chr2][chr1][(bin1 - chr_indices[chr1], bin2 - chr_indices[chr2])] = count
+            else:
+                bin_pairs[chr1][chr2][(bin2 - chr_indices[chr2], bin1 - chr_indices[chr1])] = count
+        input.close()
+        self.stats['total_reads'] = total_reads
+        total_bin_pairs = 0
+        for i in range(len(bin_pairs)):
+            for j in range(len(bin_pairs[i])):
+                total_bin_pairs += len(bin_pairs[i][j])
+        if total_bin_pairs == 0:
+            if not self.silent:
+                print >> sys.stderr, ("No valid data was loaded.\n"),
+            self.history += "Error: no valid data loaded\n"
+            return None
+        if not self.silent:
+            print >> sys.stderr, ("%i valid bin pairs loaded.\n") % (total_bin_pairs),
+        # write fend pairs to h5dict
+        self._parse_fend_pairs(bin_pairs)
         self.history += "Success\n"
         return None
 
@@ -721,7 +748,7 @@ class HiCData(object):
         """
         Read interaction counts from a tab-separated set of matrix files, one per chromosome, and place in h5dict.
 
-        Each file is assumed to contain a complete matrix of integers. If row and column names are present, the bin ranges will be taken from the labels in the format "XXX|XXX|chrX:XXX-XXX", where only the block of text following the last "|" is looked at. If no labels are present, bins are assumed to begin at coordinate zero.
+        Each file is assumed to contain a complete matrix of integers divided into equal-width bins. If row and column names are present, the bin ranges will be taken from the labels in the format "XXX|XXX|chrX:XXX-XXX", where only the block of text following the last "|" is looked at. If no labels are present, bins are assumed to begin at coordinate zero.
 
         :param fendfilename: This specifies the file name of the :class:`Fend` object to associate with the dataset.
         :type fendfilename: str.
@@ -752,7 +779,7 @@ class HiCData(object):
         if 'binned' not in self.fends['/'].attrs or self.fends['/'].attrs['binned'] is None:
             if not self.silent:
                 print >> sys.stderr, \
-                ("The fend file %s was for created for binned data. No data was loaded.\n") % (fendfilename),
+                ("The fend file %s was not created for binned data. No data was loaded.\n") % (fendfilename),
             self.history += "Error: '%s' not binned\n" % fendfilename
             return None
         binsize = self.fends['/'].attrs['binned']
@@ -800,68 +827,63 @@ class HiCData(object):
             tempdata = numpy.array(tempdata, dtype=numpy.int32)
             chrom_names = fname.split('/')[-1].split('.')[0].split('_by_')
             chrom1 = self.chr2int[chrom_names[0].strip('chr')]
-            start1 = bins['start'][bin_indices[chrom1]] / binsize
-            stop1 = bins['stop'][bin_indices[chrom1 + 1] - 1] / binsize
+            mapping1 = numpy.zeros(tempdata.shape[0], dtype=numpy.int32) - 1
             if len(chrom_names) > 1:
                 chrom2 = self.chr2int[chrom_names[1].strip('chr')]
-                start2 = bins['start'][bin_indices[chrom2]] / binsize
-                stop2 = bins['stop'][bin_indices[chrom2 + 1] - 1] / binsize
+                mapping2 = numpy.zeros(tempdata.shape[1], dtype=numpy.int32) - 1
             else:
                 chrom2 = chrom1
+                mapping2 = mapping1
             if col_labels is None:
+                n = bin_indices[chrom1 + 1] - bin_indices[chrom1]
+                mapping1[:n] = numpy.arange(n)
+                valid1 = numpy.where(mapping1 >= 0)[0]
                 if len(chrom_names) > 1:
-                    tempdata = tempdata[start1:stop1, start2:stop2]
+                    m = bin_indices[chrom2 + 1] - bin_indices[chrom2]
+                    mapping2[:m] = numpy.arange(m)
+                    valid2 = numpy.where(mapping2 >= 0)[0]
+                    tempdata = tempdata[valid1, :][:, valid2]
+                else:
+                    tempdata = tempdata[valid1, :][:, valid1]
+            else:
+                for i in range(len(row_labels)):
+                    row_labels[i] = int(row_labels[i].split('|')[-1].split('-')[0].split(':')[1])
+                row_labels = numpy.array(row_labels)
+                starts = numpy.searchsorted(bins['start'][bin_indices[chrom1]:bin_indices[chrom1 + 1]],
+                                            row_labels, side='right') - 1
+                stops = numpy.searchsorted(bins['stop'][bin_indices[chrom1]:bin_indices[chrom1 + 1]], row_labels)
+                valid = numpy.where(starts == stops)[0]
+                mapping1[valid] = starts[valid]
+                valid1 = numpy.where(mapping1 >= 0)[0]
+                if len(chrom_names) > 1:
+                    for i in range(len(col_labels)):
+                        col_labels[i] = int(col_labels[i].split('|')[-1].split('-')[0].split(':')[1])
+                    col_labels = numpy.array(col_labels)
+                    starts = numpy.searchsorted(bins['start'][bin_indices[chrom2]:bin_indices[chrom2 + 1]],
+                                                col_labels, side='right') - 1
+                    stops = numpy.searchsorted(bins['stop'][bin_indices[chrom2]:bin_indices[chrom2 + 1]], col_labels)
+                    valid = numpy.where(starts == stops)[0]
+                    mapping2[valid] = starts[valid]
+                    valid2 = numpy.where(mapping2 >= 0)[0]
+                    tempdata = tempdata[valid1, :][:, valid2]
+                else:
+                    tempdata = tempdata[valid1, :][:, valid1]
+            if len(chrom_names) > 1:
                     where = numpy.where(tempdata > 0)
                     counts = numpy.zeros((where[0].shape[0], 3), dtype=numpy.int32)
                     counts[:, 0] = where[0] + bin_indices[chrom1]
                     counts[:, 1] = where[1] + bin_indices[chrom2]
                     counts[:, 2] = tempdata[where]
                     trans_counts += counts.shape[0]
-                else:
-                    tempdata = tempdata[start1:stop1, start1:stop1]
-                    indices = numpy.triu_indices(tempdata.shape[0], 0)
-                    tempdata = tempdata[indices]
-                    where = numpy.where(tempdata > 0)[0]
-                    counts = numpy.zeros((where.shape[0], 3), dtype=numpy.int32)
-                    counts[:, 0] = indices[0][where] + bin_indices[chrom1]
-                    counts[:, 1] = indices[1][where] + bin_indices[chrom1]
-                    counts[:, 2] = tempdata[where]
-                    cis_counts += counts.shape[0]
             else:
-                mapping1 = []
-                for i in range(len(row_labels)):
-                    mapping1.append(int(row_labels[i].split('|')[-1].split('-')[0].split(':')[1]) / binsize - start1)
-                    if mapping1[i] >= stop1:
-                        mapping1[i] = -1
-                mapping1 = numpy.array(mapping1)
-                valid1 = numpy.where(mapping1 >= 0)[0]
-                if len(chrom_names) > 1:
-                    mapping2 = []
-                    for i in range(len(col_labels)):
-                        mapping2.append(int(col_labels[i].split('|')[-1].split('-')[0].split(':')[1]) / binsize - start2)
-                        if mapping2[i] >= stop2:
-                            mapping2[i] = -1
-                    mapping2 = numpy.array(mapping2)
-                    valid2 = numpy.where(mapping2 >= 0)[0]
-                    tempdata = tempdata[valid1, :][:, valid2]
-                    mapping1 = mapping1[valid1]
-                    mapping2 = mapping2[valid2]
-                    where = numpy.where(tempdata > 0)
-                    counts = numpy.zeros((where[0].shape[0], 3), dtype=numpy.int32)
-                    counts[:, 0] = mapping1[where[0]] + bin_indices[chrom1]
-                    counts[:, 1] = mapping2[where[1]] + bin_indices[chrom2]
-                    counts[:, 2] = tempdata[where]
-                    trans_counts += counts.shape[0]
-                else:
-                    tempdata = tempdata[valid1, :][:, valid1]
-                    indices = numpy.triu_indices(tempdata.shape[0], 0)
-                    tempdata = tempdata[indices]
-                    where = numpy.where(tempdata > 0)[0]
-                    counts = numpy.zeros((where.shape[0], 3), dtype=numpy.int32)
-                    counts[:, 0] = mapping1[indices[0][where]] + bin_indices[chrom1]
-                    counts[:, 1] = mapping1[indices[1][where]] + bin_indices[chrom1]
-                    counts[:, 2] = tempdata[where]
-                    cis_counts += counts.shape[0]
+                indices = numpy.triu_indices(tempdata.shape[0], 0)
+                tempdata = tempdata[indices]
+                where = numpy.where(tempdata > 0)[0]
+                counts = numpy.zeros((where.shape[0], 3), dtype=numpy.int32)
+                counts[:, 0] = indices[0][where] + bin_indices[chrom1]
+                counts[:, 1] = indices[1][where] + bin_indices[chrom1]
+                counts[:, 2] = tempdata[where]
+                cis_counts += counts.shape[0]
             data[chrom2][chrom1] = counts
         self.stats['valid_cis_pairs'] = cis_counts
         self.stats['valid_trans_pairs'] = trans_counts
@@ -885,177 +907,6 @@ class HiCData(object):
                         self.trans_data[pos:(pos + data[j][i].shape[0]), :] = data[j][i]
                         pos += data[j][i].shape[0]
                         data[j][i] = None
-            self.stats['valid_trans_reads'] = numpy.sum(self.trans_data[:, 2])
-        else:
-            self.trans_data = None
-        # create data indices
-        if self.cis_data is not None:
-            cis_indices = numpy.r_[0, numpy.bincount(self.cis_data[:, 0],
-                                   minlength=self.fends['bins'].shape[0])].astype(numpy.int64)
-            for i in range(1, cis_indices.shape[0]):
-                cis_indices[i] += cis_indices[i - 1]
-            self.cis_indices = cis_indices
-        else:
-            self.cis_indices = None
-        if self.trans_data is not None:
-            trans_indices = numpy.r_[0, numpy.bincount(self.trans_data[:, 0],
-                                     minlength=self.fends['bins'].shape[0])].astype(numpy.int64)
-            for i in range(1, trans_indices.shape[0]):
-                trans_indices[i] += trans_indices[i - 1]
-            self.trans_indices = trans_indices
-        else:
-            self.trans_indices = None
-        # create interaction partner profiles for quality reporting
-        cis_reads = 0
-        trans_reads = 0
-        if self.cis_data is not None:
-            fend_profiles = numpy.bincount(self.cis_data[:, 0], minlength=bin_indices[-1])
-            fend_profiles += numpy.bincount(self.cis_data[:, 1], minlength=bin_indices[-1])
-            self.cis_interaction_distribution = numpy.bincount(fend_profiles)
-            cis_reads = numpy.sum(self.cis_data[:, 2])
-        if self.trans_data is not None:
-            fend_profiles = numpy.bincount(self.trans_data[:, 0], minlength=bin_indices[-1])
-            fend_profiles += numpy.bincount(self.trans_data[:, 1], minlength=bin_indices[-1])
-            self.trans_interaction_distribution = numpy.bincount(fend_profiles)
-            trans_reads = numpy.sum(self.trans_data[:, 2])
-        if not self.silent:
-            print >> sys.stderr, ("Done  %i cis reads, %i trans reads\n") % (cis_reads, trans_reads),
-        return None
-
-    def load_binned_data_from_raw(self, fendfilename, filelist):
-        """
-        Read interaction counts from a tab-separated set of matrix files, one per chromosome, and place in h5dict.
- 
-        Files should contain chromosome and start coordinate for both interacting bins, one pair per line, separated by tabs. Each line should be in the following format::
-
-          chromosome1    coordinate1   chromosome2    coordinate2  count
-
-        Bin pairs should only appear once per file (i.e. only the upper or lower triangle of the intrachromosomal matrix, not both).
-
-        :param fendfilename: This specifies the file name of the :class:`Fend` object to associate with the dataset.
-        :type fendfilename: str.
-        :param filelist: A list containing all of the raw file names. If only one file is needed, this may be passed as a string.
-        :type filelist: list
-        :returns: None
-
-        :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
-                     * **cis_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero intra-chromosomal bin pairings observed in the data. The first column contains the bin index (from the 'bins' array in the fend object) of the upstream bin, the second column contains the index of the downstream bin, and the third column contains the number of reads observed for that bin pair.
-                     * **cis_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of bins + 1. Each position contains the first entry for the correspondingly-indexed bin in the first column of 'cis_data'. For example, all of the downstream cis interactions for the bin at index 5 in the fend object 'bins' array are in cis_data[cis_indices[5]:cis_indices[6], :]. 
-                     * **trans_data** (*ndarray*) - A numpy array of type int32 and shape N x 3 where N is the number of valid non-zero inter-chromosomal bin pairings observed in the data. The first column contains the bin index (from the 'bins' array in the fend object) of the upstream bin (upstream also refers to the lower indexed chromosome in this context), the second column contains the index of the downstream bin, and the third column contains the number of reads observed for that bin pair.
-                     * **trans_indices** (*ndarray*) - A numpy array of type int64 and a length of the number of bins + 1. Each position contains the first entry for the correspondingly-indexed bin in the first column of 'trans_data'. For example, all of the downstream trans interactions for the bin at index 5 in the fend object 'bins' array are in trans_data[trans_indices[5]:trans_indices[6], :].
-                     * **fends** (*ndarray*) - A filestream to the hdf5 fend file such that all saved bin attributes can be accessed through this class attribute.
-
-        When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
-        """
-        self.history += "HiCData.load_binned_data_from_raw(fendfilename='%s', filelist=%s) - " % (fendfilename, str(filelist))
-        # determine if fend file exists and if so, load it
-        if not os.path.exists(fendfilename):
-            if not self.silent:
-                print >> sys.stderr, \
-                ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
-            self.history += "Error: '%s' not found\n" % fendfilename
-            return None
-        self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
-                                       os.path.dirname(self.file)), os.path.basename(fendfilename))
-        self.fends = h5py.File(fendfilename, 'r')
-        if 'binned' not in self.fends['/'].attrs or self.fends['/'].attrs['binned'] is None:
-            if not self.silent:
-                print >> sys.stderr, \
-                ("The fend file %s was for created for binned data. No data was loaded.\n") % (fendfilename),
-            self.history += "Error: '%s' not binned\n" % fendfilename
-            return None
-        binsize = self.fends['/'].attrs['binned']
-        bins = self.fends['bins'][...]
-        bin_indices = self.fends['bin_indices'][...]
-        starts = numpy.zeros(bin_indices.shape[0] - 1, dtype=numpy.int32)
-        sizes = numpy.zeros(bin_indices.shape[0] - 1, dtype=numpy.int32)
-        for i in range(starts.shape[0]):
-            starts[i] = bins['start'][bin_indices[i]]
-            sizes[i] = (bins['stop'][bin_indices[i + 1] - 1] - starts[i]) / binsize
-        self.history = self.fends['/'].attrs['history'] + self.history
-        self.chr2int = {}
-        chroms = self.fends['chromosomes'][...]
-        for i, j in enumerate(chroms):
-            self.chr2int[j] = i
-        # load raw files
-        data = []
-        for i in range(chroms.shape[0]):
-            data.append([])
-            for j in range(i + 1):
-                data[i].append({})
-        cis_counts = 0
-        trans_counts = 0
-        if isinstance(filelist, str):
-            filelist = [filelist]
-        for fname in filelist:
-            if not os.path.exists(fname):
-                if not self.silent:
-                    print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
-                self.history += "'%s' not found, " % fname
-                continue
-            for line in open(fname):
-                temp = line.rstrip('\n').split('\t')
-                count = int(temp[4])
-                if count == 0:
-                    continue
-                chrom1 = self.chr2int[temp[0].strip('chr')]
-                chrom2 = self.chr2int[temp[2].strip('chr')]
-                bin1 = (int(temp[1]) - starts[chrom1]) / binsize
-                bin2 = (int(temp[3]) - starts[chrom2]) / binsize
-                if bin1 < 0 or bin1 > sizes[chrom1] or bin2 < 0 or bin2 > sizes[chrom2]:
-                    continue
-                if chrom1 == chrom2:
-                    if bin1 > bin2:
-                        bin1, bin2 = bin2, bin1
-                else:
-                    if chrom2 < chrom1:
-                        chrom1, chrom2, bin1, bin2 = chrom2, chrom1, bin2, bin1
-                key = (bin1, bin2)
-                if key not in data[chrom2][chrom1]:
-                    data[chrom2][chrom1][(bin1, bin2)] = count
-                else:
-                    data[chrom2][chrom1][(bin1, bin2)] += count
-        cis_counts = 0
-        trans_counts = 0
-        for i in range(chroms.shape[0]):
-            cis_counts += len(data[i][i])
-            for j in range(i):
-                trans_counts += len(data[i][j])
-        self.stats['valid_cis_pairs'] = cis_counts
-        self.stats['valid_trans_pairs'] = trans_counts
-        if cis_counts > 0:
-            self.cis_data = numpy.zeros((cis_counts, 3), dtype=numpy.int32)
-            pos = 0
-            for i in range(chroms.shape[0]):
-                if len(data[i][i]) > 0:
-                    keys = data[i][i].keys()
-                    keys.sort()
-                    for j, key in enumerate(keys):
-                        self.cis_data[pos + j, :2] = key
-                        self.cis_data[pos + j, 2] = data[i][i][key]
-                    self.cis_data[pos:(pos + len(data[i][i])), :2] += bin_indices[i]
-                    pos += len(data[i][i])
-                    data[i][i] = None
-                    del keys
-            self.stats['valid_cis_reads'] = numpy.sum(self.cis_data[:, 2])
-        else:
-            self.cis_data = None
-        if trans_counts > 0:
-            self.trans_data = numpy.zeros((trans_counts, 3), dtype=numpy.int32)
-            pos = 0
-            for i in range(chroms.shape[0]):
-                for j in range(i + 1, chroms.shape[0]):
-                    if len(data[j][i]) > 0:
-                        keys = data[j][i].keys()
-                        keys.sort()
-                        for k, key in enumerate(keys):
-                            self.trans_data[pos + k, :2] = key
-                            self.trans_data[pos + k, 2] = data[j][i][key]
-                        self.trans_data[pos:(pos + len(data[j][i])), 0] += bin_indices[i]
-                        self.trans_data[pos:(pos + len(data[j][i])), 1] += bin_indices[j]
-                        pos += len(data[j][i])
-                        data[j][i] = None
-                        del keys
             self.stats['valid_trans_reads'] = numpy.sum(self.trans_data[:, 2])
         else:
             self.trans_data = None
@@ -1152,6 +1003,70 @@ class HiCData(object):
             print >> sys.stderr, ("Done\n"),
         return None
 
+    def _find_bin_pairs(self, data, bin_pairs, skip_duplicate_filtering=False):
+        """Return array with lower bin, upper bin, and count for pair."""
+        chroms = self.fends['chromosomes'][...]
+        bins = self.fends['bins'][...]
+        bin_indices = self.fends['bin_indices'][...]
+        if 'maxinsert' in self.__dict__ and self.maxinsert is not None:
+            maxinsert = self.maxinsert
+        else:
+            maxinsert = None
+        # assign fends on a per-chromosome pair basis
+        for i in range(len(data)):
+            for j in range(len(data[i])):
+                if data[i][j].shape[0] == 0:
+                    continue
+                mapped_bins = numpy.zeros((data[i][j].shape[0], 2), dtype=numpy.int32) - 1
+                signs = numpy.minimum(0, numpy.sign(data[i][j]))
+                data[i][j] = numpy.abs(data[i][j])
+                if not self.silent:
+                    print >> sys.stderr, ("\rMapping bins for %s by %s") % (chroms[i].ljust(10), chroms[j].ljust(10)),
+                starts = numpy.searchsorted(bins['start'][bin_indices[j]:bin_indices[j + 1]],
+                                            data[i][j][:, 0], side='right') - 1
+                stops = numpy.searchsorted(bins['stop'][bin_indices[j]:bin_indices[j + 1]], data[i][j][:, 0])
+                valid = numpy.where(starts == stops)[0]
+                mapped_bins[valid, 0] = starts[valid]
+                starts = numpy.searchsorted(bins['start'][bin_indices[i]:bin_indices[i + 1]],
+                                            data[i][j][:, 1], side='right') - 1
+                stops = numpy.searchsorted(bins['stop'][bin_indices[i]:bin_indices[i + 1]], data[i][j][:, 1])
+                valid = numpy.where(starts == stops)[0]
+                mapped_bins[valid, 1] = starts[valid]
+                valid = numpy.where((mapped_bins[:, 0] >= 0) * (mapped_bins[:, 1] >= 0))[0]
+                if skip_duplicate_filtering:
+                    self.stats['out_of_bounds'] += numpy.sum(data[i][j][:, 2]) - numpy.sum(data[i][j][valid, 2])
+                else:
+                    self.stats['out_of_bounds'] += mapped_bins.shape[0] - valid.shape[0]
+                # if filtering by insert size, determine distances
+                if i == j and maxinsert is not None:
+                    distances = numpy.zeros(data[i][j].shape[0], dtype=numpy.int32)
+                    distances[valid] = data[i][j][valid, 1] - data[i][j][valid, 0]
+                    valid1 = numpy.where((distances[valid] > maxinsert) + (signs[valid, 0] == signs[valid, 1]))[0]
+                    if skip_duplicate_filtering:
+                        self.stats['insert_size'] += (numpy.sum(data[i][j][valid, 2]) -
+                                                      numpy.sum(data[i][j][valid[valid1], 2]))
+                    else:
+                        self.stats['insert_size'] += valid.shape[0] - valid1.shape[0]
+                    valid = valid[valid1]
+                # convert to bin paired
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rCounting bin pairs...") % (' ' * 50),
+                for k in valid:
+                    key = (mapped_bins[k, 0], mapped_bins[k, 1])
+                    if key not in bin_pairs[i][j]:
+                        if skip_duplicate_filtering:
+                            bin_pairs[i][j][key] = data[i][j][k, 2]
+                        else:
+                            bin_pairs[i][j][key] = 1
+                    else:
+                        if skip_duplicate_filtering:
+                            bin_pairs[i][j][key] += data[i][j][k, 2]
+                        else:
+                            bin_pairs[i][j][key] += 1
+        if not self.silent and not skip_duplicate_filtering:
+            print >> sys.stderr, ("Done\n"),
+        return None
+
     def _clean_fend_pairs(self, fend_pairs):
         chr_indices = self.fends['chr_indices'][...]
         # remove fend pairs from same fend or opposite strand adjacents
@@ -1209,7 +1124,10 @@ class HiCData(object):
         """Separate fend pairs into cis and trans interactions index."""
         if not self.silent:
             print >> sys.stderr, ("Parsing fend pairs..."),
-        chr_indices = self.fends['chr_indices'][...]
+        if self.binned and not self.re:
+            chr_indices = self.fends['bin_indices'][...]
+        else:
+            chr_indices = self.fends['chr_indices'][...]
         # determine number of cis pairs
         cis_count = 0
         for i in range(len(fend_pairs)):
@@ -1265,7 +1183,7 @@ class HiCData(object):
         # create data indices
         if self.cis_data.shape[0] > 0:
             cis_indices = numpy.r_[0, numpy.bincount(self.cis_data[:, 0],
-                                   minlength=self.fends['fends'].shape[0])].astype(numpy.int64)
+                                   minlength=chr_indices[-1])].astype(numpy.int64)
             for i in range(1, cis_indices.shape[0]):
                 cis_indices[i] += cis_indices[i - 1]
             self.cis_indices = cis_indices
@@ -1273,7 +1191,7 @@ class HiCData(object):
             self.cis_data = None
         if self.trans_data.shape[0] > 0:
             trans_indices = numpy.r_[0, numpy.bincount(self.trans_data[:, 0],
-                                     minlength=self.fends['fends'].shape[0])].astype(numpy.int64)
+                                     minlength=chr_indices[-1])].astype(numpy.int64)
             for i in range(1, trans_indices.shape[0]):
                 trans_indices[i] += trans_indices[i - 1]
             self.trans_indices = trans_indices
@@ -1314,7 +1232,7 @@ class HiCData(object):
         indices = []
         for i in range(len(fend_pairs)):
             mapping = (self.fends['fends']['mid'][chr_indices[i]:chr_indices[i + 1]] -
-                       bins[bin_indices[i]]['start']) / binsize
+                       bins['start'][bin_indices[i]]) / binsize
             n = bin_indices[i + 1] - bin_indices[i]
             data = numpy.zeros(n * (n + 1) / 2, dtype=numpy.int32)
             for key, count in fend_pairs[i][i].iteritems():
@@ -1333,8 +1251,9 @@ class HiCData(object):
             if indices[i].shape[0] == 0:
                 continue
             n = bin_indices[i + 1] - bin_indices[i]
-            self.cis_data[pos:(pos + indices[i].shape[0]), 0] = indices[-1] / n + bin_indices[i]
-            self.cis_data[pos:(pos + indices[i].shape[0]), 1] = indices[-1] % n + bin_indices[i]
+            triu_indices = numpy.triu_indices(n, 0)
+            self.cis_data[pos:(pos + indices[i].shape[0]), 0] = triu_indices[0][indices[i]] + bin_indices[i]
+            self.cis_data[pos:(pos + indices[i].shape[0]), 1] = triu_indices[1][indices[i]] + bin_indices[i]
             self.cis_data[pos:(pos + indices[i].shape[0]), 2] = fend_pairs[i][i]
             pos += indices[i].shape[0]
             indices[i] = None
@@ -1353,14 +1272,14 @@ class HiCData(object):
             indices.append([])
         for i in range(len(fend_pairs)):
             mapping1 = (self.fends['fends']['mid'][chr_indices[i]:chr_indices[i + 1]] -
-                        bins[bin_indices[i]]['start']) / binsize
+                        bins['start'][bin_indices[i]]) / binsize
             n = bin_indices[i + 1] - bin_indices[i]
             for j in range(i + 1, len(fend_pairs)):
                 mapping2 = (self.fends['fends']['mid'][chr_indices[j]:chr_indices[j + 1]] -
-                            bins[bin_indices[j]]['start']) / binsize
+                            bins['start'][bin_indices[j]]) / binsize
                 m = bin_indices[j + 1] - bin_indices[j]
                 data = numpy.zeros((n, m), dtype=numpy.int32)
-                for key, count in fend_pairs[i][i].iteritems():
+                for key, count in fend_pairs[j][i].iteritems():
                     bin1 = mapping1[key[0]]
                     bin2 = mapping2[key[1]]
                     data[bin1, bin2] += count
@@ -1375,10 +1294,10 @@ class HiCData(object):
             for j in range(i + 1, len(fend_pairs)):
                 if indices[j][i][0].shape[0] == 0:
                     continue
-                self.trans_data[pos:(pos + indices[i].shape[0]), 0] = indices[j][i][0] + bin_indices[i]
-                self.trans_data[pos:(pos + indices[i].shape[0]), 1] = indices[j][i][1] + bin_indices[j]
-                self.trans_data[pos:(pos + indices[i].shape[0]), 2] = fend_pairs[j][i]
-                pos += indices[i].shape[0]
+                self.trans_data[pos:(pos + indices[j][i][0].shape[0]), 0] = indices[j][i][0] + bin_indices[i]
+                self.trans_data[pos:(pos + indices[j][i][0].shape[0]), 1] = indices[j][i][1] + bin_indices[j]
+                self.trans_data[pos:(pos + indices[j][i][0].shape[0]), 2] = fend_pairs[j][i]
+                pos += indices[j][i][0].shape[0]
                 indices[j][i] = None
                 fend_pairs[j][i] = None
         self.stats['valid_trans_reads'] += numpy.sum(self.trans_data[:, 2])

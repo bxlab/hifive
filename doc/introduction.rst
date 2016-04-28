@@ -39,8 +39,7 @@ There are eight major functions for both 5C and HiC data types available as subc
 HiC
 ----
 
-:fends:                   Create a fend file from either a BED or HiCPipe-style fend file containing RE fragment data.
-:hic-data:                Create a data file from mapped BAM, MAT, or paired coordinate text files.
+:fends:                   Create a fend file from either a BED or HiCPipe-style fend file containing RE fragment data or create an arbitrarily-binned interval file from chromosome length file.Create a data file from mapped BAM, MAT, or paired coordinate text (RAW) files or from binned matrix files.
 :hic-project:             Create a project file, filter fends, and estimate distance-dependence.
 :hic-normalize:           Find correction parameter values using one of the available algorithms (see normalization_).
 :hic-complete:            Perform all of the steps of the subcommands fends, hic-data, hic-project, and hic-normalization in one command.
@@ -81,6 +80,9 @@ HiFive is organized into a hierarchy of data structures. Each structure represen
 Release History
 ================
 
+- :ref:`1_3`
+- :ref:`1_2_2`
+- :ref:`1_2`
 - :ref:`1_1`
 - :ref:`1_0_3`
 - :ref:`1_0_2`

@@ -35,6 +35,8 @@ For HiC data, this approach uses a binary readout of the data (observed / unobse
 
 For 5C data, only nonzero counts are used and are assumed to be log-normally distributed. For each read, the prior is taken as the predicted distance-dependence signal. Learning can be accomplished using cis, trans, or all interactions. In the case of cis interactions, lower and upper interaction distance cutoffs can be used to limit the set of interactions included in the learning process.
 
+.. note:: Currently this algorithm is not supported by binned HiC data.
+
 .. _chaining normalization:
 
 Chaining Normalization Approaches

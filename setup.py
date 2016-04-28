@@ -17,9 +17,9 @@ ez_setup.use_setuptools()
 from distutils.extension import Extension
 
 MAJOR = 1
-MINOR = 2
-PATCH = 2
-ISRELEASED = False
+MINOR = 3
+PATCH = 0
+ISRELEASED = True
 VERSION = '%d.%d' % (MAJOR, MINOR)
 if not PATCH is None:
     VERSION += '.%d' % (PATCH)

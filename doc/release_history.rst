@@ -4,6 +4,42 @@
 Release History
 *******************
 
+.. _1_3:
+
+1.3 (2016-04-28)
+-------------------
+
+- Added support for creating non-restriction enzyme-based HiC genome partitions
+- Added ability to load RE HiC data into binned genome partition
+- Added ability to directly load pre-binned matrix files
+- Added support for normalization and plotting of binned HiC data
+- Added matrix output option in hic-interval subcommand
+- Fixed error in sub-binning cis heatmap arrays
+- Compiled domain calling approaches into new hic_domain module
+- Renamed _hic_tads to _hic_domains in libraries
+- Removed ununsed functions in _hic_domains
+- Added explicit variable casting for compatibility with cythoning in Windows 
+
+.. _1_2_2:
+
+1.2.2 (2015-12-15)
+-------------------
+
+- Added modified arrowhead transformation domain calling
+- Re-implemented modified version of boundary-index domain finding
+- Added cis sub-region binning function (no longer needs to extend to the diagonal)
+
+.. _1_2:
+
+1.2 (2015-10-21)
+-----------------
+
+- Added detailed statistics for loaded HiC data
+- Added testing of various data import functions
+- Added option to skip PCR duplicate filtering
+- Cleaned up HiC cis binning
+- Various bug fixes
+
 .. _1_1:
 
 1.1 (2015-08-26)

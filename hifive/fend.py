@@ -194,11 +194,11 @@ class Fend(object):
         """
         Parse and store bin paritions data in h5dict.
 
-        :param filename: A file name to read rgenome paritioning data from. The file may be a 'mat' file compatible with HiCPipe, or a BED file containing bin boundaries.
+        :param filename: A file name to read genome paritioning data from. The file may be a BED file containing bin boundaries or a chromosome length file.
         :type filename: str.
         :param genome_name: The name of the species and build. Optional.
         :type genome_name: str.
-        :param format: Format of the input file. If not specified, it will be inferred from the file extension. Optional.
+        :param format: Format of the input file. If not specified, it will be inferred from the file extension. This can be either 'bed' and 'len'. Optional.
         :type format: str.
         :returns: None
 
@@ -223,8 +223,8 @@ class Fend(object):
             genome_name = filename.split('/')[-1].split('_')[0]
         if format == 'bed' or (format is None and filename.split('.')[-1] == 'bed'):
             bins, chromosomes = self._load_binned_from_bed(filename)
-        elif format == "fend" or (format is None and filename.split('.')[-1] == 'fend'):
-            bins, chromosomes = self._load_binned_from_fend(filename)
+        elif format == "len" or (format is None and filename.split('.')[-1] == 'len'):
+            bins, chromosomes = self._load_binned_from_length(filename)
         else:
             if not self.silent:
                 print >> sys.stderr, ("Unrecognized format.")
@@ -240,13 +240,6 @@ class Fend(object):
         self.genome_name = genome_name
         self.bin_indices = chr_indices
         self.chromosomes = chromosomes
-        # calculate statistics
-        #self.fend_sizes = numpy.zeros((40, self.chromosomes.shape[0] + 1), dtype=numpy.float32)
-        #sizes = numpy.log(self.fends['stop'] - self.fends['start'])
-        #splits = numpy.linspace(numpy.amin(sizes), numpy.amax(sizes) + 1, 41)
-        #for i in range(self.chr_indices.shape[0] - 1):
-        #    self.fend_sizes[:, i] = numpy.histogram(sizes[chr_indices[i]:chr_indices[i + 1]], bins=splits)[0]
-        #self.fend_sizes[:, -1] = (splits[1:] + splits[:-1]) / 2.0
         self.history += "Success\n"
         return None
 
@@ -399,12 +392,14 @@ class Fend(object):
         chromosomes.sort()
         chromosomes = numpy.array(chromosomes)
         dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32), ('mid', numpy.int32)]
+        dtypes2 = [('start', numpy.int32), ('stop', numpy.int32)]
         for i in range(len(feature_names)):
             dtypes.append((feature_names[i], numpy.float32))
+            dtypes2.append((feature_names[i], numpy.float32))
         count = 0
         for i, chrom in enumerate(chromosomes):
             data[chrom].sort()
-            data[chrom] = numpy.array(data[chrom], dtype=numpy.dtype(dtypes))
+            data[chrom] = numpy.array(data[chrom], dtype=numpy.dtype(dtypes2))
             count += data[chrom].shape[0]
         bins = numpy.empty(count, dtype=numpy.dtype(dtypes))
         pos = 0
@@ -412,11 +407,36 @@ class Fend(object):
             data_len = data[chrom].shape[0]
             bins['chr'][pos:(pos + data_len)] = i
             bins['start'][pos:(pos + data_len)] = data[chrom]['start'][:]
-            bins['start'][pos:(pos + data_len)] = data[chrom]['stop'][:]
-            bins['stop'][pos:(pos + data_len)] = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
+            bins['stop'][pos:(pos + data_len)] = data[chrom]['stop'][:]
+            bins['mid'][pos:(pos + data_len)] = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
             for j in range(len(feature_names)):
                 bins[feature_names[j]][pos:(pos + data_len)] = data[chrom][feature_names[j]][:]
             pos += data_len
+        return [bins, chromosomes]
+
+    def _load_binned_from_length(self, fname):
+        chromosomes = []
+        data = {}
+        input = open(fname, 'r')
+        for line in input:
+            temp = line.strip('\n').split('\t')
+            chrom = temp[0].strip('chr')
+            chromosomes.append(chrom)
+            data[chrom] = int(temp[1])
+        input.close()
+        chromosomes = numpy.array(chromosomes)
+        chr_indices = numpy.zeros(chromosomes.shape[0] + 1, dtype=numpy.int32)
+        for i, chrom in enumerate(chromosomes):
+            chr_indices[i + 1] = chr_indices[i] + (data[chrom] - 1) / self.binned + 1
+        bins = numpy.zeros(chr_indices[-1], dtype=numpy.dtype([('chr', numpy.int32), ('start', numpy.int32),
+                                                  ('stop', numpy.int32), ('mid', numpy.int32)]))
+        for i in range(chromosomes.shape[0]):
+            bins['start'][chr_indices[i]:chr_indices[i + 1]] = (numpy.arange(chr_indices[i + 1] -
+                                                                             chr_indices[i]) * self.binned)
+            bins['stop'][chr_indices[i]:chr_indices[i + 1]] = (numpy.arange(1, chr_indices[i + 1] -
+                                                                            chr_indices[i] + 1) * self.binned)
+            bins['chr'][chr_indices[i]:chr_indices[i + 1]] = i
+        bins['mid'][:] = (bins['start'] + bins['stop']) / 2
         return [bins, chromosomes]
 
     def plot_statistics(self):

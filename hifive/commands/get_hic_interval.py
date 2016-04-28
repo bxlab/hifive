@@ -19,23 +19,31 @@ def run(args):
     if not args.image is None and args.pdf and "pyx" not in sys.modules.keys():
         parser.error("-p/--pdf requires the package 'pyx'")
     hic = HiC(args.project, 'r', silent=args.silent)
+    if 'binned' in hic.fends['/'].attrs and hic.fends['/'].attrs['binned'] is not None:
+        binned = True
+        chr_indices = 'bin_indices'
+        fends = 'bins'
+    else:
+        binned = False
+        chr_indices = 'chr_indices'
+        fends = 'fends'
     if args.stop == 0 or args.stop is None:
-        maxstop = hic.fends['fends']['stop'][hic.fends['chr_indices'][hic.chr2int[args.chrom] + 1] - 1]
+        maxstop = hic.fends[fends]['stop'][hic.fends[chr_indices][hic.chr2int[args.chrom] + 1] - 1]
     else:
         maxstop = args.stop
     if args.stop is None:
         args.stop = maxstop
     if args.start is None:
-        args.start = hic.fends['fends']['start'][hic.fends['chr_indices'][hic.chr2int[args.chrom]]]
+        args.start = hic.fends[fends]['start'][hic.fends[chr_indices][hic.chr2int[args.chrom]]]
     if not args.chrom2 is None:
         if args.stop2 == 0 or args.stop2 is None:
-            maxstop2 = hic.fends['fends']['stop'][hic.fends['chr_indices'][hic.chr2int[args.chrom2] + 1] - 1]
+            maxstop2 = hic.fends[fends]['stop'][hic.fends[chr_indices][hic.chr2int[args.chrom2] + 1] - 1]
         else:
             maxstop2 = args.stop2
         if args.stop2 is None:
             args.stop2 = maxstop2
         if args.start2 is None:
-            args.start2 = hic.fends['fends']['start'][hic.fends['chr_indices'][hic.chr2int[args.chrom2]]]
+            args.start2 = hic.fends[fends]['start'][hic.fends[chr_indices][hic.chr2int[args.chrom2]]]
     else:
         if args.maxdist is None:
             args.maxdist = 0
@@ -116,7 +124,7 @@ def run(args):
                 print >> output, '\t'.join(tempout)
     else:
         if args.chrom2 is None:
-            diag = int(hic.binned is None)
+            diag = binned
             if arraytype == 'upper':
                 pos = 0
                 for i in range(mapping.shape[0] - 1 + diag):

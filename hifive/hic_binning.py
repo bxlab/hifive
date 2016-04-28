@@ -269,7 +269,6 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         data_array = numpy.zeros((num_bins * (num_bins - 1 + 2 * int(includediagonal)) / 2, 2), dtype=numpy.float32)
     if maxdistance == 0:
         maxdistance = stop - start + 1
-    print mapping.shape, numpy.amin(mapping), numpy.amax(mapping), numpy.sum(mapping >= 0)
     # Fill in data values
     if arraytype == 'compact':
         if binned:

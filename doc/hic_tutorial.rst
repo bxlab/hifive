@@ -25,6 +25,22 @@ To create a basic :class:`Fend <hifive.fend.Fend>` object, use the following com
 
 In this case, the 'out_filename' specifies the location to save the :class:`Fend <hifive.fend.Fend>` object to. The 'RE_data_filename' contains the RE fragment boundaries in one of the formats described above. The 'genome_name' and 're_name' are option strings that may be passed. The 'format' argument specifies that we are passing a BED file containing the fend data to load.
 
+To create a RE-based binned :class:`Fend <hifive.fend.Fend>` object, use the following command::
+
+  import hifive
+  fend = hifive.Fend(out_filename, mode='w', binned=40000)
+  fend.load_fends(RE_data_filename, genome_name='MM9', re_name='HindIII', format='bed')
+  fend.save()
+
+This would create a 40Kb parition of the genome in addition to the RE-based parition. Now data associated with the Fend file would be filtered as usual for RE fragments but then assigned to the appropriate 40Kb bin instead of maintained as fend pairs. You could also skip the restriction enzyme parition information if it won't be needed as follows::
+
+  import hifive
+  fend = hifive.Fend(out_filename, mode='w', binned=40000)
+  fend.load_bins(chrom_length_filename, genome_name='MM9', format='len')
+  fend.save()
+
+This creates a parition of uniform-sized bins starting at coordinate zero for each chromosome.
+
 .. note:: The :class:`Fend <hifive.fend.Fend>` object can now be used by any experiment that relies on the same genome / restriction enzyme combination and does not need to be created separately for different experiments or analyses.
 
 .. _creating_a_HiC_dataset:
@@ -38,7 +54,7 @@ In order to create a HiC dataset, you first need to have created an appropriate 
 
 where values are separated by tabs and strands are denoted by '+' or '-'. In addition to mapped reads, you need to provide a maximum insert size, i.e. the total acceptable length of a sequenced fragment as determined by the sum of each mapping location to its downstream RE cutsite.
 
-To create the 5C dataset from a HiCPipe-compatible format, you can run the following commands::
+To create the HiC dataset from a HiCPipe-compatible format, you can run the following commands::
 
   import hifive
   data = hifive.HiCData(out_filename, mode='w')
@@ -47,7 +63,7 @@ To create the 5C dataset from a HiCPipe-compatible format, you can run the follo
 
 In this case, 'out_filename' specifies the location to save the :class:`HiCData <hifive.hic_data.HiCData>` object to. The 'fend_filename' value is the location of the appropriate :class:`Fend <hifive.fend.Fend>` object. To maintain compatibility with HiCPipe-formatted 'mat' files, :mod:`HiFive` expects that fend and fragment numbering begin at index 1, not 0.
 
-To create the 5C dataset from raw coordinate data, you can run the following commands::
+To create the HiC dataset from raw coordinate data, you can run the following commands::
 
   import hifive
   data = hifive.HiCData(out_filename, mode='w')
@@ -65,7 +81,14 @@ In order to load data from a set of BAM files, a similar procedure is used::
     maxinsert=500)
   data.save()
 
-IIn this case, the only difference is that pairs of file names corresponding to the two mapped read ends are passed as lists. Like the function for counts data, if only a single pair of files is needed, it may be passed as a list (not nested).
+In this case, the only difference is that pairs of file names corresponding to the two mapped read ends are passed as lists. Like the function for counts data, if only a single pair of files is needed, it may be passed as a list (not nested).
+
+If your Fend file is 'binned', then you can also load data directly from a set of tab-delimited matrix files. These files can contain labels indicating bin positions (see :ref:`matrix_files`). If no labels are present, each column and row is expected to match the paritioning in the Fend file and start with the first bin of the chromosome(s). This is done using the command::
+
+  data.load_data_from_matrices(fragment_filename,
+    ['chr1.matrix', 'chr2.matrix', 'chr1_by_chr2.matrix'])
+
+If only matrix files are to be loaded, a Fend file created using chromosome lengths is the best option as it does not contain fend data and gaurentees that bins start with the zero coordinate which is how most publicly available matrix files are organized.
 
 .. note:: The :class:`HiCData <hifive.hic_data.>` object can now be used by multiple analyses of this sample and does not need to be created separately for each one.
 
@@ -284,12 +307,14 @@ Note that we used the 'r' option when opening the file with h5py. This ensures t
 Plotting a heatmap
 ==================
 
-In order to visualize the heatmap we just produced, :mod:`HiFive` has several plotting functions that take different shaped arrays. The function called needs to match the array produced. In this case, we produced an upper array which is compatible with the :meth:`hifive.plotting.plot_upper_array` function, so we'll use that as follows::
+In order to visualize the heatmap we just produced, :mod:`HiFive` has several plotting functions that take different shaped arrays. The function called needs to match the array produced. In this case, we produced an upper array which is compatible with the :func:`plot_upper_array<hifive.plotting.plot_upper_array>` function, so we'll use that as follows::
 
   img = hifive.plotting.plot_upper_array(heatmap, symmetric_scaling=True)
   img.save(out_fname)
 
 In calling the function, we pass the heatmap and that would be sufficient. There are, however, additional options. For example, 'symmetric_scaling' specifies whether the color scale should be expanded to run from the minimum value to the maximum (False) or so that the maximum absolute value determine both upper and lower color bounds. The image returned is a :mod:`PIL` image of type 'png'.
+
+Note that if we were plotting data from a 'binned' HiC dataset, we would have to pass the 'diagonal_included' option as True for either :func:`plot_upper_array<hifive.plotting.plot_upper_array>` or :func:`plot_compact_array<hifive.plotting.plot_compact_array>`.
 
 .. _making_an_mrh_file:
 

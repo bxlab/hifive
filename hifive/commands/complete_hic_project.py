@@ -29,12 +29,12 @@ def run(args):
             chroms = []
     if args.matrix is not None and args.binned is None:
         if rank == 0:
-            print sys.stderr, ("Loading data from matrices is only supported for binned data.")
+            print sys.stderr, ("Loading data from matrices is only supported for binned data.\n")
         return 1
     if args.algorithm.count('binning') > 0:
         if args.binned is not None:
             if rank == 0:
-                print sys.stderr, ("This normalization algorithm is not currently supported for binned data.")
+                print sys.stderr, ("This normalization algorithm is not currently supported for binned data.\n")
             return 1
         model = args.model.split(',')
         modelbins = args.modelbins.split(',')
@@ -44,12 +44,20 @@ def run(args):
                 modelbins[i] = int(modelbins[i])
             except:
                 if rank == 0:
-                    print sys.stderr, ("Not all arguments in -n/--modelbins could be converted to integers.")
+                    print sys.stderr, ("Not all arguments in -n/--modelbins could be converted to integers.\n")
                 return 1
         if len(model) != len(modelbins) or len(model) != len(parameters):
             if rank == 0:
-                print sys.stderr, ("-v/--model, -n/--modelbins, and -u/--parameter-types must be equal lengths.")
+                print sys.stderr, ("-v/--model, -n/--modelbins, and -u/--parameter-types must be equal lengths.\n")
             return 1
+    if args.binned == 0 and args.bed is None:
+        if rank == 0:
+            print  >> sys.stderr, ("Non-uniforming binning (binned=0) must have a bed file to read bin partitions from.\n"),
+        return None
+    elif args.binned is None or args.binned < 1 and args.length is not None:
+        if rank == 0:
+            print  >> sys.stderr, ("Binning from a chromosome length file needs a positive integer value for binning.\n"),
+        return None
     if args.prefix is None:
         fend_fname, data_fname, project_fname = args.output
     else:
@@ -57,11 +65,16 @@ def run(args):
         data_fname = "%s.hcd" % args.prefix
         project_fname = "%s.hcp" % args.prefix
     if rank == 0:
-        fends = Fend(fend_fname, 'w', binned=args.binned, silent=args.silent)
-        if args.bed is None:
+        fends = Fend(fend_fname, mode='w', binned=args.binned, silent=args.silent)
+        if args.bed is not None:
+            if args.binned is not None and args.binned == 0:
+                fends.load_bins(args.bed, genome_name=args.genome, format='bed')
+            else:
+                fends.load_fends(args.bed, genome_name=args.genome, re_name=args.re, format="bed")
+        elif args.fend is not None:
             fends.load_fends(args.fend, genome_name=args.genome, re_name=args.re, format="fend")
         else:
-            fends.load_fends(args.bed, genome_name=args.genome, re_name=args.re, format="bed")
+            fends.load_bins(args.length, genome_name=args.genome, format='len')
         fends.save()
         del fends
         data = HiCData(data_fname, 'w', silent=args.silent)

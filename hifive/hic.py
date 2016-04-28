@@ -513,7 +513,7 @@ class HiC(object):
         self.distance_parameters = distance_parameters
         self.bin_distance_parameters = bin_distance_parameters
         if self.chromosome_means is None:
-            self.chromosome_means = numpy.zeros(self.fends['chr_indices'].shape[0] - 1, dtype=numpy.float32)
+            self.chromosome_means = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.float32)
         if not self.silent:
             print >> sys.stderr, ('\r%s\rFinding distance curve... Done\n') % (' ' * 80),
         self.history += "Success\n"

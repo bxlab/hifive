@@ -35,8 +35,24 @@ Fends associated with HiC data can be loaded from either a BED file or a HiCPipe
 The header line should contain the exact labels as seen above since HiFive uses them to determine which columns contain what information. In addition to the above characteristics, the tabular fend file may also contain the columns 'frag_gc' and 'map_score'. These fend characteristic values are used in HiFive's :ref:`binning algorithm`, although are not needed for either probability or express normalization.
 
 
-====================
-Pre-binned HiC Data
-====================
+=================================================
+Non-restriction Fragment-based Genome Partitions
+=================================================
 
-As more HiC data is released as pre-binned matrices do to size and processing time constraints, there is a need to be able to easily and efficiently handle such a format. HiFive allows this pre-binned data to be loaded and analyzed using both the Probability and Express algorithms, along with all binning and plotting manipulations. In order to do this, the :class:`Fend <hifive.fend.Fend>` object must be create specifying the resolution of this binning using the 'binned' value either through the HiFive executable or when initializing a fend object from the library directly. Any subsequent analysis is automatically adjusted to handle the data as binned without additional intervention of the user. The one exception is if calling library functions directly the 'diagonal_included' argument needs to be passed to plotting functions as they do not have access to the HiC object and therefore cannot determine whether pre-binning has been used.
+As a consequence of chromatin interaction assay and analysis approach continuing to diversify, enforcing restriction enzyme-based genome partitions is too limiting. HiFive allows both uniform and arbitrary genome partitions for chromatin interaction analysis to support a variety of analysis needs.
+
+There are currently three ways of creating 'binned' partitions, although they are all still stored in a :class:`Fend <hifive.fend.Fend>` object. These different approaches reflect differing experimental designs and care should be take to select the appropriate one.
+
+**Binned restriction fragment-based data**
+
+ In order to support lower coverage datasets and facilitate analysis by users with fewer computational resources, HiFive allows binning of data as it is loaded from mapped read files. This requires knowledge of restriction sites as well as the binning interval. Thus a Fend object created for these kind of data should be created as described above for a standard RE-based partitioning but will also be passed a bin width via the 'binned' option. Datasets connected to the resulting Fend object will automatically be binned and all subsequent analysis will be on the binned data. This allows proper filtering of the reads but no need to have the overhead of keep fend pairs after this stage.
+
+ **Uniform genome paritioning**
+
+ If filtering based on RE-fragments is not needed, either because it has been previously performed or the experiment did not use a restriction enzyme, a Fend object with a uniform paritioning of the genome can be produced by passing a file containing only the chromosome names and lengths plus a bin width. Datasets associated with the resulting Fend object will not be able to perform filtering based on RE fragment assignment but can filter reads based on orientation as decribed for :ref:`bin-based filtering<bin filtering>`. Bins produced in this approach always start from coordinate zero.
+
+ **Arbitrary genome paritioning**
+
+ HiFive also accepts user-defined paritions. The primary difference between these and restriction fragments are that unlike RE fragments, bins are no subdivided (i.e. fragments into fends) and no fragment-based filtering is performed on reads for datasets associated with these fend files. In order to tell HiFive that the parition file being passed is not restriction fragments, a value of zero must be passed to the 'binned' option.
+
+.. note:: Unlike RE-based paritions, within-bin interactions are included in binned partitions. This is all handled automatically by HiFive with one exception. If calling library functions directly, the 'diagonal_included' argument needs to be passed to plotting functions as they do not have access to the HiC object and therefore cannot determine whether the data are of the 'binned' type.

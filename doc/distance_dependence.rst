@@ -24,4 +24,4 @@ The log-distance range covered by interactions is divided into equal-sized bins 
 
 The same strategy is used to simultaneously estimate a distance-dependence relationship between log-distance and a binary indicator of observed/unobserved instead of counts.
 
-If data are pre-binned (loaded from a set of matrix files), the smallest bin size should be just smaller than the binsize (e.g. for data pre-binned at 40Kb resolution, a minimum distance bin size of 39Kb is appropriate). This is because the diagonal is included in analysis which is shifted to an interaction distance of 1 to avoid issues when log-transformed.
+If data are binned (associated with a fend file created with the 'binned' flag), the smallest bin size should be just smaller than the binsize (e.g. for data pre-binned at 40Kb resolution, a minimum distance bin size of 39Kb is appropriate). This is because the diagonal is included in analysis which is shifted to an interaction distance of 1 to avoid issues when the distance is log-transformed.

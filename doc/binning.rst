@@ -12,6 +12,8 @@ The 'upper' format
 
 The 'upper' format is used when the data can be represented in a symmetric matrix (bin i,j is equal to j,i). In these cases, HiFive flattens the matrix into a 1D array, using only the upper triangle of the matrix, not including the diagonal. This results in an N * (N - 1) / 2 sized matrix from an N x N square matrix. This is the format used for all cis genomic regions that are binned and have no distance bound on the length of included interactions.
 
+.. note:: For 'binned' HiC data, because within-bin interactions are included, the array is of size N * (N + 1) / 2.
+
 ++++++++++++++++++
 The 'full' format
 ++++++++++++++++++
@@ -23,6 +25,8 @@ The HiC 'compact' format
 ++++++++++++++++++++++++
 
 Because HiC data is often worked with over short ranges, HiFive has a 'compact' format that has an upper bound on the length of interactions included in the array. The array size is equal to the number of bins (or fends in unbinned data) by the maximum number of bins apart that interactions are included for minus one. This means that if we have ten 10 Kb bins and include interactions up to 30 Kb apart, we would need a 10 x 3 array. Position i,j would give us interactions from bin i interacting with bin i + j + 1. This format allows a more efficient way of holding data up to the point that the maximum interaction distance is half of the span of the region or greater, in which case it becomes more efficient to use the 'upper' format. This is only used internally by HiFive or through the API.
+
+.. note:: For 'binned' HiC data, because within-bin interactions are included, the array is one larger along the second axis.
 
 ++++++++++++++++++++++++++
 The 5C 'compact' format

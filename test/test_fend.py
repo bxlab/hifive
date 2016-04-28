@@ -15,13 +15,28 @@ import h5py
 class Fends(unittest.TestCase):
     def setUp(self):
         self.fends = h5py.File('test/data/test.fends', 'r')
+        self.binned_fends = h5py.File('test/data/test_binned.fends', 'r')
+        self.len_fends = h5py.File('test/data/test_len.fends', 'r')
         self.bed_fname = 'test/data/test_fend.bed'
+        self.len_fname = 'test/data/test.len'
 
     def test_fend_creation(self):
         subprocess.call("./bin/hifive fends -q -g mm9 -r HindIII -B %s test/data/test_temp.fends" %
                         self.bed_fname, shell=True)
         fends = h5py.File('test/data/test_temp.fends', 'r')
         self.compare_hdf5_dicts(self.fends, fends, 'fends')
+
+    def test_binned_fend_creation(self):
+        subprocess.call("./bin/hifive fends -q -g mm9 -B %s test/data/test_temp.fends --binned 40000" %
+                        self.bed_fname, shell=True)
+        fends = h5py.File('test/data/test_temp.fends', 'r')
+        self.compare_hdf5_dicts(self.binned_fends, fends, 'RE binned fends')
+
+    def test_binned_creation(self):
+        subprocess.call("./bin/hifive fends -q -g mm9 -L %s test/data/test_temp.fends --binned 40000" %
+                        self.len_fname, shell=True)
+        fends = h5py.File('test/data/test_temp.fends', 'r')
+        self.compare_hdf5_dicts(self.len_fends, fends, 'binned fends')
 
     def tearDown(self):
         subprocess.call('rm -f test/data/test_temp.fends', shell=True)

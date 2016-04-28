@@ -418,6 +418,8 @@ def add_fends_subparser(subparsers):
         help="Fend file in HiCPipe-compatible tabular format, optionally containing fend characteristics (GC content and/or mappability).")
     infile_group.add_argument("-B", "--bed", dest="bed", type=str, default=None,
         help="Bed file containing either RE fragment boundary data or RE cutsites.")
+    infile_group.add_argument("-L", "--length", dest="length", type=str, default=None,
+        help="Text file containing chromosome names and lengths.")
     parser.add_argument("--binned", dest="binned", type=int, default=None,
         help="Interval to bin data into.")
     parser.add_argument("-r", "--re", dest="re", required=False, default=None, type=str,
@@ -529,8 +531,10 @@ def add_complete_hic_group(subparser):
         help="Fend file in HiCPipe-compatible tabular format, optionally containing fend characteristics (GC content and/or mappability).")
     fendfile_group.add_argument("-B", "--bed", dest="bed", type=str, default=None,
         help="Bed file containing either RE fragment boundary data or RE cutsites.")
+    fendfile_group.add_argument("-L", "--length", dest="length", type=str, default=None,
+        help="Text file containing chromosome names and lengths.")
     subparser.add_argument("--binned", dest="binned", type=int, default=None,
-        help="Interval to bin data into.")
+        help="Interval to bin data into. If set to zero, indicates non-uniform binning to be read from bed file.")
     subparser.add_argument("--re", dest="re", required=False, default=None, type=str,
         help="The name of the restriction enzyme used to produce the RE fragments.")
     subparser.add_argument("--genome", dest="genome", required=False, default=None, type=str,
