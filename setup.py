@@ -19,7 +19,7 @@ from distutils.extension import Extension
 MAJOR = 1
 MINOR = 3
 PATCH = 0
-ISRELEASED = True
+ISRELEASED = False
 VERSION = '%d.%d' % (MAJOR, MINOR)
 if not PATCH is None:
     VERSION += '.%d' % (PATCH)

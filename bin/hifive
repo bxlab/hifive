@@ -441,7 +441,7 @@ def add_hicdataset_subparser(subparsers):
         help="A tab-separated text file containing pairs of read ends (chr1 pos1 strand1 chr2 pos2 strand2), one per line. For multiple files, this option can be passed multiple times.")
     infile_group.add_argument("-M", "--mat", dest="mat", action='store',
         help="A HiCPipe-style tabular MAT file containing fend pair counts.")
-    infile_group.add_argument("-X", "--matrix", dest="matrix", action='append',
+    infile_group.add_argument("-X", "--matrix", dest="matrix", action='store',
         help="Binned matrix containing summed fend interactions.")
     parser.add_argument("-i", "--insert", dest="insert", required=False, type=int, default=500,
         help="The maximum allowable distance sum between both fend ends and cutsites. [default: %(default)s]")
@@ -658,6 +658,9 @@ def add_hic_heatmap_subparser(subparsers):
     parser.add_argument("-d", "--datatype", dest="datatype", default="fend",
         help="Which corrections (if any) to apply to counts. [default: %(default)s]",
         choices=["raw", "fend", "distance", "enrichment", "expected"])
+    parser.add_argument("-F", "--format", dest="format", default="hdf5",
+        help="Format of output. [default: %(default)s]",
+        choices=["hdf5", "txt", "npz"])
     parser.add_argument("-y", "--dynamically-bin", dest="dynamic", default=False, action="store_true",
         help="Dynamically bin heatmap.")
     parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,

@@ -321,7 +321,7 @@ def plot_upper_array(data, maxscore=None, minscore=None, symmetricscaling=True, 
 
 def plot_hic_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True, chroms=[],
                      min_color="0000ff", mid_color="ffffff", max_color="ff0000",
-                     returnscale=False, **kwargs):
+                     returnscale=False, format='hdf5', **kwargs):
     """
     Fill in and rescale bitmap from a HiC heatmap h5dict file.
 
@@ -345,6 +345,8 @@ def plot_hic_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=Tr
     :type max_color: str.
     :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
     :type returnscale: bool.
+    :param format: Format of the heatmap.
+    :type format: str.
     :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -353,7 +355,11 @@ def plot_hic_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=Tr
         silent = False
     if 'PIL' not in sys.modules.keys():
         if not silent:
-            print >> sys.stderr, ("The PIL module must be installed to use this function.")
+            print >> sys.stderr, ("The PIL module must be installed to use this function.\n")
+        return None
+    if format not in ['hdf5', 'npz']:
+        if not silent:
+            print >> sys.stderr, ("The format is not recognized or supported.\n")
         return None
     if not silent:
         print >> sys.stderr, ("Plotting heatmap dict..."),
@@ -364,9 +370,12 @@ def plot_hic_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=Tr
                      (min_color[0] + max_color[0]) / 2.0)
     else:
         mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
-    input = h5py.File(filename, 'r')
+    if format == 'hdf5':
+        input = h5py.File(filename, 'r')
+    else:
+        input = numpy.load(filename)
     if len(chroms) == 0:
-        chroms = list(input['chromosomes'][...])
+        chroms = list(input['chromosomes'][:])
     starts = [0]
     sizes = []
     for chrom in chroms:

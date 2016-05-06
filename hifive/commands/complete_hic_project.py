@@ -85,7 +85,7 @@ def run(args):
         elif not args.mat is None: 
             data.load_data_from_mat(fend_fname, args.mat, args.insert)
         elif not args.matrix is None:
-            data.load_binned_data_from_matrices(fend_fname, args.matrix)
+            data.load_binned_data_from_matrices(fend_fname, args.matrix, format=None)
         data.save()
         del data
         for i in range(1, num_procs):

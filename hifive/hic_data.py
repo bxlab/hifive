@@ -744,7 +744,7 @@ class HiCData(object):
         self.history += "Success\n"
         return None
 
-    def load_binned_data_from_matrices(self, fendfilename, filelist):
+    def load_binned_data_from_matrices(self, fendfilename, filename, format=None):
         """
         Read interaction counts from a tab-separated set of matrix files, one per chromosome, and place in h5dict.
 
@@ -752,8 +752,10 @@ class HiCData(object):
 
         :param fendfilename: This specifies the file name of the :class:`Fend` object to associate with the dataset.
         :type fendfilename: str.
-        :param filelist: A list containing all of the matrix file names. These may be passed in any order and the name prior to the first '.' should be the chromosome name (e.g. chr1.observed.matrix). If inter-chromosomal matrices are passed, the file name should be of the form chr1_by_chr2.XXX where the first chromosome corresponds to the rows and the second chromosome corresponds to the columns of the matrix.
-        :type filelist: list
+        :param filename: The file containing the data matrices. If data are in individual text files, this should be a filename template with an '*' in place of the chromosome(s) names. Each chromosome and chromosome pair in the fend file will be checked and loaded if present. If format is not passed, the format of the matrices will be inferred from the filename (a '*' will default to 'txt', otherwise the filename extension will be used). If data are in hdf5 or npz format, the individual matrices should either be named with the chromosome name or 'N.counts' where N is the chromosome name. For inter-chromosomal interactions, names should be 'N_by_M' for chromosomes N and M.
+        :type filename: str.
+        :param format: The format of the file(s) to load data from.
+        :type format: str.
         :returns: None
 
         :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
@@ -765,13 +767,25 @@ class HiCData(object):
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_binned_data_from_matrices(fendfilename='%s', filelist=%s) - " % (fendfilename, str(filelist))
+        self.history += "HiCData.load_binned_data_from_matrices(fendfilename='%s', filename='%s', format='%s') - " % (fendfilename, filename, str(format))
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
                 print >> sys.stderr, \
                 ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
             self.history += "Error: '%s' not found\n" % fendfilename
+            return None
+        if format is None:
+            if filename.count('*'):
+                format = 'txt'
+            elif filename.split('.')[-1] == 'hdf5':
+                format = 'hdf5'
+            elif filename.split('.')[-1] == 'npz':
+                format = 'npz'
+        if format not in ['txt', 'hdf5', 'npz']:
+            if not self.silent:
+                print >> sys.stderr, ("Could not determine file format. No data loaded.\n"),
+            self.history += "Error: File format not recognized.\n"
             return None
         self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
                                        os.path.dirname(self.file)), os.path.basename(fendfilename))
@@ -782,7 +796,6 @@ class HiCData(object):
                 ("The fend file %s was not created for binned data. No data was loaded.\n") % (fendfilename),
             self.history += "Error: '%s' not binned\n" % fendfilename
             return None
-        binsize = self.fends['/'].attrs['binned']
         bins = self.fends['bins'][...]
         bin_indices = self.fends['bin_indices'][...]
         self.history = self.fends['/'].attrs['history'] + self.history
@@ -798,93 +811,12 @@ class HiCData(object):
                 data[i].append([])
         cis_counts = 0
         trans_counts = 0
-        for fname in filelist:
-            col_labels = None
-            row_labels = []
-            tempdata = []
-            if not os.path.exists(fname):
-                if not self.silent:
-                    print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
-                self.history += "'%s' not found, " % fname
-                continue
-            if not self.silent:
-                print >> sys.stderr, ("\r%s\rLoading %s...") % (' '*80, fname),
-            for line in open(fname):
-                temp = line.rstrip('\n').rstrip('\t').split('\t')
-                try:
-                    temp[0] = int(temp[0])
-                    temp[0] = str(temp[0])
-                except:
-                    if col_labels is None:
-                        col_labels = temp[1:]
-                        continue
-                    else:
-                        row_labels.append(temp[0])
-                        temp = temp[1:]
-                tempdata.append(numpy.fromstring(' '.join(temp), sep=' ', dtype=numpy.int32))
-            if not self.silent:
-                print >> sys.stderr, ("\r%s\r") % (' '*80),
-            tempdata = numpy.array(tempdata, dtype=numpy.int32)
-            chrom_names = fname.split('/')[-1].split('.')[0].split('_by_')
-            chrom1 = self.chr2int[chrom_names[0].strip('chr')]
-            mapping1 = numpy.zeros(tempdata.shape[0], dtype=numpy.int32) - 1
-            if len(chrom_names) > 1:
-                chrom2 = self.chr2int[chrom_names[1].strip('chr')]
-                mapping2 = numpy.zeros(tempdata.shape[1], dtype=numpy.int32) - 1
-            else:
-                chrom2 = chrom1
-                mapping2 = mapping1
-            if col_labels is None:
-                n = bin_indices[chrom1 + 1] - bin_indices[chrom1]
-                mapping1[:n] = numpy.arange(n)
-                valid1 = numpy.where(mapping1 >= 0)[0]
-                if len(chrom_names) > 1:
-                    m = bin_indices[chrom2 + 1] - bin_indices[chrom2]
-                    mapping2[:m] = numpy.arange(m)
-                    valid2 = numpy.where(mapping2 >= 0)[0]
-                    tempdata = tempdata[valid1, :][:, valid2]
-                else:
-                    tempdata = tempdata[valid1, :][:, valid1]
-            else:
-                for i in range(len(row_labels)):
-                    row_labels[i] = int(row_labels[i].split('|')[-1].split('-')[0].split(':')[1])
-                row_labels = numpy.array(row_labels)
-                starts = numpy.searchsorted(bins['start'][bin_indices[chrom1]:bin_indices[chrom1 + 1]],
-                                            row_labels, side='right') - 1
-                stops = numpy.searchsorted(bins['stop'][bin_indices[chrom1]:bin_indices[chrom1 + 1]], row_labels)
-                valid = numpy.where(starts == stops)[0]
-                mapping1[valid] = starts[valid]
-                valid1 = numpy.where(mapping1 >= 0)[0]
-                if len(chrom_names) > 1:
-                    for i in range(len(col_labels)):
-                        col_labels[i] = int(col_labels[i].split('|')[-1].split('-')[0].split(':')[1])
-                    col_labels = numpy.array(col_labels)
-                    starts = numpy.searchsorted(bins['start'][bin_indices[chrom2]:bin_indices[chrom2 + 1]],
-                                                col_labels, side='right') - 1
-                    stops = numpy.searchsorted(bins['stop'][bin_indices[chrom2]:bin_indices[chrom2 + 1]], col_labels)
-                    valid = numpy.where(starts == stops)[0]
-                    mapping2[valid] = starts[valid]
-                    valid2 = numpy.where(mapping2 >= 0)[0]
-                    tempdata = tempdata[valid1, :][:, valid2]
-                else:
-                    tempdata = tempdata[valid1, :][:, valid1]
-            if len(chrom_names) > 1:
-                    where = numpy.where(tempdata > 0)
-                    counts = numpy.zeros((where[0].shape[0], 3), dtype=numpy.int32)
-                    counts[:, 0] = where[0] + bin_indices[chrom1]
-                    counts[:, 1] = where[1] + bin_indices[chrom2]
-                    counts[:, 2] = tempdata[where]
-                    trans_counts += counts.shape[0]
-            else:
-                indices = numpy.triu_indices(tempdata.shape[0], 0)
-                tempdata = tempdata[indices]
-                where = numpy.where(tempdata > 0)[0]
-                counts = numpy.zeros((where.shape[0], 3), dtype=numpy.int32)
-                counts[:, 0] = indices[0][where] + bin_indices[chrom1]
-                counts[:, 1] = indices[1][where] + bin_indices[chrom1]
-                counts[:, 2] = tempdata[where]
-                cis_counts += counts.shape[0]
-            data[chrom2][chrom1] = counts
+        if format == 'txt':
+            cis_counts, trans_counts = self._load_txt_matrices(data, filename, chroms, bins, bin_indices)
+        elif format == 'hdf5':
+            cis_counts, trans_counts = self._load_hdf5_npz_matrices(data, filename, chroms, bins, bin_indices, 'hdf5')
+        else:
+            cis_counts, trans_counts = self._load_hdf5_npz_matrices(data, filename, chroms, bins, bin_indices, 'npz')
         self.stats['valid_cis_pairs'] = cis_counts
         self.stats['valid_trans_pairs'] = trans_counts
         if cis_counts > 0:
@@ -943,6 +875,232 @@ class HiCData(object):
         if not self.silent:
             print >> sys.stderr, ("Done  %i cis reads, %i trans reads\n") % (cis_reads, trans_reads),
         return None
+
+    def _load_txt_matrices(self, data, filename, chroms, bins, bin_indices):
+        """Load count data from tab-separated matrix files."""
+        cis_counts = 0
+        trans_counts = 0
+        for chrom in chroms:
+            for chrom2 in chroms:
+                if chrom == chrom2:
+                    fname = filename.replace('*', chrom)
+                    if not os.path.exists(fname):
+                        fname = filename.replace('*', 'chr%s' % chrom)
+                        if not os.path.exists(fname):
+                            continue
+                else:
+                    fname = filename.replace('*', '%s_by_%s' % (chrom, chrom2))
+                    if not os.path.exists(fname):
+                        fname = filename.replace('*', 'chr%s_by_chr%s' % (chrom, chrom2))
+                        if not os.path.exists(fname):
+                            continue
+                col_labels = None
+                row_labels = []
+                tempdata = []
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rLoading %s...") % (' '*80, fname),
+                for line in open(fname):
+                    temp = line.rstrip('\n').rstrip('\t').split('\t')
+                    try:
+                        temp[0] = int(temp[0])
+                        temp[0] = str(temp[0])
+                    except:
+                        if col_labels is None:
+                            col_labels = temp[1:]
+                            continue
+                        else:
+                            row_labels.append(temp[0])
+                            temp = temp[1:]
+                    tempdata.append(numpy.fromstring(' '.join(temp), sep=' ', dtype=numpy.int32))
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\r") % (' '*80),
+                tempdata = numpy.array(tempdata, dtype=numpy.int32)
+                chrint1 = self.chr2int[chrom]
+                mapping1 = numpy.zeros(tempdata.shape[0], dtype=numpy.int32) - 1
+                if chrom != chrom2:
+                    chrint2 = self.chr2int[chrom2]
+                    mapping2 = numpy.zeros(tempdata.shape[1], dtype=numpy.int32) - 1
+                else:
+                    chrint2 = chrint1
+                    mapping2 = mapping1
+                if col_labels is None:
+                    n = bin_indices[chrint1 + 1] - bin_indices[chrint1]
+                    mapping1[:n] = numpy.arange(n)
+                    valid1 = numpy.where(mapping1 >= 0)[0]
+                    if chrom != chrom2:
+                        m = bin_indices[chrint2 + 1] - bin_indices[chrint2]
+                        mapping2[:m] = numpy.arange(m)
+                        valid2 = numpy.where(mapping2 >= 0)[0]
+                        tempdata = tempdata[valid1, :][:, valid2]
+                    else:
+                        tempdata = tempdata[valid1, :][:, valid1]
+                else:
+                    for i in range(len(row_labels)):
+                        temp = row_labels[i].split('|')[-1].split(':')[1].split('-')
+                        row_labels[i] = (int(temp[0]) + int(temp[1])) / 2
+                    row_labels = numpy.array(row_labels)
+                    starts = numpy.searchsorted(bins['start'][bin_indices[chrint1]:bin_indices[chrint1 + 1]],
+                                                row_labels, side='right') - 1
+                    stops = numpy.searchsorted(bins['stop'][bin_indices[chrint1]:bin_indices[chrint1 + 1]],
+                                               row_labels, side='right')
+                    valid = numpy.where(starts == stops)[0]
+                    mapping1[valid] = starts[valid]
+                    invalid1 = numpy.where(mapping1 < 0)[0]
+                    if chrom != chrom2:
+                        for i in range(len(col_labels)):
+                            temp = col_labels[i].split('|')[-1].split(':')[1].split('-')
+                            col_labels[i] = (int(temp[0]) + int(temp[1])) / 2
+                        col_labels = numpy.array(col_labels)
+                        starts = numpy.searchsorted(bins['start'][bin_indices[chrint2]:bin_indices[chrint2 + 1]],
+                                                    col_labels, side='right') - 1
+                        stops = numpy.searchsorted(bins['stop'][bin_indices[chrint2]:bin_indices[chrint2 + 1]],
+                                                   col_labels, side='right')
+                        valid = numpy.where(starts == stops)[0]
+                        mapping2[valid] = starts[valid]
+                        invalid2 = numpy.where(mapping2 < 0)[0]
+                        tempdata[invalid1, :] = 0
+                        tempdata[:, invalid2] = 0
+                    else:
+                        tempdata[invalid1, :] = 0
+                        tempdata[:, invalid1] = 0
+                if chrom != chrom2:
+                        where = numpy.where(tempdata > 0)
+                        counts = numpy.zeros((where[0].shape[0], 3), dtype=numpy.int32)
+                        if chrint1 < chrint2:
+                            counts[:, 0] = mapping1[where[0]] + bin_indices[chrint1]
+                            counts[:, 1] = mapping2[where[1]] + bin_indices[chrint2]
+                        else:
+                            counts[:, 1] = mapping1[where[0]] + bin_indices[chrint1]
+                            counts[:, 0] = mapping2[where[1]] + bin_indices[chrint2]
+                        counts[:, 2] = tempdata[where]
+                        trans_counts += counts.shape[0]
+                else:
+                    indices = numpy.triu_indices(tempdata.shape[0], 0)
+                    tempdata = tempdata[indices]
+                    where = numpy.where(tempdata > 0)[0]
+                    counts = numpy.zeros((where.shape[0], 3), dtype=numpy.int32)
+                    counts[:, 0] = mapping1[indices[0][where]] + bin_indices[chrint1]
+                    counts[:, 1] = mapping1[indices[1][where]] + bin_indices[chrint1]
+                    counts[:, 2] = tempdata[where]
+                    cis_counts += counts.shape[0]
+                data[chrint2][chrint1] = counts
+        return cis_counts, trans_counts
+
+    def _load_hdf5_npz_matrices(self, data, filename, chroms, bins, bin_indices, format):
+        """Load count data from hdf5 file."""
+        cis_counts = 0
+        trans_counts = 0
+        if format == 'hdf5':
+            infile = h5py.File(filename, 'r')
+        else:
+            infile = numpy.load(filename)
+        for chrom in chroms:
+            chrint1 = self.chr2int[chrom]
+            for chrom2 in chroms:
+                chrint2 = self.chr2int[chrom2]
+                if chrom == chrom2:
+                    for template in ['*', 'chr*', '*.counts', 'chr*.counts', '*.observed', 'chr*.observed']:
+                        name = template.replace('*', chrom)
+                        if name in infile:
+                            break
+                else:
+                    for template in ['*_by_+', 'chr*_by_chr+', '*_by_+.counts', 'chr*_by_chr+.counts', '*_by_+.observed', 'chr*_by_chr+.observed']:
+                        name = template.replace('*', chrom).replace('+', chrom2)
+                        if name in infile:
+                            break
+                if name not in infile:
+                    continue
+                if not self.silent:
+                    print >> sys.stderr, ("\r%s\rLoading %s...") % (' '*80, name),
+                if '%s.positions' % chrom in infile or 'chr%s.positions' % chrom in infile:
+                    if '%s.positions' % chrom in infile:
+                        pos1 = infile['%s.positions' % chrom][:]
+                    else:
+                        pos1 = infile['chr%s.positions' % chrom][:]
+                    pos1 = (pos1[:, 0] + pos1[:, 1]) / 2
+                    if chrom != chrom2:
+                        if '%s.positions' % chrom2 in infile:
+                            pos2 = infile['%s.positions' % chrom2][:]
+                        else:
+                            pos2 = infile['chr%s.positions' % chrom2][:]
+                        pos2 = (pos2[:, 0] + pos2[:, 1]) / 2
+                    else:
+                        pos2 = pos1
+                else:
+                    pos1 = None
+                tempdata = infile[name][:]
+                if chrom == chrom2 and len(tempdata.shape) == 1:
+                    if pos1 is not None:
+                        N = pos1.shape[0]
+                        if tempdata.shape[0] == N * (N - 1) / 2:
+                            diag = False
+                        else:
+                            diag = True
+                    elif format == 'npz' or ('diagonal' in infile['/'].attrs and infile['/'].attrs['diagonal']):
+                        diag = True
+                        N = (-0.5 + (0.25 + 2 * tempdata.shape[0]))
+                    else:
+                        diag = False
+                        N = (0.5 + (0.25 + 2 * tempdata.shape[0]))
+                    temp = numpy.zeros((N, N), dtype=numpy.int32)
+                    temp[numpy.triu_indices(N, 1 - int(diag))] = tempdata
+                    tempdata = temp
+                else:
+                    tempdata = infile[name][...]
+                    N, M = tempdata.shape
+                    if chrom == chrom2:
+                        tempdata[numpy.tril_indices(N, 1)] = 0
+                if pos1 is None:
+                    n = bin_indices[chrint1 + 1] - bin_indices[chrint1]
+                    mapping1 = numpy.zeros(N, dtype=numpy.int32) - 1
+                    mapping1[:min(n, N)] = numpy.arange(min(n, N))
+                    if chrom == chrom2:
+                        mapping2 = mapping1
+                    else:
+                        m = bin_indices[chrint2 + 1] - bin_indices[chrint2]
+                        mapping2 = numpy.zeros(M, dtype=numpy.int32) - 1
+                        mapping2[:min(m, M)] = numpy.arange(min(m, M))
+                else:
+                    starts = numpy.searchsorted(bins['start'][bin_indices[chrint1]:bin_indices[chrint1 + 1]],
+                                                pos1, side='right') - 1
+                    stops = numpy.searchsorted(bins['stop'][bin_indices[chrint1]:bin_indices[chrint1 + 1]],
+                                               pos1, side='right')
+                    valid1 = numpy.where(starts == stops)[0]
+                    mapping1 = numpy.zeros(N, dtype=numpy.int32) - 1
+                    mapping1[valid1] = starts[valid1]
+                    invalid1 = numpy.where(mapping1 < 0)[0]
+                    if chrom == chrom2:
+                        mapping2 = mapping1
+                        invalid2 = invalid1
+                    else:
+                        starts = numpy.searchsorted(bins['start'][bin_indices[chrint2]:bin_indices[chrint2 + 1]],
+                                                    pos2, side='right') - 1
+                        stops = numpy.searchsorted(bins['stop'][bin_indices[chrint2]:bin_indices[chrint2 + 1]],
+                                                   pos2, side='right')
+                        valid = numpy.where(starts == stops)[0]
+                        mapping2 = numpy.zeros(M, dtype=numpy.int32) - 1
+                        mapping2[valid] = starts[valid]
+                        invalid2 = numpy.where(mapping2 < 0)[0]
+                tempdata[invalid1, :] = 0
+                tempdata[:, invalid2] = 0
+                where = numpy.where(tempdata > 0)
+                counts = numpy.zeros((where[0].shape[0], 3), dtype=numpy.int32)
+                if chrint1 <= chrint2:
+                    counts[:, 0] = mapping1[where[0]] + bin_indices[chrint1]
+                    counts[:, 1] = mapping2[where[1]] + bin_indices[chrint2]
+                else:
+                    counts[:, 1] = mapping1[where[0]] + bin_indices[chrint1]
+                    counts[:, 0] = mapping2[where[1]] + bin_indices[chrint2]
+                counts[:, 2] = tempdata[where]
+                if chrom == chrom2:
+                    cis_counts += counts.shape[0]
+                else:
+                    trans_counts += counts.shape[0]
+                data[chrint2][chrint1] = counts
+        infile.close()
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\r") % (' '*80),
+        return cis_counts, trans_counts
 
     def _find_fend_pairs(self, data, fend_pairs, skip_duplicate_filtering=False):
         """Return array with lower fend, upper fend, and count for pair."""

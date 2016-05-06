@@ -39,7 +39,7 @@ class HiCBinning(unittest.TestCase):
         self.compare_arrays(self.data['hic_mapping2'][...], mapping2, 'trans mappings')
 
     def test_generate_heatmap(self):
-        subprocess.call("./bin/hifive hic-heatmap -q -b 50000 -t -d fend %s test/data/test_temp.hch" %
+        subprocess.call("./bin/hifive hic-heatmap -q -b 50000 -t -F hdf5 -d fend %s test/data/test_temp.hch" %
                         self.project_fname, shell=True)
         heatmap = h5py.File("test/data/test_temp.hch")
         self.compare_hdf5_dicts(self.heatmap, heatmap, 'heatmap')

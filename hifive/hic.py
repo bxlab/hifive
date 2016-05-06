@@ -2344,11 +2344,11 @@ class HiC(object):
 
     def write_heatmap(self, filename, binsize, includetrans=True, datatype='enrichment', chroms=[], 
                       dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
-                      removefailed=False):
+                      removefailed=False, format='hdf5'):
         """
-        Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
+        Create a file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
-        :param filename: Location to write h5dict object to.
+        :param filename: Location to write heatmap object to. If format is 'txt', this should be a filename prefix.
         :type filename: str.
         :param binsize: Size of bins for interaction arrays.
         :type binsize: int.
@@ -2368,6 +2368,8 @@ class HiC(object):
         :type expansion_binsize: int.
         :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
         :type removefailed: bool.
+        :param format: A string indicating whether to save heatmaps as text matrices ('txt'), an HDF5 file of numpy arrays ('hdf5'), or a numpy npz file ('npz').
+        :type format: str.
         :returns: None
 
         The following attributes are created within the hdf5 dictionary file. Arrays are accessible as datasets while the resolution is held as an attribute.
@@ -2377,11 +2379,16 @@ class HiC(object):
                      * **N.positions** (*ndarray*) - A series of numpy arrays of type int32, one for each chromosome where N is the chromosome name, containing one row for each bin and four columns denoting the start and stop coordinates and first fend and last fend plus one for each bin.
                      * **N.counts** (*ndarray*) - A series of numpy arrays of type int32, one for each chromosome where N is the chromosome name, containing the observed counts for valid fend combinations. Arrays are in an upper-triangle format such that they have N * (N - 1) / 2 entries where N is the number of fends or bins in the chromosome.
                      * **N.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each chromosome where N is the chromosome name, containing the expected counts for valid fend combinations. Arrays are in an upper-triangle format such that they have N * (N - 1) / 2 entries where N is the number of fends in the chromosome.
+                     * **N.enrichment** (*ndarray*) - A series of numpy arrays of type float32, one for each chromosome where N is the chromosome name, containing the observed / expected counts for valid fend combinations. Arrays are in an upper-triangle format such that they have N * (N - 1) / 2 entries where N is the number of fends in the chromosome.
                      * **N_by_M.counts** (*ndarray*) - A series of numpy arrays of type int32, one for each chromosome pair N and M if trans data are included, containing the observed counts for valid fend combinations. The chromosome name order specifies which axis corresponds to which chromosome.
                      * **N_by_M.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each chromosome pair N and M if trans data are included, containing the expected counts for valid fend combinations. The chromosome name order specifies which axis corresponds to which chromosome.
         """
         history = self.history
-        history += "HiC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', chroms=%s, dynamically_binned=%s, minobservations=%i, searchdistance=%i, expansion_binsize=%i, removefailed=%s)" % (filename, binsize, includetrans, datatype, str(chroms), dynamically_binned, minobservations, searchdistance, expansion_binsize, removefailed)
+        history += "HiC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', chroms=%s, dynamically_binned=%s, minobservations=%i, searchdistance=%i, expansion_binsize=%i, removefailed=%s, format='%s')" % (filename, binsize, includetrans, datatype, str(chroms), dynamically_binned, minobservations, searchdistance, expansion_binsize, removefailed, format)
+        if format not in ['hdf5', 'txt', 'npz']:
+            if not self.silent:
+                print >> sys.stderr, ("Unrecognized output format. No data written.\n"),
+            return None
         if (chroms is None or
                 (isinstance(chroms, list) and
                 (len(chroms) == 0 or
@@ -2393,7 +2400,7 @@ class HiC(object):
                                        chroms=chroms, dynamically_binned=dynamically_binned,
                                        minobservations=minobservations, searchdistance=searchdistance,
                                        expansion_binsize=expansion_binsize, removefailed=removefailed,
-                                       silent=self.silent, history=history)
+                                       silent=self.silent, history=history, format=format)
         return None
 
     def write_multiresolution_heatmap(self, filename, datatype='fend', maxbinsize=1280000, minbinsize=5000,

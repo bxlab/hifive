@@ -1405,13 +1405,13 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
 
 def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enrichment', chroms=[], 
                        dynamically_binned=False, minobservations=0, searchdistance=0, expansion_binsize=0,
-                       removefailed=False, includediagonal=False, **kwargs):
+                       removefailed=False, includediagonal=False, format='hdf5', **kwargs):
     """
-    Create an h5dict file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
+    Create a file containing binned interaction arrays, bin positions, and an index of included chromosomes. This function is MPI compatible.
 
     :param hic: A :class:`HiC <hifive.hic.HiC>` class object containing fend and count data.
     :type hic: :class:`HiC <hifive.hic.HiC>`
-    :param filename: Location to write h5dict object to.
+    :param filename: Location to write heatmap object to. If format is 'txt', this should be a filename prefix.
     :type filename: str.
     :param binsize: Size of bins for interaction arrays.
     :type binsize: int.
@@ -1431,6 +1431,8 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
     :type expansion_binsize: int.
     :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
     :type removefailed: bool.
+    :param format: A string indicating whether to save heatmaps as text matrices ('txt'), an HDF5 file of numpy arrays ('hdf5'), or a numpy npz file ('npz').
+    :type format: str.
     :returns: None
     """
     # check if MPI is available
@@ -1446,6 +1448,10 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
         silent = True
     else:
         silent = False
+    if format not in ['hdf5', 'txt', 'npz']:
+        if not silent:
+            print >> sys.stderr, ("Unrecognized output format. No data written.\n"),
+        return None
     if hic.binned is not None:
         includediagonal=True
     # Check if trans mean is needed and calculate if not already done
@@ -1459,8 +1465,6 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
             subprocess.call('rm %s' % filename, shell=True)
         if not silent:
             print >> sys.stderr, ("Creating binned heatmap...\n"),
-        output = h5py.File(filename, 'w')
-        output.attrs['resolution'] = binsize
         # If chromosomes not specified, fill list
         if len(chroms) == 0:
             chroms = list(hic.fends['chromosomes'][...])
@@ -1543,26 +1547,112 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
                     temp = comm.recv(source=i, tag=11)
                     heatmaps.update(temp)
             del temp
+    else:
+        if len(heatmaps) > 0:
+            comm.send(heatmaps, dest=0, tag=11)
+        return None
+    if format == 'hdf5':
+        output = h5py.File(filename, 'w')
+        output.attrs['resolution'] = binsize
         for chrom in heatmaps.keys():
             if len(chrom) == 1:
-                output.create_dataset('%s.counts' % chrom[0], data=heatmaps[chrom][0][:, 0])
+                output.create_dataset('%s.counts' % chrom[0], data=heatmaps[chrom][0][:, 0].astype(numpy.int32))
                 output.create_dataset('%s.expected' % chrom[0], data=heatmaps[chrom][0][:, 1])
+                enrichment = numpy.copy(heatmaps[chrom][0][:, 0])
+                where = numpy.where(heatmaps[chrom][0][:, 1] > 0)[0]
+                enrichment[where] /= heatmaps[chrom][0][where, 1]
+                output.create_dataset('%s.enrichment' % chrom[0], data=enrichment)
                 output.create_dataset('%s.positions' % chrom[0], data=heatmaps[chrom][1][:, :2])
             else:
-                output.create_dataset('%s_by_%s.counts' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 0])
+                output.create_dataset('%s_by_%s.counts' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 0].astype(numpy.int32))
                 output.create_dataset('%s_by_%s.expected' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 1])
+                enrichment = numpy.copy(heatmaps[chrom][:, :, 0])
+                where = numpy.where(heatmaps[chrom][:, :, 1] > 0)[0]
+                enrichment[where[0], where[1]] /= heatmaps[chrom][where[0], where[1], 1]
+                output.create_dataset('%s_by_%s.enrichment' % (chrom[0], chrom[1]), data=enrichment)
         output.create_dataset('chromosomes', data=numpy.array(chroms))
         if 'history' in kwargs:
             output.attrs['history'] = kwargs['history']
         output.attrs['filetype'] = 'hic_heatmap'
         output.attrs['diagonal'] = includediagonal
         output.close()
-        if not silent:
-            print >> sys.stderr, ("Creating binned heatmap...Done\n"),
+    elif format == 'npz':
+        output = open(filename, 'w')
+        arrays = {}
+        for chrom in heatmaps.keys():
+            if len(chrom) == 1:
+                arrays['%s.counts' % chrom[0]] = heatmaps[chrom][0][:, 0].astype(numpy.int32)
+                arrays['%s.expected' % chrom[0]] = heatmaps[chrom][0][:, 1]
+                enrichment = numpy.copy(heatmaps[chrom][0][:, 0])
+                where = numpy.where(heatmaps[chrom][0][:, 1] > 0)[0]
+                enrichment[where] /= heatmaps[chrom][0][where, 1]
+                arrays['%s.enrichment' % chrom[0]] = enrichment
+                arrays['%s.positions' % chrom[0]] = heatmaps[chrom][1][:, :2]
+            else:
+                arrays['%s_by_%s.counts' % (chrom[0], chrom[1])] = heatmaps[chrom][:, :, 0].astype(numpy.int32)
+                arrays['%s_by_%s.expected' % (chrom[0], chrom[1])] = heatmaps[chrom][:, :, 1]
+                enrichment = numpy.copy(heatmaps[chrom][:, :, 0])
+                where = numpy.where(heatmaps[chrom][:, :, 1] > 0)[0]
+                enrichment[where[0], where[1]] /= heatmaps[chrom][where[0], where[1], 1]
+                arrays['%s_by_%s.enrichment' % (chrom[0], chrom[1])] = enrichment
+        arrays['chromosomes'] = numpy.array(chroms)
+        numpy.savez(output, **arrays)
+        output.close()
     else:
-        if len(heatmaps) > 0:
-            comm.send(heatmaps, dest=0, tag=11)
-        del heatmaps
+        labels = {}
+        for chrom in heatmaps.keys():
+            if len(chrom) == 1:
+                labels[chrom[0]] = []
+                for i in range(heatmaps[chrom][1].shape[0]):
+                    labels[chrom[0]].append("%s:%i-%i" % (chrom[0], heatmaps[chrom][1][i, 0],
+                                                          heatmaps[chrom][1][i, 1]))
+        for chrom in heatmaps.keys():
+            for datatype in ['observed', 'expected', 'enrichment']:
+                chr1 = chrom[0]
+                if len(chrom) == 1:
+                    chr2 = chrom[0]
+                    fname = '%s.%s.%s' % (filename, chr1, datatype)
+                else:
+                    chr2 = chrom[1]
+                    fname = '%s.%s_by_%s.%s' % (filename, chr1, chr2, datatype)
+                if datatype == 'observed':
+                    if chr1 == chr2:
+                        data = heatmaps[chrom][0][:, 0].astype(numpy.int32)
+                    else:
+                        data = heatmaps[chrom][:, :, 0].astype(numpy.int32)
+                else:
+                    if datatype == 'expected':
+                        if chr1 == chr2:
+                            data = heatmaps[chrom][0][:, 1]
+                        else:
+                            data = heatmaps[chrom][:, :, 1]
+                    else:
+                        if chr1 == chr2:
+                            data = numpy.zeros(heatmaps[chrom][0].shape[0], dtype=numpy.float32)
+                            where = numpy.where(heatmaps[chrom][0][:, 1] > 0)[0]
+                            data[where] = heatmaps[chrom][0][where, 0] / heatmaps[chrom][0][where, 1]
+                        else:
+                            data = numpy.zeros((heatmaps[chrom].shape[0], heatmaps[chrom].shape[1]),
+                                               dtype=numpy.float32)
+                            where = numpy.where(heatmaps[chrom][:, :, 1] > 0)
+                            data[where[0], where[1]] = (heatmaps[chrom][where[0], where[1], 0] /
+                                    heatmaps[chrom][where[0], where[1], 1])
+                if chr1 == chr2:
+                    temp = numpy.zeros((heatmaps[chrom][1].shape[0], heatmaps[chrom][1].shape[0]), dtype=data.dtype)
+                    indices = numpy.triu_indices(temp.shape[0], 1 - int(includediagonal))
+                    temp[indices[0], indices[1]] = data
+                    temp[indices[1], indices[0]] = data
+                    data = temp
+                output = open(fname, 'w')
+                print >> output, "\t%s" % '\t'.join(labels[chrom[0]])
+                for i in range(data.shape[0]):
+                    line = [labels[chrom[0]][i]]
+                    for j in range(data.shape[1]):
+                        line.append(str(data[i, j]))
+                    print >> output, '\t'.join(line)
+                output.close()
+    if not silent:
+        print >> sys.stderr, ("Creating binned heatmap...Done\n"),
     return None
 
 

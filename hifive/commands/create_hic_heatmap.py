@@ -40,10 +40,14 @@ def run(args):
     hic.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans,
                       datatype=args.datatype, chroms=chroms, dynamically_binned=args.dynamic,
                       expansion_binsize=args.expbinsize, minobservations=args.minobs,
-                      searchdistance=args.search, removefailed=args.remove)
+                      searchdistance=args.search, removefailed=args.remove, format=args.format)
     if rank > 0:
         sys.exit(0)
     if not args.image is None:
+        if args.format == 'txt':
+            if rank == 0:
+                print >> sys.stderr, ("Plotting is only available for non-txt formats.\n"),
+            return None
         kwargs = {}
         for arg in args.keywords:
             temp = arg.split("=")
@@ -75,7 +79,8 @@ def run(args):
                 kwargs['symmetricscaling'] = True
             else:
                 kwargs['symmetricscaling'] = False
-        img, minscore, maxscore = plot_hic_heatmap(args.output, returnscale=True, silent=args.silent, **kwargs)
+        img, minscore, maxscore = plot_hic_heatmap(args.output, returnscale=True, silent=args.silent,
+                                                   format=args.format, **kwargs)
         if not args.pdf:
             img_format = args.image.split('.')[-1].upper()
             if img_format not in ['PNG', 'TIF', 'JPG', 'JPEG']:
