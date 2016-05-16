@@ -287,7 +287,7 @@ class HiC(object):
         self.history += "Success\n"
         return None
 
-    def filter_fends(self, mininteractions=10, mindistance=0, maxdistance=0):
+    def filter_fends(self, mininteractions=10, mindistance=0, maxdistance=0, usereads='cis'):
         """
         Iterate over the dataset and remove fends that do not have 'minobservations' within 'maxdistance' of themselves using only unfiltered fends.
 
@@ -299,9 +299,17 @@ class HiC(object):
         :type mindistance: int.
         :param maxdistance: The maximum inter-fend distance used to count fend interactions. A value of 0 indicates no maximum should be used.
         :type maxdistance: int.
+        :param usereads: Specifies which set of interactions to use, 'cis', 'trans', or 'all'.
+        :type usereads: str.
         :returns: None
         """
-        self.history += "HiC.filter_fends(mininteractions=%i, mindistance=%s, maxdistance=%s) - " % (mininteractions, str(mindistance), str(maxdistance))
+        self.history += "HiC.filter_fends(mininteractions=%i, mindistance=%s, maxdistance=%s, usereads='%s') - " % (mininteractions, str(mindistance), str(maxdistance), usereads)
+        # make sure usereads has a valid value
+        if usereads not in ['cis', 'trans', 'all']:
+            if not self.silent:
+                print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
+            self.history += "Error: '%s' not a valid value for 'usereads'\n" % usereads
+            return None
         if not self.silent:
             print >> sys.stderr, ("Filtering fends..."),
         self.mininteractions = mininteractions
@@ -314,46 +322,56 @@ class HiC(object):
         current_valid = original_count
         coverage = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
         # determine maximum ranges of valid interactions for each fend
-        max_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
-        min_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
-        if self.binned is None:
-            _interactions.find_max_fend(max_fend,
-                                        self.fends['fends']['mid'][...],
-                                        self.fends['fends']['chr'][...],
-                                        self.fends['chr_indices'][...],
-                                        0,
-                                        maxdistance)
-            _interactions.find_min_fend(min_fend,
-                                        self.fends['fends']['mid'][...],
-                                        self.fends['fends']['chr'][...],
-                                        self.fends['chr_indices'][...],
-                                        mindistance)
-        else:
-            _interactions.find_max_fend(max_fend,
-                                        self.fends['bins']['mid'][...],
-                                        self.fends['bins']['chr'][...],
-                                        self.fends['bin_indices'][...],
-                                        0,
-                                        maxdistance)
-            _interactions.find_min_fend(min_fend,
-                                        self.fends['bins']['mid'][...],
-                                        self.fends['bins']['chr'][...],
-                                        self.fends['bin_indices'][...],
-                                        mindistance)
+        if usereads != 'trans':
+            max_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
+            min_fend = numpy.zeros(self.filter.shape[0], dtype=numpy.int32)
+            if self.binned is None:
+                _interactions.find_max_fend(max_fend,
+                                            self.fends['fends']['mid'][...],
+                                            self.fends['fends']['chr'][...],
+                                            self.fends['chr_indices'][...],
+                                            0,
+                                            maxdistance)
+                _interactions.find_min_fend(min_fend,
+                                            self.fends['fends']['mid'][...],
+                                            self.fends['fends']['chr'][...],
+                                            self.fends['chr_indices'][...],
+                                            mindistance)
+            else:
+                _interactions.find_max_fend(max_fend,
+                                            self.fends['bins']['mid'][...],
+                                            self.fends['bins']['chr'][...],
+                                            self.fends['bin_indices'][...],
+                                            0,
+                                            maxdistance)
+                _interactions.find_min_fend(min_fend,
+                                            self.fends['bins']['mid'][...],
+                                            self.fends['bins']['chr'][...],
+                                            self.fends['bin_indices'][...],
+                                            mindistance)
          # copy needed arrays
-        data = self.data['cis_data'][...]
-        indices = self.data['cis_indices'][...]
+        if usereads != 'trans':
+            data = self.data['cis_data'][...]
+            indices = self.data['cis_indices'][...]
+        if usereads != 'cis':
+            transdata = self.data['trans_data'][...][:, :2]
         # repeat until all remaining fends have mininteraction valid interactions
         while current_valid < previous_valid:
             previous_valid = current_valid
             coverage.fill(0)
-            _interactions.find_fend_coverage(data,
-                                             indices,
-                                             self.filter,
-                                             min_fend,
-                                             max_fend,
-                                             coverage,
-                                             mininteractions)
+            if usereads != 'trans':
+                _interactions.find_fend_coverage(data,
+                                                 indices,
+                                                 self.filter,
+                                                 min_fend,
+                                                 max_fend,
+                                                 coverage,
+                                                 mininteractions)
+            if usereads != 'cis':
+                coverage += numpy.bincount(transdata.ravel(), minlength=coverage.shape[0])
+            self.filter[:] = coverage >= mininteractions
+            if usereads != 'cis':
+                transdata = transdata[numpy.where(self.filter[transdata[:, 0]] * self.filter[transdata[:, 1]])[0], :]
             current_valid = numpy.sum(self.filter)
         if not self.silent:
             if self.binned is None:

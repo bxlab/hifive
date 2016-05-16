@@ -404,6 +404,8 @@ class Compartment( object ):
             needed = []
             if chroms == "" or (isinstance(chroms, list) and len(chroms) == 0):
                 chroms = hic.fends['chromosomes'][...]
+            elif isinstance(chroms, str):
+                chroms = [chroms]
             self.chroms = chroms
             for chrom in chroms:
                 if storage is None or ("%s.correlations" % chrom not in storage and
@@ -422,7 +424,10 @@ class Compartment( object ):
             node_needed = self.comm.recv(source=0, tag=11)
         data = {}
         self.positions = {}
-        chr_indices = hic.fends['chr_indices'][...]
+        if hic.binned is None:
+            chr_indices = hic.fends['chr_indices'][...]
+        else:
+            chr_indices = hic.fends['bin_indices'][...]
         for chrom in node_needed:
             if self.rank == 0 and not self.silent:
                 print >> sys.stderr, ("\r%s\rHeatmapping %s") % (' '*80, chrom),
@@ -430,32 +435,43 @@ class Compartment( object ):
             startfend = chr_indices[chrint]
             while hic.filter[startfend] == 0:
                 startfend += 1
-            start = (hic.fends['fends']['mid'][startfend] / binsize) * binsize
+            if hic.binned is None:
+                start = (hic.fends['fends']['mid'][startfend] / binsize) * binsize
+            else:
+                start = (hic.fends['bins']['mid'][startfend] / binsize) * binsize
             stopfend = chr_indices[chrint + 1]
             while hic.filter[stopfend - 1] == 0:
                 stopfend -= 1
-            stop = ((hic.fends['fends']['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
+            if hic.binned is None:
+                stop = ((hic.fends['fends']['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
+            else:
+                stop = ((hic.fends['bins']['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
             temp = hic.cis_heatmap(chrom, binsize=binsize / 2, start=start, stop=stop, datatype='enrichment',
                                    arraytype='upper', returnmapping=True, silent=True)
             temp1 = hic_binning.bin_cis_array(temp[0], temp[1], binsize, arraytype='upper', returnmapping=True,
-                                              silent=True)
-            hic_binning.dynamically_bin_cis_array(temp[0], temp[1], temp1[0], temp1[1], minobservation=5, silent=True)
-            indices = numpy.triu_indices(temp1[1].shape[0], 1)
+                                              silent=True, diagonal_included=(hic.binned is not None))
+            hic_binning.dynamically_bin_cis_array(temp[0], temp[1], temp1[0], temp1[1], minobservation=5, silent=True,
+                                                  diagonal_included=(hic.binned is not None))
+            indices = numpy.triu_indices(temp1[1].shape[0], int(hic.binned is None))
             hm = numpy.zeros((temp1[1].shape[0], temp1[1].shape[0], 2), dtype=numpy.float32)
             hm[indices[0], indices[1], :] = temp1[0]
             hm[indices[1], indices[0], :] = temp1[0]
             valid = numpy.where(numpy.sum(hm[:, :, 1], axis=0) > 0)[0]
             hm = hm[valid, :, :][:, valid, :]
-            where = numpy.where(hm[:, :, 1] > 0)
-            hm[where[0], where[1], 0] = numpy.log(hm[where[0], where[1], 0] / hm[where[0], where[1], 1])
             self.positions[chrom] = temp1[1][valid, :]
-            data[chrom] = hm[:, :, 0]
+            data[chrom] = hm
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 data.update(self.comm.recv(source=i, tag=11))
                 self.positions.update(self.comm.recv(source=i, tag=11))
             if storage is not None:
                 for chrom in data:
+                    storage.create_dataset(name="%s.counts" % chrom, data=data[chrom][:, :, 0])
+                    storage.create_dataset(name="%s.expected" % chrom, data=data[chrom][:, :, 1])
+                    where = numpy.where(data[chrom][:, :, 1] > 0)
+                    data[chrom][where[0], where[1], 0] = numpy.log(data[chrom][where[0], where[1], 0] /
+                                                                   data[chrom][where[0], where[1], 1])
+                    data[chrom] = data[chrom][:, :, 0]
                     storage.create_dataset(name="%s.enrichments" % chrom, data=data[chrom])
                     storage.create_dataset(name="%s.positions" % chrom, data=self.positions[chrom])
         else:
@@ -495,6 +511,8 @@ class Compartment( object ):
                 if chrom not in correlations:
                     correlations[chrom] = storage["%s.correlations" % chrom][...]
                 self.eigenv[chrom] = scipy.sparse.linalg.eigs(correlations[chrom], k=1)[1][:, 0]
+                storage.create_dataset(name="%s.eigenv", data=self.eigenv[chrom])
+            storage.close()
             self.find_clusters()
             if not self.silent:
                 print >> sys.stderr, ("\r%s\r") % (' '*80),

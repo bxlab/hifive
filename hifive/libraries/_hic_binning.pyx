@@ -752,22 +752,23 @@ def find_cis_subregion_expected(
 def bin_compact_to_compact(
         np.ndarray[DTYPE_t, ndim=3] binned,
         np.ndarray[DTYPE_t, ndim=3] unbinned,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping):
+        np.ndarray[DTYPE_int_t, ndim=1] mapping,
+        int diag):
     cdef long long int i, j, fend2
     cdef long long int num_bins = binned.shape[0]
     cdef long long int num_fends = mapping.shape[0]
     cdef long long int max_fend = unbinned.shape[1]
     with nogil:
-        for i in range(num_fends - 1):
+        for i in range(num_fends - 1 + diag):
             if mapping[i] == -1:
                 continue
-            for j in range(min(num_fends - i - 1, max_fend)):
-                fend2 = j + i + 1
+            for j in range(min(num_fends - i - 1 + diag, max_fend)):
+                fend2 = j + i + 1 - diag
                 if mapping[fend2] == -1 or mapping[fend2] == mapping[i]:
                     continue
                 else:
-                    binned[mapping[i], mapping[fend2] - mapping[i] - 1, 0] += unbinned[i, j, 0]
-                    binned[mapping[i], mapping[fend2] - mapping[i] - 1, 1] += unbinned[i, j, 1]
+                    binned[mapping[i], mapping[fend2] - mapping[i] - 1 + diag, 0] += unbinned[i, j, 0]
+                    binned[mapping[i], mapping[fend2] - mapping[i] - 1 + diag, 1] += unbinned[i, j, 1]
     return None
 
 
@@ -778,21 +779,23 @@ def bin_compact_to_upper(
         np.ndarray[DTYPE_t, ndim=2] binned,
         np.ndarray[DTYPE_t, ndim=3] unbinned,
         np.ndarray[DTYPE_int_t, ndim=1] mapping,
-        int num_bins):
+        int num_bins,
+        int diag):
     cdef long long int i, j, index
+    cdef long long int diag2 = diag * 2
     cdef long long int num_fends = mapping.shape[0]
     cdef long long int max_fend = unbinned.shape[1]
     with nogil:
-        for i in range(num_fends - 1):
+        for i in range(num_fends - 1 + diag):
             if mapping[i] == -1:
                 continue
-            index = mapping[i] * num_bins - mapping[i] * (mapping[i] + 1) / 2 - mapping[i] - 1
-            for j in range(i + 1, num_fends):
+            index = mapping[i] * (num_bins - 1) - mapping[i] * (mapping[i] + 1 - diag2) / 2 - 1 + diag
+            for j in range(i + 1 - diag, num_fends):
                 if mapping[j] == -1 or mapping[j] == mapping[i]:
                     continue
                 else:
-                    binned[index + mapping[j], 0] += unbinned[i, j - i - 1, 0]
-                    binned[index + mapping[j], 1] += unbinned[i, j - i - 1, 1]
+                    binned[index + mapping[j], 0] += unbinned[i, j - i - 1 + diag, 0]
+                    binned[index + mapping[j], 1] += unbinned[i, j - i - 1 + diag, 1]
     return None
 
 
@@ -802,20 +805,22 @@ def bin_compact_to_upper(
 def bin_upper_to_compact(
         np.ndarray[DTYPE_t, ndim=3] binned,
         np.ndarray[DTYPE_t, ndim=2] unbinned,
-        np.ndarray[DTYPE_int_t, ndim=1] mapping):
+        np.ndarray[DTYPE_int_t, ndim=1] mapping,
+        int diag):
     cdef long long int i, j, index
+    cdef long long int diag2 = diag * 2
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
-        for i in range(num_fends - 1):
+        for i in range(num_fends - 1 + diag):
             if mapping[i] == -1:
                 continue
-            index = i * num_fends - i * (i + 1) / 2 - i - 1
-            for j in range(i + 1, num_fends):
+            index = i * (num_fends - 1) - i * (i + 1 - diag2) / 2 - 1 + diag
+            for j in range(i + 1 - diag, num_fends):
                 if mapping[j] == -1 or mapping[j] == mapping[i]:
                     continue
                 else:
-                    binned[mapping[i], mapping[j] - mapping[i] - 1, 0] += unbinned[index + j, 0]
-                    binned[mapping[i], mapping[j] - mapping[i] - 1, 1] += unbinned[index + j, 1]
+                    binned[mapping[i], mapping[j] - mapping[i] - 1 + diag, 0] += unbinned[index + j, 0]
+                    binned[mapping[i], mapping[j] - mapping[i] - 1 + diag, 1] += unbinned[index + j, 1]
     return None
 
 
@@ -826,16 +831,18 @@ def bin_upper_to_upper(
         np.ndarray[DTYPE_t, ndim=2] binned,
         np.ndarray[DTYPE_t, ndim=2] unbinned,
         np.ndarray[DTYPE_int_t, ndim=1] mapping,
-        int num_bins):
+        int num_bins,
+        int diag):
     cdef long long int i, j, index, index2
+    cdef long long int diag2 = diag * 2
     cdef long long int num_fends = mapping.shape[0]
     with nogil:
-        for i in range(num_fends - 1):
+        for i in range(num_fends - 1 + diag):
             if mapping[i] == -1:
                 continue
-            index = i * num_fends - i * (i + 1) / 2 - i - 1
-            index2 = mapping[i] * num_bins - mapping[i] * (mapping[i] + 1) / 2 - mapping[i] - 1
-            for j in range(i + 1, num_fends):
+            index = i * (num_fends - 1) - i * (i + 1 - diag2) / 2 - 1 + diag
+            index2 = mapping[i] * (num_bins - 1) - mapping[i] * (mapping[i] + 1 - diag2) / 2 - 1 + diag
+            for j in range(i + 1 - diag, num_fends):
                 if mapping[j] == -1 or mapping[j] == mapping[i]:
                     continue
                 else:

@@ -123,12 +123,7 @@ def find_fend_coverage(
                     coverage[fend1] += 1
                     coverage[data[i, 1]] += 1
                 i += 1
-        for i in range(num_fends):
-            if coverage[i] < mincoverage:
-                filter[i] = 0
-            else:
-                valid += 1
-    return valid
+    return None
 
 
 @cython.boundscheck(False)

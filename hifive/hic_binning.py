@@ -25,7 +25,6 @@ try:
 except:
     pass
 
-from libraries._hic_interactions import find_max_fend
 import libraries._hic_binning as _hic_binning
 import libraries._hic_interactions as _hic_interactions
 
@@ -395,7 +394,7 @@ def _find_fend_from_coord(hic, chrint, coord):
         return numpy.searchsorted(hic.fends['fends']['mid'][first_fend:last_fend], coord) + first_fend
 
 def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start=None, stop=None, arraytype='full',
-                  returnmapping=False, **kwargs):
+                  returnmapping=False, diagonal_included=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill 'binsize' bins or bins defined by 'binbounds' with data provided in the array passed by 'data_array'.
 
@@ -415,6 +414,8 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
     :type arraytype: str.
     :param returnmapping: If 'True', a list containing the data array and a 2d array containing first coordinate included and excluded from each bin, and the first fend included and excluded from each bin is returned. Otherwise only the data array is returned.
     :type returnmapping: bool.
+    :param diagonal_included: If true, adjust expected input shapes as necessary.
+    :type diagonal_included: bool.
     :returns: Array in format requested with 'arraytype' containing binned data requested with 'datatype' pulled from 'data_array' or list of binned data array and mapping array.
     """
     if 'silent' in kwargs and kwargs['silent']:
@@ -426,8 +427,10 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
         if not silent:
             print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
+    diag = int(diagonal_included)
     # Determine input array type
-    if len(data_array.shape) == 2 and data_mapping.shape[0] * (data_mapping.shape[0] - 1) / 2 == data_array.shape[0]:
+    if (len(data_array.shape) == 2 and
+        data_mapping.shape[0] * (data_mapping.shape[0] - 1 + 2 * diag) / 2 == data_array.shape[0]):
         input_type = 'upper'
     elif len(data_array.shape) == 3 and data_array.shape[0] == data_mapping.shape[0]:
         input_type = 'compact'
@@ -465,27 +468,27 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
         fend_ranges[i, 1] = data_mapping[lastbin - 1, 3]
     # Create requested array
     if arraytype == 'compact':
-        max_bin = (stop - start) / binsize + 1
+        max_bin = (stop - start) / binsize + 1 + diag
         binned_array = numpy.zeros((num_bins, max_bin, 2), dtype=numpy.float32)
     else:
-        binned_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
+        binned_array = numpy.zeros((num_bins * (num_bins - 1 + 2 * diag) / 2, 2), dtype=numpy.float32)
     # Fill in binned data values
     if arraytype == 'compact':
         if input_type == 'compact':
-            _hic_binning.bin_compact_to_compact(binned_array, data_array, mapping)
+            _hic_binning.bin_compact_to_compact(binned_array, data_array, mapping, diag)
         else:
-            _hic_binning.bin_upper_to_compact(binned_array, data_array, mapping)
+            _hic_binning.bin_upper_to_compact(binned_array, data_array, mapping, diag)
         # Trim unused bins
         valid = numpy.where(numpy.sum(binned_array[:, :, 1] > 0, axis=0) > 0)[0][-1]
         binned_array = binned_array[:, :(valid + 1), :]
     else:
         if input_type == 'compact':
-            _hic_binning.bin_compact_to_upper(binned_array, data_array, mapping, num_bins)
+            _hic_binning.bin_compact_to_upper(binned_array, data_array, mapping, num_bins, diag)
         else:
-            _hic_binning.bin_upper_to_upper(binned_array, data_array, mapping, num_bins)
+            _hic_binning.bin_upper_to_upper(binned_array, data_array, mapping, num_bins, diag)
     # If requesting 'full' array, convert 'upper' array type to 'full'
     if arraytype == 'full':
-        indices = numpy.triu_indices(num_bins, 1)
+        indices = numpy.triu_indices(num_bins, 1 - diag)
         full_binned_array = numpy.zeros((num_bins, num_bins, 2), dtype=numpy.float32)
         full_binned_array[indices[1], indices[0], :] = binned_array
         full_binned_array[indices[0], indices[1], :] = binned_array
