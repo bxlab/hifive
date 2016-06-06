@@ -3005,7 +3005,7 @@ class HiC(object):
         This function uses a weighted spatial consistency approach to calculate the consistency between HiC data replicates. Briefly, when two regions in the genome occur near each other, the distances from these regions to all other chromosome regions should be similar to each other. Conversely, regions that are spatially far apart should be either have uncorrelated or inversely correlated sets of distances with each other. To assess the inter-dataset consistency, HiC read matrices are into P-values under a negative binomial distribution. For each pairwise combination of bins (intra-chromosomal only), the correlation between the matrix columns corresponding to the bin pair is calculated. The chromosome quality score is the sum of the correlations in the first HiC dataset weighted by the corresponding interactions from the second HiC dataset and the converse weighted correlations minus the sum of the unweighted means of correlations. The overall quality is the euclidean mean of the chromosome quality scores.
 
         :param hic2: The :class:`HiC <hifive.hic.HiC>` file to compare interactions with.
-        :type chrom: :class:`HiC <hifive.hic.HiC>`.
+        :type hic2: :class:`HiC <hifive.hic.HiC>`.
         :param filename: The name of the file to write the results to.
         :type filename: str.
         :param resolution: The size of bins to partition the genome into prior to calculating the quality values.
