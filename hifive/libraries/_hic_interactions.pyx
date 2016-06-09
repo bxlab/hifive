@@ -71,7 +71,6 @@ def find_max_fend(
                 max_fend[i] = j
     return None
 
-
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
@@ -80,22 +79,28 @@ def find_min_fend(
         np.ndarray[DTYPE_int_t, ndim=1] mids not None,
         np.ndarray[DTYPE_int_t, ndim=1] chromosomes not None,
         np.ndarray[DTYPE_int_t, ndim=1] chr_indices not None,
-        int mindistance):
+        int mindistance,
+        int binned):
     cdef long long int h, i, j, chr_max
     cdef long long int num_fends = min_fend.shape[0]
     cdef long long int max_num_fends = mids.shape[0]
     with nogil:
-        j = 2
+        if binned == 1:
+            j = 0
+        else:
+            j = 2
         for i in range(num_fends):
             chr_max = min(max_num_fends, chr_indices[chromosomes[i] + 1])
             if mindistance == 0:
-                min_fend[i] = min(i + 2, chr_max)
+                if binned == 1:
+                    min_fend[i] = min(i, chr_max)
+                else:
+                    min_fend[i] = min(i + 2, chr_max)
             else:
                 while j < chr_max and mids[j] - mids[i] < mindistance:
                     j += 1
                 min_fend[i] = j
     return None
-
 
 @cython.boundscheck(False)
 @cython.wraparound(False)

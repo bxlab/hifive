@@ -337,7 +337,8 @@ class HiC(object):
                                             self.fends['fends']['mid'][...],
                                             self.fends['fends']['chr'][...],
                                             self.fends['chr_indices'][...],
-                                            mindistance)
+                                            mindistance,
+                                            0)
             else:
                 _interactions.find_max_fend(max_fend,
                                             self.fends['bins']['mid'][...],
@@ -349,7 +350,8 @@ class HiC(object):
                                             self.fends['bins']['mid'][...],
                                             self.fends['bins']['chr'][...],
                                             self.fends['bin_indices'][...],
-                                            mindistance)
+                                            mindistance,
+                                            1)
          # copy needed arrays
         if usereads != 'trans':
             data = self.data['cis_data'][...]
