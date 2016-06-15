@@ -126,7 +126,8 @@ def find_fend_coverage(
             while i < data_indices[fend1 + 1] and data[i, 1] < max_fend[fend1]:
                 if filter[data[i, 1]] == 1:
                     coverage[fend1] += 1
-                    coverage[data[i, 1]] += 1
+                    if fend1 != data[i, 1]:
+                        coverage[data[i, 1]] += 1
                 i += 1
     return None
 

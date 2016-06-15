@@ -474,28 +474,29 @@ class HiC(object):
             mapping = numpy.zeros(stop_fend - start_fend, dtype=numpy.int32) - 1
             mapping[rev_mapping] = numpy.arange(num_valid, dtype=numpy.int32)
             # pull relevant data
-            start_index = self.data['cis_indices'][rev_mapping[node_start] + start_fend]
-            stop_index = self.data['cis_indices'][max(rev_mapping[node_stop - 1] + 1,
-                                                      rev_mapping[node_start]) + start_fend]
-            indices = self.data['cis_data'][start_index:stop_index, :]
-            counts = indices[:, 2].astype(numpy.float64)
-            if corrected:
-                counts /= (self.corrections[indices[:, 0]] * self.corrections[indices[:, 1]])
-            indices = indices[:, :2]
-            indices -= start_fend
-            # find bin sums
-            _distance.find_distance_bin_sums(mapping,
-                                             rev_mapping,
-                                             cutoffs,
-                                             mids,
-                                             counts,
-                                             indices,
-                                             bin_size,
-                                             count_sum,
-                                             logdistance_sum,
-                                             node_start,
-                                             node_stop,
-                                             int(self.binned is not None))
+            if node_start < node_stop:
+                start_index = self.data['cis_indices'][rev_mapping[node_start] + start_fend]
+                stop_index = self.data['cis_indices'][max(rev_mapping[node_stop - 1] + 1,
+                                                          rev_mapping[node_start]) + start_fend]
+                indices = self.data['cis_data'][start_index:stop_index, :]
+                counts = indices[:, 2].astype(numpy.float64)
+                if corrected:
+                    counts /= (self.corrections[indices[:, 0]] * self.corrections[indices[:, 1]])
+                indices = indices[:, :2]
+                indices -= start_fend
+                # find bin sums
+                _distance.find_distance_bin_sums(mapping,
+                                                 rev_mapping,
+                                                 cutoffs,
+                                                 mids,
+                                                 counts,
+                                                 indices,
+                                                 bin_size,
+                                                 count_sum,
+                                                 logdistance_sum,
+                                                 node_start,
+                                                 node_stop,
+                                                 int(self.binned is not None))
         if self.rank == 0:
             # exchange arrays
             if not self.silent:
@@ -2783,6 +2784,7 @@ class HiC(object):
                     temp1 = numpy.arange(N - i)
                     temp2 = numpy.arange(i, N)
                     bg[i] = numpy.sum(data[temp1, temp2, 0]) / max(1, numpy.sum(data[temp1, temp2, 1]))
+                """
                 distances = numpy.log(numpy.arange(1, N + 1))
                 smoothed = numpy.zeros(N, dtype=numpy.float64)
                 for i in range(bg.shape[0]):
@@ -2791,6 +2793,7 @@ class HiC(object):
                     weights = 1.0 / (spacing[where] * 45.0 + 1.0)
                     smoothed[i] = numpy.sum(bg[where] * weights) / numpy.sum(weights)
                 bg = smoothed
+                """
                 for i in range(N):
                     data[numpy.arange(N - i), numpy.arange(i, N), 0] -= bg[i]
                 indices = numpy.triu_indices(N, 1)
@@ -2892,6 +2895,7 @@ class HiC(object):
                 temp1 = numpy.arange(N - i)
                 temp2 = numpy.arange(i, N)
                 bg[i] = numpy.sum(data[temp1, temp2]) / max(1, numpy.sum(valid[temp1, temp2]))
+            """
             smoothed = numpy.zeros(N, dtype=numpy.float32)
             distances = numpy.log(numpy.arange(1, N + 1))
             for i in range(bg.shape[0]):
@@ -2900,6 +2904,7 @@ class HiC(object):
                 weights = 1.0 / (spacing[where] * 45.0 + 1.0)
                 smoothed[i] = numpy.sum(bg[where] * weights) / numpy.sum(weights)
             bg = smoothed
+            """
             for i in range(bg.shape[0]):
                 temp1 = numpy.arange(N - i)
                 temp2 = numpy.arange(i, N)
@@ -2968,7 +2973,7 @@ class HiC(object):
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 results += self.comm.recv(source=i, tag=11)
-            mean_results = numpy.maximum(0.0001, numpy.sum(numpy.maximum(0.0, results) ** 2.0, axis=0) ** 0.5)
+            mean_results = numpy.mean(results, axis=0)
             X = numpy.zeros(mean_results.shape, dtype=numpy.float64)
             for i in range(len(coverage)):
                 X[i, :] = 1.0 - numpy.array(noise)
@@ -3060,6 +3065,7 @@ class HiC(object):
                 temp1 = numpy.arange(N - i)
                 temp2 = numpy.arange(i, N)
                 bg[i] = numpy.sum(data[temp1, temp2]) / max(1, numpy.sum(valid[temp1, temp2]))
+            """
             smoothed = numpy.zeros(N, dtype=numpy.float32)
             distances = numpy.log(numpy.arange(1, N + 1))
             for i in range(bg.shape[0]):
@@ -3068,6 +3074,7 @@ class HiC(object):
                 weights = 1.0 / (spacing[where] * 45.0 + 1.0)
                 smoothed[i] = numpy.sum(bg[where] * weights) / numpy.sum(weights)
             bg = smoothed
+            """
 
             # adjust by bg
             for i in range(bg.shape[0]):
@@ -3164,7 +3171,7 @@ class HiC(object):
             valid = numpy.where(results > -numpy.inf)[0]
             chroms = list(numpy.array(chroms)[valid])
             results = results[valid]
-            QM = numpy.maximum(0.0001, numpy.mean(numpy.maximum(0.0, results) ** 2.0, axis=0) ** 0.5)
+            QM = numpy.mean(results, axis=0)
             output = open(filename, 'w')
             print >> output, "Overall quality: %f" % QM
             print >> output, '\t'.join(chroms)
