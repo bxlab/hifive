@@ -235,6 +235,11 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
                 not proportional):
                 correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid],
                                                  minlength=num_bins).astype(numpy.float32)
+            elif (binned and datatype == 'fend' and
+                hic.normalization in ['express', 'probability'] and
+                not proportional):
+                correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid],
+                                                 minlength=num_bins).astype(numpy.float32)
     # if accounting for distance, get distance parameters
     if datatype in ['distance', 'enrichment', 'expected']:
         distance_parameters = hic.distance_parameters
@@ -1739,7 +1744,12 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
     n = span / midbinsize
     valid = numpy.where(hic.filter[startfend:stopfend])[0].astype(numpy.int32)
     fend_nums = valid + startfend
-    mids = hic.fends['fends']['mid'][fend_nums] - start
+    if hic.binned is not None:
+        fends = hic.fends['bins'][...]
+        mids = fends['mid'][fend_nums] - start
+    else:
+        fends = hic.fends['fends'][...]
+        mids = fends['mid'][fend_nums] - start
     binbounds = numpy.round(numpy.linspace(0, span, n + 1)).astype(numpy.int32)
     bin_mids = (binbounds[:-1] + binbounds[1:]) / 2
     mapping = numpy.empty(stopfend - startfend, dtype=numpy.int32)
@@ -1768,7 +1778,10 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
         m = span2 / midbinsize
         valid2 = numpy.where(hic.filter[startfend2:stopfend2])[0]
         fend_nums2 = valid2 + startfend2
-        mids2 = hic.fends['fends']['mid'][fend_nums2] - start2
+        if hic.binned is not None:
+            mids2 = fends['mid'][fend_nums2] - start2
+        else:
+            mids2 = fends['mid'][fend_nums2] - start2
         binbounds2 = numpy.round(numpy.linspace(0, span2, m + 1)).astype(numpy.int32)
         bin_mids2 = (binbounds2[:-1] + binbounds2[1:]) / 2
         obs_indices2 = numpy.searchsorted(mids2, binbounds2).astype(numpy.int32)

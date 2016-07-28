@@ -80,6 +80,7 @@ class HiCData(object):
         """
         self.history.replace("'None'", "None")
         datafile = h5py.File(self.file, 'w')
+        chroms = self.fends['chromosomes'][...]
         for key in self.__dict__.keys():
             if key in ['file', 'chr2int', 'fends', 'silent', 'cuts']:
                 continue
@@ -93,8 +94,13 @@ class HiCData(object):
                 continue
             elif isinstance(self[key], numpy.ndarray):
                 datafile.create_dataset(key, data=self[key])
+            elif isinstance(self[key], list):
+                if isinstance(self[key][0], numpy.ndarray):
+                    for i in range(len(self[key])):
+                        datafile.create_dataset("%s.%s" % (key, chroms[i]), data=self[key][i])
             elif not isinstance(self[key], dict):
                 datafile.attrs[key] = self[key]
+
         datafile.close()
         return None
 
@@ -1104,10 +1110,26 @@ class HiCData(object):
 
     def _find_fend_pairs(self, data, fend_pairs, skip_duplicate_filtering=False):
         """Return array with lower fend, upper fend, and count for pair."""
+        chroms = self.fends['chromosomes'][...]
         if 'cuts' not in self.__dict__.keys():
             self._find_cut_sites()
-        chroms = self.fends['chromosomes'][...]
+        # for looking at fragment end distribution across genome in fragments with >insert size
+        """
+        if 'invalid_distribution' not in self.__dict__.keys():
+            self.invalid_starts = numpy.zeros(chroms.shape[0], dtype=numpy.int32)
+            self.invalid_distribution = []
+            self.invalid_binsize = 100
+            for i, chrom in enumerate(chroms):
+                start = (self.cuts[i][0] / self.invalid_binsize) * self.invalid_binsize
+                stop = ((self.cuts[i][-1] - 1) / self.invalid_binsize + 1) * self.invalid_binsize
+                self.invalid_starts[i] = start
+                self.invalid_distribution.append(numpy.zeros(((stop - start) / self.invalid_binsize, 2),
+                                                              dtype=numpy.int32))
+        """
         # assign fends on a per-chromosome pair basis
+        if 'non_cis_invalid_insert' not in self.__dict__.keys():
+            self.non_cis_invalid_insert = 0
+            self.different_fragment_invalid_insert = 0
         for i in range(len(data)):
             for j in range(len(data[i])):
                 if data[i][j].shape[0] == 0:
@@ -1120,6 +1142,7 @@ class HiCData(object):
                     print >> sys.stderr, ("\rMapping fends for %s by %s") % (chroms[i].ljust(10), chroms[j].ljust(10)),
                 mapped_fends[:, 0] = numpy.searchsorted(self.cuts[j], data[i][j][:, 0])
                 mapped_fends[:, 1] = numpy.searchsorted(self.cuts[i], data[i][j][:, 1])
+                # make sure coordinates are within first and last cutsites
                 valid = numpy.where((mapped_fends[:, 0] > 0) * (mapped_fends[:, 0] < self.cuts[j].shape[0]) *
                                     (mapped_fends[:, 1] > 0) * (mapped_fends[:, 1] < self.cuts[i].shape[0]))[0]
                 if skip_duplicate_filtering:
@@ -1134,6 +1157,26 @@ class HiCData(object):
                 self.insert_distribution[:, 0] += numpy.bincount(numpy.searchsorted(self.insert_distribution[1:, 1],
                     distances[valid], side='right'), minlength=self.insert_distribution.shape[0])
                 # remove fends with too great an insert distance
+                invalid = valid[numpy.where(distances[valid] > self.maxinsert)[0]]
+                if i != j:
+                    self.non_cis_invalid_insert += invalid.shape[0]
+                # for looking at fragment end distribution across genome in fragments with >insert size
+                """
+                strand = numpy.where(signs[invalid, 1] == 0)[0]
+                self.invalid_distribution[i][:, 0] += numpy.bincount((data[i][j][invalid[strand], 1] -
+                    self.invalid_starts[i]) / self.invalid_binsize, minlength=self.invalid_distribution[i].shape[0])
+                strand = numpy.where(signs[invalid, 0] == 0)[0]
+                self.invalid_distribution[j][:, 0] += numpy.bincount((data[i][j][invalid[strand], 0] -
+                    self.invalid_starts[j]) / self.invalid_binsize, minlength=self.invalid_distribution[j].shape[0])
+                strand = numpy.where(signs[invalid, 1] == -1)[0]
+                self.invalid_distribution[i][:, 1] += numpy.bincount((data[i][j][invalid[strand], 1] -
+                    self.invalid_starts[i]) / self.invalid_binsize, minlength=self.invalid_distribution[i].shape[0])
+                strand = numpy.where(signs[invalid, 0] == -1)[0]
+                self.invalid_distribution[j][:, 1] += numpy.bincount((data[i][j][invalid[strand], 0] -
+                    self.invalid_starts[j]) / self.invalid_binsize, minlength=self.invalid_distribution[j].shape[0])
+                del invalid
+                del strand
+                """
                 valid1 = numpy.where(distances[valid] <= self.maxinsert)[0]
                 if skip_duplicate_filtering:
                     self.stats['insert_size'] += (numpy.sum(data[i][j][valid, 2]) -

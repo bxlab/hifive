@@ -507,9 +507,8 @@ def find_binned_cis_compact_expected(
     cdef long long int fend1, fend2, j, k, map1, map2, num_bins, max_bin
     cdef double distance, value
     cdef long long int num_fends = mapping.shape[0]
-    if not correction_sums is None:
-        num_bins = correction_sums.shape[0]
-        max_bin = signal.shape[1]
+    num_bins = signal.shape[0]
+    max_bin = signal.shape[1]
     with nogil:
         if correction_sums is None:
             for fend1 in range(num_fends):
@@ -517,7 +516,7 @@ def find_binned_cis_compact_expected(
                 if map1 == -1:
                     continue
                 k = 0
-                for fend2 in range(fend1, min(num_fends, fend1 + max_bin)):
+                for fend2 in range(fend1, num_fends):
                     map2 = mapping[fend2]
                     if map2 == -1 or mids[fend2] - mids[fend1] > maxdistance:
                         continue
@@ -533,7 +532,7 @@ def find_binned_cis_compact_expected(
                             k += 1
                         value *= exp(distance * parameters[k, 1] + parameters[k, 2] + chrom_mean)
                     signal[map1, map2 - map1, 1] += value
-                signal[map1, map1, 1] /= 2
+                signal[map1, 0, 1] /= 2
         else:
             for j in range(num_bins):
                 for k in range(j, min(num_bins, j + max_bin)):

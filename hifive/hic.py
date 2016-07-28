@@ -2538,13 +2538,18 @@ class HiC(object):
             chr2int[chrom] = i
         # find the first and last valid fend positions for each chromosome
         chrom_bounds = numpy.zeros((n_chroms, 2), dtype=numpy.int32)
-        chr_indices = self.fends['chr_indices'][...]
+        if self.binned is not None:
+            chr_indices = self.fends['bin_indices'][...]
+            fends = self.fends['bins'][...]
+        else:
+            chr_indices = self.fends['chr_indices'][...]
+            fends = self.fends['fends'][...]
         for i, chrom in enumerate(chroms):
             chrint = self.chr2int[chrom]
             valid = numpy.where(self.filter[chr_indices[chrint]:chr_indices[chrint + 1]])[0]
             if valid.shape[0] > 0:
-                chrom_bounds[i, 0] = self.fends['fends']['start'][valid[0] + chr_indices[chrint]]
-                chrom_bounds[i, 1] = self.fends['fends']['stop'][valid[-1] + chr_indices[chrint]]
+                chrom_bounds[i, 0] = fends['start'][valid[0] + chr_indices[chrint]]
+                chrom_bounds[i, 1] = fends['stop'][valid[-1] + chr_indices[chrint]]
         # determine largest bin bounds for intra-chromosomal heatmaps
         cis_chrom_bounds = numpy.zeros(chrom_bounds.shape, dtype=numpy.int32)
         valid = numpy.where(chrom_bounds[:, 1] > chrom_bounds[:, 0])[0]
