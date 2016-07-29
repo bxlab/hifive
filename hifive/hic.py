@@ -2928,6 +2928,7 @@ class HiC(object):
             data -= (corrections + corrections.T) * 0.5 * valid
 
             # for NB values
+            """
             expected = (corrections + corrections.T) / 2.0
             for i in range(1, N):
                 expected[numpy.arange(N - i), numpy.arange(i, N)] += bg[i]
@@ -2941,9 +2942,12 @@ class HiC(object):
             counts = counts[indices]
             mu = numpy.mean(counts / expected)
             means = expected * mu
-            sigma = numpy.sum((counts - means) ** 2.0) / counts.shape[0]
-            p = (2.0 * sigma + expected - (8.0 * sigma * expected + expected ** 2.0) ** 0.5) / (2.0 * sigma)
-            r = (expected * (1 - p)) / p
+            #sigma = numpy.sum((counts - means) ** 2.0) / counts.shape[0]
+            #p = (2.0 * sigma + expected - (8.0 * sigma * expected + expected ** 2.0) ** 0.5) / (2.0 * sigma)
+            #r = (expected * (1 - p)) / p
+            sigma = numpy.sum((counts - means) ** 2.0 / means) / counts.shape[0] * means
+            p = numpy.maximum(1e-15, numpy.minimum(1.0 - 1e-15, (sigma - means) / sigma))
+            r = (means) / numpy.maximum(1e-15, (sigma - means))
             data[indices] = -nbinom.logsf(counts, r, 1.0 - p)
             data[indices[1], indices[0]] = data[indices]
             data[numpy.arange(N), numpy.arange(N)] = 0.0
@@ -2952,6 +2956,7 @@ class HiC(object):
             where = numpy.where(numpy.isnan(data))
             data[where] = 0
             valid[where] = 0
+            """
 
             # find chrom quality
             indices = numpy.triu_indices(N, 1)
@@ -2969,10 +2974,13 @@ class HiC(object):
                 samples[i, 0] = numpy.corrcoef(data[set_indices, X], data[set_indices, Y])[0, 1]
                 samples[i, 1] = data[X, Y]
             where = numpy.where(samples[:, 1] > -numpy.inf)[0]
-            samples[where, 1] -= numpy.amin(samples[where, 1])
-            samples[where, 1] /= numpy.sum(samples[where, 1])
-            results[chroms.index(chrom), coverage.index(cov), noise.index(noi)] = (numpy.sum(samples[where, 0] *
-                                                            samples[where, 1]) - numpy.mean(samples[where, 0]))
+            if where.shape[0] < 2:
+                results[chroms.index(chrom), coverage.index(cov), noise.index(noi)] = -numpy.inf
+            else:    
+                samples[where, 1] -= numpy.amin(samples[where, 1])
+                samples[where, 1] /= numpy.sum(samples[where, 1])
+                results[chroms.index(chrom), coverage.index(cov), noise.index(noi)] = (numpy.sum(samples[where, 0] *
+                                                                samples[where, 1]) - numpy.mean(samples[where, 0]))
 
         # compile and write results
         if self.rank == 0:
