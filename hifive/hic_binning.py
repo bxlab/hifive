@@ -1828,11 +1828,8 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
             start_index = hic.data['trans_indices'][startfend]
             stop_index = hic.data['trans_indices'][stopfend]
             data = hic.data['trans_data'][start_index:stop_index, :]
-            data = data[numpy.where((data[:, 1] >= startfend2) * (data[:, 1] < stopfend2))[0], :]
             data_indices = hic.data['trans_indices'][startfend:(stopfend + 1)]
             data_indices -= data_indices[0]
-            for i in range(1, data_indices.shape[0]):
-                data_indices[i] += data_indices[i - 1]
             num_data = _hic_binning.remap_mrh_data(
                         data,
                         data_indices,
