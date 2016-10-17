@@ -147,9 +147,12 @@ class HiCData(object):
         chroms = self.fends['chromosomes'][...]
         chr_indices = self.fends['chr_indices'][...]
         for i in range(len(chroms)):
-            self.cuts.append(numpy.r_[
-                self.fends['fends']['start'][chr_indices[i]:(chr_indices[i + 1])][::2],
-                self.fends['fends']['stop'][chr_indices[i + 1] - 1]])
+            if chr_indices[i] < self.fends['fends'].shape[0] and chr_indices[i + 1] > chr_indices[i]:
+                self.cuts.append(numpy.r_[
+                    self.fends['fends']['start'][chr_indices[i]:(chr_indices[i + 1])][::2],
+                    self.fends['fends']['stop'][chr_indices[i + 1] - 1]])
+            else:
+                self.cuts.append(numpy.zeros(0, dtype=numpy.int32))
         return None
 
     def load_data_from_raw(self, fendfilename, filelist, maxinsert, skip_duplicate_filtering=False):

@@ -26,6 +26,7 @@ import libraries._hic_interactions as _interactions
 import libraries._hic_optimize as _optimize
 import plotting
 
+#from pyx import *
 
 class HiC(object):
 
@@ -2723,7 +2724,7 @@ class HiC(object):
         return None
 
     def calculate_quality(self, filename, resolution=1000000, coverage=[1.0, 0.5, 0.25, 0.12, 0.06],
-                          noise=[1.0, 0.75, 0.5, 0.25, 0.0], chroms=[]):
+                          noise=[0.8, 0.6, 0.4, 0.2, 0.0], chroms=[], num_iterations=10):
         """
         Write individual chromosome and overall quality metrics for a HiC dataset to a text file.
 
@@ -2746,14 +2747,23 @@ class HiC(object):
             chroms = [chroms]
         if len(chroms) == 0:
             chroms = list(self.fends['chromosomes'][...])
-        needed = []
-        for chrom in chroms:
-            for cov in coverage:
-                for noi in noise:
-                    needed.append((chrom, cov, noi))
-        node_ranges = numpy.round(numpy.linspace(0, len(needed), self.num_procs + 1)).astype(numpy.int32)
-        results = numpy.zeros((len(chroms), len(coverage), len(noise)), dtype=numpy.float64)
-        for chrom, cov, noi in needed[node_ranges[self.rank]:node_ranges[self.rank + 1]]:
+        needed = [[0, 1.0, 0.0]]
+        for cov in coverage:
+            if cov == 1.0:
+                continue
+            else:
+                for i in range(num_iterations):
+                    needed.append([i, cov, 0.0])
+        for noi in noise:
+            if noi == 0.0:
+                continue
+            else:
+                for i in range(num_iterations):
+                    needed.append([i, 1.0, noi])
+        needed = numpy.array(needed, dtype=numpy.float64)
+        node_ranges = numpy.round(numpy.linspace(0, len(chroms), self.num_procs + 1)).astype(numpy.int32)
+        results = numpy.zeros((len(chroms) + 1, len(needed), 4), dtype=numpy.float64)
+        for chrom in chroms[node_ranges[self.rank]:node_ranges[self.rank + 1]]:
             chrint = self.chr2int[chrom]
             if self.binned is not None:
                 chr_indices = self.fends['bin_indices'][...]
@@ -2761,258 +2771,353 @@ class HiC(object):
             else:
                 chr_indices = self.fends['chr_indices'][...]
                 fends = self.fends['fends'][...]
+            start_f = chr_indices[chrint]
+            stop_f = chr_indices[chrint + 1]
             start_i = self.data['cis_indices'][chr_indices[chrint]]
             stop_i = self.data['cis_indices'][chr_indices[chrint + 1]]
+            valid_bins = numpy.bincount(fends['mid'][start_f:stop_f] / resolution, weights=self.filter[start_f:stop_f])
+            if numpy.sum(valid_bins > 0) < 10:
+                results[chroms.index(chrom), :, :] = -numpy.inf
+                continue
             counts = self.data['cis_data'][...][start_i:stop_i, :]
             counts = counts[numpy.where(self.filter[counts[:, 0]] * self.filter[counts[:, 1]])[0], :]
             start = (fends['start'][chr_indices[chrint]] / resolution) * resolution
             stop = ((fends['stop'][chr_indices[chrint + 1] - 1] - 1) / resolution + 1) * resolution
             counts[:, 0] = (fends['mid'][counts[:, 0]] - start) / resolution
             counts[:, 1] = (fends['mid'][counts[:, 1]] - start) / resolution
+            original_counts = counts
             N = (stop - start) / resolution
             current_count = numpy.sum(counts[:, 2])
-            total_target = int(round(current_count * cov))
-            cov_target = int(round(total_target * (1.0 - noi)))
-            noise_target = total_target - cov_target
+            expected_probs = None
+            for h in range(needed.shape[0]):
+                counts = numpy.copy(original_counts)
+                iteration, cov, noi = needed[h]
+                total_target = int(round(current_count * cov))
+                cov_target = int(round(total_target * (1.0 - noi)))
+                noise_target = total_target - cov_target
 
-            # if needed, find bg prob model
-            if noi > 0.0:
-                data = numpy.zeros((N, N, 2), dtype=numpy.float64)
-                data[:, :, 0] = numpy.bincount(counts[:, 0] * N + counts[:, 1], weights=counts[:, 2],
-                                               minlength=(N*N)).reshape(N, N)
-                data[:, :, 0] += data[:, :, 0].T
-                where = numpy.where(data[:, :, 0] > 0)
-                data[where[0], where[1], 0] = numpy.log(data[where[0], where[1], 0])
-                data[where[0], where[1], 1] = 1
-                bg = numpy.zeros(N, dtype=numpy.float64)
-                for i in range(N):
-                    temp1 = numpy.arange(N - i)
-                    temp2 = numpy.arange(i, N)
-                    bg[i] = numpy.sum(data[temp1, temp2, 0]) / max(1, numpy.sum(data[temp1, temp2, 1]))
-                """
-                distances = numpy.log(numpy.arange(1, N + 1))
-                smoothed = numpy.zeros(N, dtype=numpy.float64)
-                for i in range(bg.shape[0]):
-                    spacing = numpy.abs(distances[i] - distances)
-                    where = numpy.where(spacing <= 0.2)[0]
-                    weights = 1.0 / (spacing[where] * 45.0 + 1.0)
-                    smoothed[i] = numpy.sum(bg[where] * weights) / numpy.sum(weights)
-                bg = smoothed
-                """
-                for i in range(N):
-                    data[numpy.arange(N - i), numpy.arange(i, N), 0] -= bg[i]
-                indices = numpy.triu_indices(N, 1)
-                data[indices[0], indices[1], :] = data[indices[1], indices[0], :]
-                corrections = (numpy.sum(data[:, :, 0], axis=0) /
-                               numpy.maximum(1, numpy.sum(data[:, :, 1], axis=0))).reshape(-1, 1)
-                valid_counts = numpy.maximum(1, numpy.sum(data[:, :, 1])).reshape(-1, 1)
-                diff = numpy.amax(numpy.abs(corrections))
-                iteration = 0
-                while diff > 0.0001 and iteration < 100:
-                    temp = numpy.sum(data[:, :, 0] - (corrections + corrections.T) * data[:, :, 1] * 0.5,
-                                     axis=0).reshape(-1, 1) / valid_counts
-                    diff = numpy.amax(numpy.abs(temp))
-                    corrections += temp
-                    iteration += 1
-                expected = (corrections + corrections.T) * 0.5
-                for i in range(bg.shape[0]):
-                    temp1 = numpy.arange(N - i)
-                    temp2 = numpy.arange(i, N)
-                    expected[temp1, temp2] += bg[i] * data[temp1, temp2, 1]
-                invalid_rows = numpy.sum(data[:, :, 1], axis=0) == 0
-                expected[numpy.arange(N), numpy.arange(N)] /= 2.0
-                expected = numpy.exp(expected)
-                expected[invalid_rows, :] = 0
-                expected[:, invalid_rows] = 0
-                indices = numpy.triu_indices(N, 0)
-                expected = expected[indices]
-                expected /= numpy.sum(expected)
-                for i in range(1, expected.shape[0]):
-                    expected[i] += expected[i - 1]
-                del data
+                # if needed, find bg prob model
+                if noi > 0.0 and expected_probs is None:
+                    data = numpy.zeros((N, N, 2), dtype=numpy.float64)
+                    data[:, :, 0] = numpy.bincount(counts[:, 0] * N + counts[:, 1], weights=counts[:, 2],
+                                                   minlength=(N*N)).reshape(N, N)
+                    data[:, :, 0] += data[:, :, 0].T
+                    invalid_rows = numpy.where(numpy.sum(data[:, :, 0] > 0, axis=0) == 0)[0]
+                    data[:, :, 1] = 1
+                    data[invalid_rows, :, 1] = 0
+                    data[:, invalid_rows, 1] = 0
+                    bg = numpy.zeros(N, dtype=numpy.float64)
+                    for i in range(N):
+                        temp1 = numpy.arange(N - i)
+                        temp2 = numpy.arange(i, N)
+                        bg[i] = numpy.sum(data[temp1, temp2, 0]) / max(1, numpy.sum(data[temp1, temp2, 1]))
+                    for i in range(N):
+                        if bg[i] > 0:
+                            data[numpy.arange(N - i), numpy.arange(i, N), 0] /= bg[i]
+                    indices = numpy.triu_indices(N, 1)
+                    data[indices[1], indices[0], :] = data[indices[0], indices[1], :]
+                    valid = numpy.where(numpy.sum(data[:, :, 1], axis=0) > 0)[0]
+                    invalid = numpy.where(numpy.sum(data[:, :, 1], axis=0) == 0)[0]
+                    valid_counts = numpy.maximum(1, numpy.sum(data[:, :, 1], axis=0)).reshape(-1, 1)
+                    corrections = (numpy.sum(data[:, :, 0], axis=0).reshape(-1, 1) / valid_counts) ** 0.5
+                    corrections[invalid, 0] = 1
+                    diff = numpy.amax(numpy.abs(1.0 - corrections))
+                    iteration = 0
+                    while diff > 0.0001 and iteration < 1000:
+                        temp = numpy.sum(data[:, :, 0] / (corrections * corrections.T),
+                                         axis=0).reshape(-1, 1) / valid_counts
+                        diff = numpy.amax(numpy.abs(1.0 - temp[valid, 0]))
+                        corrections[valid, 0] *= temp[valid, 0] ** 0.5
+                        iteration += 1
+                    expected = (corrections * corrections.T) * data[:, :, 1]
+                    for i in range(bg.shape[0]):
+                        temp1 = numpy.arange(N - i)
+                        temp2 = numpy.arange(i, N)
+                        if bg[i] > 0:
+                            expected[temp1, temp2] *= bg[i] * data[temp1, temp2, 1]
+                    expected[indices[1], indices[0]] = expected[indices]
+                    expected[numpy.arange(N), numpy.arange(N)] /= 2.0
+                    expected[invalid_rows, :] = 0
+                    expected[:, invalid_rows] = 0
+                    indices = numpy.triu_indices(N, 0)
+                    expected = expected[indices]
+                    expected /= numpy.sum(expected)
+                    for i in range(1, expected.shape[0]):
+                        expected[i] += expected[i - 1]
+                    expected_probs = expected
+                    del data
 
-            # randomly select reads to remove to lower coverage
-            if cov_target < 0.5 * current_count:
-                target_reads = cov_target
-            else:
-                target_reads = current_count - cov_target
-            reads = {}
-            while len(reads) < target_reads:
-                possible_reads = numpy.random.randint(0, current_count, 5000000)
-                for read in possible_reads:
-                    if len(reads) < target_reads and read not in reads:
-                        reads[read] = None
-            reads = reads.keys()
-            reads.sort()
+                # randomly select reads to remove to lower coverage
+                if cov_target < 0.5 * current_count:
+                    target_reads = cov_target
+                else:
+                    target_reads = current_count - cov_target
+                reads = {}
+                while len(reads) < target_reads:
+                    possible_reads = numpy.random.randint(0, current_count, 5000000)
+                    for read in possible_reads:
+                        if len(reads) < target_reads and read not in reads:
+                            reads[read] = None
+                reads = reads.keys()
+                reads.sort()
 
-            # adjust reads and put into square matrix
-            pos = 0
-            count = counts[0, 2]
-            data = numpy.zeros((N, N), dtype=numpy.int32)
-            if cov_target == current_count:
-                for i in range(counts.shape[0]):
-                    data[counts[i, 0], counts[i, 1]] += counts[i, 2]
-            elif cov_target < 0.5 * current_count:
-                for j in reads:
-                    while count <= j:
-                        pos += 1
-                        count += counts[pos, 2]
-                    data[counts[pos, 0], counts[pos, 1]] += 1
-                    if not self.silent and self.rank == 0:
-                        print >> sys.stderr, ("\r%s\t%07i of %07i") % (chrom, j, current_count),
-            else:
-                for j in reads:
-                    while count <= j:
+                # adjust reads and put into square matrix
+                pos = 0
+                count = counts[0, 2]
+                data = numpy.zeros((N, N), dtype=numpy.int32)
+                if cov_target == current_count:
+                    for i in range(counts.shape[0]):
+                        data[counts[i, 0], counts[i, 1]] += counts[i, 2]
+                elif cov_target < 0.5 * current_count:
+                    for j in reads:
+                        while count <= j:
+                            pos += 1
+                            count += counts[pos, 2]
+                        data[counts[pos, 0], counts[pos, 1]] += 1
+                        if not self.silent and self.rank == 0 and j % 1000 == 0:
+                            print >> sys.stderr, ("\r%s\t%07i of %07i") % (chrom, j, current_count),
+                else:
+                    for j in reads:
+                        while count <= j:
+                            data[counts[pos, 0], counts[pos, 1]] += counts[pos, 2]
+                            pos += 1
+                            count += counts[pos, 2]
+                        counts[pos, 2] -= 1
+                        if not self.silent and self.rank == 0 and j % 1000 == 0:
+                            print >> sys.stderr, ("\r%s\t%07i of %07i") % (chrom, j, current_count),
+                    while pos < data.shape[0]:
                         data[counts[pos, 0], counts[pos, 1]] += counts[pos, 2]
                         pos += 1
-                        count += counts[pos, 2]
-                    counts[pos, 2] -= 1
-                    if not self.silent and self.rank == 0:
-                        print >> sys.stderr, ("\r%s\t%07i of %07i") % (chrom, j, current_count),
-                while pos < data.shape[0]:
-                    data[counts[pos, 0], counts[pos, 1]] += counts[pos, 2]
-                    pos += 1
-            del counts
-            cov_count = numpy.sum(data)
+                del counts
+                cov_count = numpy.sum(data)
 
-            # add noise
-            if noise_target > 0:
-                reads = numpy.random.rand(noise_target)
-                reads.sort()
-                read_indices = numpy.r_[0, numpy.searchsorted(reads, expected)]
-                for j in range(read_indices.shape[0] - 1):
-                    data[indices[0][j], indices[1][j]] += read_indices[j + 1] - read_indices[j]
-                    if not self.silent and self.rank == 0:
-                        print >> sys.stderr, ("\r%s\t%07i of %07i") % (chrom, j, read_indices.shape[0]),
-            noise_count = numpy.sum(data)
-            data += data.T
+                # add noise
+                if noise_target > 0:
+                    indices = numpy.triu_indices(N, 0)
+                    reads = numpy.random.rand(noise_target)
+                    reads.sort()
+                    read_indices = numpy.r_[0, numpy.searchsorted(reads, expected_probs)]
+                    for j in range(read_indices.shape[0] - 1):
+                        data[indices[0][j], indices[1][j]] += read_indices[j + 1] - read_indices[j]
+                        if not self.silent and self.rank == 0 and j % 1000 == 0:
+                            print >> sys.stderr, ("\r%s\t%07i of %07i") % (chrom, j, read_indices.shape[0]),
+                noise_count = numpy.sum(data)
+                data += data.T
 
-            # for NB values
-            counts = numpy.copy(data)
+                # learn condition-specific bg
+                valid = numpy.ones(data.shape, dtype=numpy.int32)
+                invalid = numpy.where(numpy.sum(data > 0, axis=0) == 0)[0]
+                valid[invalid, :] = 0
+                valid[:, invalid] = 0
+                zeros = data == 0
+                data = data.astype(numpy.float64)
+                bg = numpy.zeros((N, 3), dtype=numpy.float64)
+                for i in range(N):
+                    temp1 = numpy.arange(N - i)
+                    temp2 = numpy.arange(i, N)
+                    bg[i, 0] = numpy.sum(data[temp1, temp2])
+                    bg[i, 1] = numpy.sum(valid[temp1, temp2])
+                    bg[i, 2] = bg[i, 1] * numpy.log(max(0.5, i))
+                dist_params = []
+                for i in range(N):
+                    if len(dist_params) == 0 or dist_params[-1][0] > 10000:
+                        dist_params.append(list(bg[i, :]))
+                    else:
+                        dist_params[-1][0] += bg[i, 0]
+                        dist_params[-1][1] += bg[i, 1]
+                        dist_params[-1][2] += bg[i, 2]
+                dist_params = numpy.array(dist_params)
+                dist_params[:, 0] = numpy.log(dist_params[:, 0] / dist_params[:, 1])
+                dist_params[:, 2] /= dist_params[:, 1]
+                line_params = numpy.zeros((dist_params.shape[0] - 1, 2), dtype=numpy.float64)
+                line_params[:, 0] = ((dist_params[1:, 0] - dist_params[:-1, 0]) /
+                                     (dist_params[1:, 2] - dist_params[:-1, 2]))
+                line_params[:, 1] = dist_params[:-1, 0] - dist_params[:-1, 2] * line_params[:, 0]
+                temp = numpy.r_[numpy.exp(line_params[:, 0] * dist_params[:-1, 2] + line_params[:, 1]),numpy.exp(line_params[-1, 0] * dist_params[-1, 2] + line_params[-1, 1])]
+                bg = numpy.zeros(N, dtype=numpy.float64)
+                for i in range(N):
+                    index = numpy.searchsorted(dist_params[1:-1, 2], numpy.log(max(0.5, i)), side='left')
+                    bg[i] = numpy.exp(line_params[index, 0] * numpy.log(max(0.5, i)) + line_params[index, 1])
+                    temp1 = numpy.arange(N - i)
+                    temp2 = numpy.arange(i, N)
+                    data[temp1, temp2] /= bg[i]
+                    data[temp2, temp1] = data[temp1, temp2]
 
-            # learn condition-specific bg and corrections
-            valid = data > 0
-            data = data.astype(numpy.float64)
-            where = numpy.where(valid)
-            data[where] = numpy.log(data[where])
-            bg = numpy.zeros(N, dtype=numpy.float32)
-            for i in range(N):
-                temp1 = numpy.arange(N - i)
-                temp2 = numpy.arange(i, N)
-                bg[i] = numpy.sum(data[temp1, temp2]) / max(1, numpy.sum(valid[temp1, temp2]))
-            """
-            smoothed = numpy.zeros(N, dtype=numpy.float32)
-            distances = numpy.log(numpy.arange(1, N + 1))
-            for i in range(bg.shape[0]):
-                spacing = numpy.abs(distances[i] - distances)
-                where = numpy.where(spacing <= 0.2)[0]
-                weights = 1.0 / (spacing[where] * 45.0 + 1.0)
-                smoothed[i] = numpy.sum(bg[where] * weights) / numpy.sum(weights)
-            bg = smoothed
-            """
-            for i in range(bg.shape[0]):
-                temp1 = numpy.arange(N - i)
-                temp2 = numpy.arange(i, N)
-                data[temp1, temp2] -= valid[temp1, temp2] * bg[i]
-                data[temp2, temp1] = data[temp1, temp2]
-            valid_counts = numpy.maximum(1, numpy.sum(valid, axis=0)).reshape(-1, 1)
-            corrections = numpy.sum(data, axis=0).reshape(-1, 1) / valid_counts
-            diff = numpy.amax(numpy.abs(corrections))
-            iteration = 0
-            while diff > 0.0001 and iteration < 100:
-                temp = numpy.sum(data - (corrections + corrections.T) * valid * 0.5,
-                                 axis=0).reshape(-1, 1) / valid_counts
-                diff = numpy.amax(numpy.abs(temp))
-                corrections += temp
-                iteration += 1
-            data -= (corrections + corrections.T) * 0.5 * valid
+                # learn condition-specific corrections
+                valid_rows = numpy.where(numpy.sum(valid, axis=0) > 0)[0]
+                invalid = numpy.where(numpy.sum(valid, axis=0) == 0)[0]
+                valid_counts = numpy.maximum(1, numpy.sum(valid, axis=0)).reshape(-1, 1)
+                corrections = (numpy.sum(data, axis=0).reshape(-1, 1) / valid_counts) ** 0.5
+                corrections[invalid, 0] = 1
+                diff = numpy.amax(numpy.abs(1.0 - corrections))
+                iteration = 0
+                while diff > 0.0001 and iteration < 1000:
+                    temp = numpy.sum(data / (corrections * corrections.T),
+                                     axis=0).reshape(-1, 1) / valid_counts
+                    diff = numpy.amax(numpy.abs(1.0 - temp[valid_rows, 0]))
+                    corrections[valid_rows, 0] *= temp[valid_rows, 0] ** 0.5
+                    iteration += 1
+                expected = corrections * corrections.T
+                for i in range(1, N):
+                    if bg[i] > 0:
+                        expected[numpy.arange(N - i), numpy.arange(i, N)] /= bg[i]
+                data /= (corrections * corrections.T)
+                valid_rows = numpy.sum(valid, axis=0) > 0
+                valid_rows *= corrections[:, 0] >= 0.2
+                valid_rows *= corrections[:, 0] <= 5.0
+                nonzero = numpy.where(numpy.logical_not(zeros))
+                data[nonzero] = numpy.log2(data[nonzero])
+                data = numpy.maximum(0, data + 5.)
+                data = data[valid_rows, :][:, valid_rows]
+                valid = numpy.logical_not(zeros).astype(numpy.int32)
+                valid = valid[valid_rows, :][:, valid_rows]
 
-            # for NB values
-            """
-            expected = (corrections + corrections.T) / 2.0
-            for i in range(1, N):
-                expected[numpy.arange(N - i), numpy.arange(i, N)] += bg[i]
-            valid_rows = numpy.sum(valid, axis=0) > 0
-            expected = expected[valid_rows, :][:, valid_rows]
-            counts = counts[valid_rows, :][:, valid_rows]
-            valid = valid[valid_rows, :][:, valid_rows]
-            N = valid.shape[0]
-            indices = numpy.triu_indices(N, 1)
-            expected = numpy.exp(expected[indices])
-            counts = counts[indices]
-            mu = numpy.mean(counts / expected)
-            means = expected * mu
-            #sigma = numpy.sum((counts - means) ** 2.0) / counts.shape[0]
-            #p = (2.0 * sigma + expected - (8.0 * sigma * expected + expected ** 2.0) ** 0.5) / (2.0 * sigma)
-            #r = (expected * (1 - p)) / p
-            sigma = numpy.sum((counts - means) ** 2.0 / means) / counts.shape[0] * means
-            p = numpy.maximum(1e-15, numpy.minimum(1.0 - 1e-15, (sigma - means) / sigma))
-            r = (means) / numpy.maximum(1e-15, (sigma - means))
-            data[indices] = -nbinom.logsf(counts, r, 1.0 - p)
-            data[indices[1], indices[0]] = data[indices]
-            data[numpy.arange(N), numpy.arange(N)] = 0.0
-            valid = numpy.ones((N, N), dtype=bool)
-            valid[numpy.arange(N), numpy.arange(N)] = 0.0
-            where = numpy.where(numpy.isnan(data))
-            data[where] = 0
-            valid[where] = 0
-            """
-
-            # find chrom quality
-            indices = numpy.triu_indices(N, 1)
-            where = numpy.where(valid[indices])[0]
-            samples = numpy.zeros((where.shape[0], 2), dtype=numpy.float64)
-            samples[:, 1] -= numpy.inf
-            for i in range(where.shape[0]):
-                X = indices[0][where[i]]
-                Y = indices[1][where[i]]
-                set_indices = numpy.r_[numpy.arange(X), numpy.arange(X + 1, Y), numpy.arange(Y + 1, N)]
-                valid_indices = numpy.where(valid[set_indices, X] * valid[set_indices, Y])[0]
-                if valid_indices.shape[0] < 3:
-                    continue
-                set_indices = set_indices[valid_indices]
-                samples[i, 0] = numpy.corrcoef(data[set_indices, X], data[set_indices, Y])[0, 1]
-                samples[i, 1] = data[X, Y]
-            where = numpy.where(samples[:, 1] > -numpy.inf)[0]
-            if where.shape[0] < 2:
-                results[chroms.index(chrom), coverage.index(cov), noise.index(noi)] = -numpy.inf
-            else:    
-                samples[where, 1] -= numpy.amin(samples[where, 1])
-                samples[where, 1] /= numpy.sum(samples[where, 1])
-                results[chroms.index(chrom), coverage.index(cov), noise.index(noi)] = (numpy.sum(samples[where, 0] *
-                                                                samples[where, 1]) - numpy.mean(samples[where, 0]))
+                # find chrom quality
+                M = data.shape[0]
+                indices = numpy.triu_indices(M, 1)
+                where = numpy.where(valid[indices])[0]
+                samples = numpy.zeros((where.shape[0], 2), dtype=numpy.float64)
+                samples[:, 1] -= numpy.inf
+                for i in range(where.shape[0]):
+                    X = indices[0][where[i]]
+                    Y = indices[1][where[i]]
+                    set_indices = numpy.r_[numpy.arange(X), numpy.arange(X + 1, Y), numpy.arange(Y + 1, M)]
+                    valid_indices = numpy.where(valid[set_indices, X] * valid[set_indices, Y])[0]
+                    if valid_indices.shape[0] < 3:
+                        continue
+                    set_indices = set_indices[valid_indices]
+                    samples[i, 0] = numpy.corrcoef(data[set_indices, X], data[set_indices, Y])[0, 1]
+                    samples[i, 1] = max(0, data[X, Y] + 3)
+                where = numpy.where(samples[:, 1] > -numpy.inf)[0]
+                cindex = chroms.index(chrom)
+                results[cindex, h, 0] = numpy.sum(samples[where, 0] * samples[where, 1])
+                results[cindex, h, 1] = numpy.sum(samples[where, 1])
+                results[cindex, h, 2] = numpy.sum(samples[where, 0])
+                results[cindex, h, 3] = where.shape[0]
 
         # compile and write results
         if self.rank == 0:
             for i in range(1, self.num_procs):
                 results += self.comm.recv(source=i, tag=11)
-            mean_results = numpy.mean(results, axis=0)
-            X = numpy.zeros(mean_results.shape, dtype=numpy.float64)
-            for i in range(len(coverage)):
-                X[i, :] = 1.0 - numpy.array(noise)
-            A = numpy.array([X.ravel(), numpy.ones(X.shape[0] * X.shape[1])])
-            mean_slope = numpy.linalg.lstsq(A.T, mean_results.ravel())[0][0]
-            regr_stats = numpy.zeros((mean_results.shape[0], 4), dtype=numpy.float64)
-            regr_stats[:, 0] = numpy.mean(mean_results - X * mean_slope, axis=1)
-            regr_stats[:, 1] = mean_slope + regr_stats[:, 0]
-            for i in range(len(coverage)):
-                X = 1.0 - numpy.array(noise)
-                A = numpy.array([X, numpy.ones(X.shape[0])])
-                regr_stats[i, 2:4] = numpy.linalg.lstsq(A.T, mean_results[i, :])[0][:2]
+            valid_chroms = numpy.where(results[:-1, 0, 0] > -numpy.inf)[0]
+            chroms = numpy.array(chroms)[valid_chroms]
+            valid = numpy.r_[valid_chroms, results.shape[0] - 1]
+            results = results[valid, :, :]
+            where = numpy.where(needed[:, 0] == 0.0)[0]
+            compiled_needed = needed[where, :]
+            compiled_results = numpy.zeros((results.shape[0], where.shape[0], results.shape[2]),
+                                           dtype=numpy.float64)
+            for i in range(compiled_needed.shape[0]):
+                where = numpy.where((needed[:, 1] == compiled_needed[i, 1]) *
+                                    (needed[:, 2] == compiled_needed[i, 2]))[0]
+                compiled_results[:-1, i, :] += numpy.sum(results[:-1, where, :], axis=1)
+            results[-1, :, :] = numpy.sum(results[:-1, :, :], axis=0)
+            compiled_results[-1, :, :] = numpy.sum(compiled_results[:-1, :, :], axis=0)
+            results = results[:, :, 0] / results[:, :, 1] - results[:, :, 2] / results[:, :, 3]
+            compiled_results = (compiled_results[:, :, 0] / compiled_results[:, :, 1] -
+                                compiled_results[:, :, 2] / compiled_results[:, :, 3])
+            where = numpy.where((compiled_needed[:, 1] == 1.0) * (compiled_needed[:, 2] == 0.0))[0][0]
+            uncorrected_score = compiled_results[-1, where]
             output = open(filename, 'w')
-            print >> output, "Overall quality: %f" % regr_stats[0, 1]
-            print >> output, "Mean slope: %f" % mean_slope
-            print >> output, "Coverage\tMean intercept\t0-Noise Value\tLocal slope\tLocal intercept"
-            for i in range(regr_stats.shape[0]):
-                print >> output, "%f\t%f\t%f\t%f\t%f" % tuple(numpy.r_[coverage[i], regr_stats[i, :]])
-            print >> output, "Coverage\tNoise\tTotal\t%s" % ('\t'.join(chroms))
-            for i in range(results.shape[1]):
-                for j in range(results.shape[2]):
-                    temp = [str(coverage[i]), str(noise[j]), str(mean_results[i, j])]
-                    for k in range(results.shape[0]):
-                        temp.append(str(results[k, i, j]))
-                    print >> output, '\t'.join(temp)
+            print >> output, "# Overall stats"
+            print >> output, "Uncorrected quality: %f" % uncorrected_score
+            print >> output, "Number of Reads: %i" % numpy.sum(original_counts[:, 2])
+            print >> output, "# Compiled scores"
+            temp = "Coverage\tNoise\tAll"
+            for chrom in chroms:
+                temp += "\t%s" % chrom
+            print >> output, temp
+            for i in range(compiled_needed.shape[0]):
+                temp = "%0.2f\t%0.2f" % (compiled_needed[i, 1], compiled_needed[i, 2])
+                temp += "\t%f" % compiled_results[-1, i]
+                for j in range(compiled_results.shape[0] - 1):
+                    temp += "\t%f" % compiled_results[j, i]
+                print >> output, temp
+            print >> output, "# Raw scores"
+            temp = "Iteration\tCoverage\tNoise\tAll"
+            for chrom in chroms:
+                temp += "\t%s" % chrom
+            print >> output, temp
+            for i in range(needed.shape[0]):
+                temp = "%i\t%0.2f\t%0.2f" % (int(needed[i, 0]), needed[i, 1], needed[i, 2])
+                temp += "\t%f" % results[-1, i]
+                for j in range(results.shape[0] - 1):
+                    temp += "\t%f" % results[j, i]
+                print >> output, temp
             output.close()
+
+            """
+            pages = []
+            width = 10.
+            height = 10.
+            c = canvas.canvas()
+            c1 = canvas.canvas([canvas.clip(path.rect(0, 0, width, height))])
+            c.stroke(path.rect(0, 0, width, height))
+            X1min = 1.0
+            X1max = 2.0
+            X1span = X1max - X1min
+            where = numpy.where(needed[:, 1] == 1.0)[0]
+            cwhere = numpy.where(compiled_needed[:, 1] == 1.0)[0]
+            Ymin = min(numpy.amin(results[-1, where]), numpy.amin(compiled_results[-1, cwhere]))
+            Ymax = max(numpy.amax(results[-1, where]), numpy.amax(compiled_results[-1, cwhere]))
+            Yspan = Ymax - Ymin
+            Ymin -= 0.05 * Yspan
+            Ymax += 0.05 * Yspan
+            Yspan *= 1.1
+            for i in where:
+                X = (2. ** (1.0 - needed[i, 2]) - X1min) / X1span * width
+                Y = (results[-1, i] - Ymin) / (Yspan) * height
+                c.fill(path.circle(X, Y, 0.05))
+            for i in cwhere:
+                X = (2. ** (1.0 - compiled_needed[i, 2]) - X1min) / X1span * width
+                Y = (compiled_results[-1, i] - Ymin) / (Yspan) * height
+                c.fill(path.circle(X, Y, 0.05), [color.rgb.red])
+            Y0 = (X1min * noise_line[0] + noise_line[1] - Ymin) / Yspan * height
+            Y1 = (X1max * noise_line[0] + noise_line[1] - Ymin) / Yspan * height
+            c1.stroke(path.line(0, Y0, width, Y1))
+            c.text(-0.1, 0, Ymin, [text.halign.right, text.valign.middle, text.size(-3)])
+            c.text(-0.1, height, Ymax, [text.halign.right, text.valign.middle, text.size(-3)])
+            c.text(0, -0.1, X1min, [text.halign.center, text.valign.top, text.size(-3)])
+            c.text(width, -0.1, X1max, [text.halign.center, text.valign.top, text.size(-3)])
+            c.text(width * 0.5, height + 0.1, "Noise", [text.halign.center, text.valign.bottom, text.size(-3)])
+            c.insert(c1)
+            pages.append(document.page(c))
+            c = canvas.canvas()
+            c1 = canvas.canvas([canvas.clip(path.rect(0, 0, width, height))])
+            c.stroke(path.rect(0, 0, width, height))
+            X2min = numpy.log2(numpy.amin(needed[:, 1]))
+            X2max = numpy.log2(numpy.amax(needed[:, 1]))
+            X2span = X2max - X2min
+            where = numpy.where(needed[:, 2] == 0.0)[0]
+            cwhere = numpy.where(compiled_needed[:, 2] == 0.0)[0]
+            Ymin = min(numpy.amin(results[-1, where]), numpy.amin(compiled_results[-1, cwhere]))
+            Ymax = max(numpy.amax(results[-1, where]), numpy.amax(compiled_results[-1, cwhere]))
+            Yspan = Ymax - Ymin
+            Ymin -= 0.05 * Yspan
+            Ymax += 0.05 * Yspan
+            Yspan *= 1.1
+            for i in where:
+                X = (numpy.log2(needed[i, 1]) - X2min) / X2span * width
+                Y = (results[-1, i] - Ymin) / (Yspan) * height
+                c.fill(path.circle(X, Y, 0.05))
+            for i in cwhere:
+                X = (numpy.log2(compiled_needed[i, 1]) - X2min) / X2span * width
+                Y = (compiled_results[-1, i] - Ymin) / (Yspan) * height
+                c.fill(path.circle(X, Y, 0.05), [color.rgb.red])
+            Y0 = (X2min * coverage_line[0] + coverage_line[1] - Ymin) / Yspan * height
+            Y1 = (X2max * coverage_line[0] + coverage_line[1] - Ymin) / Yspan * height
+            c1.stroke(path.line(0, Y0, width, Y1))
+            c.text(-0.1, 0, Ymin, [text.halign.right, text.valign.middle, text.size(-3)])
+            c.text(-0.1, height, Ymax, [text.halign.right, text.valign.middle, text.size(-3)])
+            c.text(0, -0.1, X2min, [text.halign.center, text.valign.top, text.size(-3)])
+            c.text(width, -0.1, X2max, [text.halign.center, text.valign.top, text.size(-3)])
+            c.text(width * 0.5, height + 0.1, "Coverage", [text.halign.center, text.valign.bottom, text.size(-3)])
+            c.insert(c1)
+            pages.append(document.page(c))
+            doc = document.document(pages)
+            doc.writePDFfile("%s.pdf" % filename.split('.')[0])
+            """
+
             if not self.silent and self.rank == 0:
                 print >> sys.stderr, ("\r%s\r") % (' ' * 80),
         else:
