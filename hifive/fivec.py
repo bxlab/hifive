@@ -584,7 +584,7 @@ class FiveC(object):
             data = self.data['cis_data'][...]
             distances = (self.frags['fragments']['mid'][data[:, 1]] -
                          self.frags['fragments']['mid'][data[:, 0]]).astype(numpy.float32)
-            if maxdistance == 0:
+            if maxdistance == 0 or maxdistance is None:
                 maxdistance = numpy.amax(distances) + 1
             valid = numpy.where((filt[data[:, 0]] * filt[data[:, 1]]) *
                                 (distances >= mindistance) * (distances < maxdistance))[0]
