@@ -1652,7 +1652,10 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
                     temp[indices[1], indices[0]] = data
                     data = temp
                 output = open(fname, 'w')
-                print >> output, "\t%s" % '\t'.join(labels[chrom[0]])
+                if len(chrom) > 1:
+                    print >> output, "\t%s" % '\t'.join(labels[chrom[1]])
+                else:
+                    print >> output, "\t%s" % '\t'.join(labels[chrom[0]])
                 for i in range(data.shape[0]):
                     line = [labels[chrom[0]][i]]
                     for j in range(data.shape[1]):
