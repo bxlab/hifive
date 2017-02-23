@@ -22,7 +22,7 @@ class HiCBinning(unittest.TestCase):
         self.project = hic.HiC(self.project_fname, 'r', silent=True)
 
     def test_cis_binning(self):
-        cis, mapping = self.project.cis_heatmap('1', start=50000, stop=200000, binsize=25000, datatype='enrichment',
+        cis, mapping = self.project.cis_heatmap('chr1', start=50000, stop=200000, binsize=25000, datatype='enrichment',
                                                 arraytype='compact', maxdistance=0, skipfiltered=False,
                                                 returnmapping=True, dynamically_binned=True, minobservations=10,
                                                 searchdistance=0, expansion_binsize=0, removefailed=False)
@@ -30,7 +30,7 @@ class HiCBinning(unittest.TestCase):
         self.compare_arrays(self.data['hic_mapping'][...], mapping, 'cis mappings')
 
     def test_trans_binning(self):
-        trans, mapping1, mapping2 = self.project.trans_heatmap('1', '2', binsize=50000, datatype='enrichment',
+        trans, mapping1, mapping2 = self.project.trans_heatmap('chr1', 'chr2', binsize=50000, datatype='enrichment',
                                                                returnmapping=True, dynamically_binned=True,
                                                                minobservations=100, searchdistance=0,
                                                                expansion_binsize=50000, removefailed=False)

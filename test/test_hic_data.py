@@ -31,7 +31,7 @@ class HiCData(unittest.TestCase):
         self.raw_fname = 'test/data/test.raw'
         self.bam_fname1 = 'test/data/test_hic_1.bam'
         self.bam_fname2 = 'test/data/test_hic_2.bam'
-        self.matrix_fname = 'test/data/chr*.test.matrix'
+        self.matrix_fname = 'test/data/*.test.matrix'
 
     def test_hic_raw_data_creation(self):
         subprocess.call("./bin/hifive hic-data -q -R %s -i 500 %s test/data/test_temp.hcd" %
