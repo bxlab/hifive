@@ -1,5 +1,6 @@
 import sys
 
+import connect_files
 import create_fragmentset
 import create_fivec_dataset
 import create_fivec_project

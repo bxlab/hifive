@@ -34,6 +34,9 @@ def main():
 
     subcommand = args.subcommand
 
+    if subcommand == "connect" and rank == 0:
+        from hifive.commands.connect_files import run
+        run(args)
     if subcommand == "fragments" and rank == 0:
         from hifive.commands.create_fragmentset import run
         run(args)
@@ -94,6 +97,7 @@ def generate_parser():
     parser.add_argument("--version", action="version", version="%(prog)s %(version_num)s" % {'prog':parser.prog, 'version_num':VERSION})
     subparsers = parser.add_subparsers(dest='subcommand')
 
+    add_connect_subparser(subparsers)
     add_fragments_subparser(subparsers)
     add_fivecdataset_subparser(subparsers)
     add_fivecproject_subparser(subparsers)
@@ -112,6 +116,18 @@ def generate_parser():
     add_hic_interval_subparser(subparsers)
     add_hic_combine_replicates_subparser(subparsers)
     return parser
+
+def add_connect_subparser(subparsers):
+    """Add command 'connect' arguments to parser."""
+    parser = subparsers.add_parser("connect", help="Link (or re-link) HiFive files, partition to data or data to project. Partition file links will automatically be updated in project files with linking data files to them.")
+    parser.add_argument(dest="type", type=str, choices=['fragments', 'fends', '5c-data', 'hic-data'],
+        help="The type of file being linked to.")
+    parser.add_argument(dest="target", type=str,
+        help="The file to be linked to (partition or data).")
+    parser.add_argument(dest="source", type=str,
+        help="The file getting an updated link (data or project).")
+    add_silent_argument(parser)
+    return
 
 def add_fragments_subparser(subparsers):
     """Add command 'fragments' arguments to parser."""
