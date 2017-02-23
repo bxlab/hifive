@@ -54,7 +54,7 @@ def run(args):
         if rank == 0:
             print  >> sys.stderr, ("Non-uniforming binning (binned=0) must have a bed file to read bin partitions from.\n"),
         return None
-    elif args.binned is None or args.binned < 1 and args.length is not None:
+    elif args.binned is not None and args.binned < 1 and args.length is not None:
         if rank == 0:
             print  >> sys.stderr, ("Binning from a chromosome length file needs a positive integer value for binning.\n"),
         return None

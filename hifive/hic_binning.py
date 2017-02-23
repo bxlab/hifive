@@ -88,7 +88,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
         return None
     binned = hic.binned is not None
-    chrint = hic.chr2int[chrom.strip('chr')]
+    chrint = hic.chr2int[chrom]
     if binned:
         includediagonal = True
         chr_indices = hic.fends['bin_indices'][...]
@@ -643,7 +643,7 @@ def find_cis_subregion_signal(hic, chrom, binsize=10000, binbounds1=None, binbou
             print >> sys.stderr, ("Normalization has not been performed yet on this project. Select either 'raw' or 'distance' for datatype. No data returned\n"),
         return None
     # Determine start, stop, startfend, and stopfend
-    chrint = hic.chr2int[chrom.strip('chr')]
+    chrint = hic.chr2int[chrom]
     if not binbounds1 is None:
         start1 = binbounds1[0, 0]
         stop1 = binbounds1[-1, 1]
@@ -948,8 +948,8 @@ def find_trans_signal(hic, chrom1, chrom2, binsize=10000, binbounds1=None, binbo
         chr_indices = hic.fends['chr_indices'][...]
         mids = hic.fends['fends']['mid'][...]
     # Determine start, stop, startfend, and stopfend
-    chrint1 = hic.chr2int[chrom1.strip('chr')]
-    chrint2 = hic.chr2int[chrom2.strip('chr')]
+    chrint1 = hic.chr2int[chrom1]
+    chrint2 = hic.chr2int[chrom2]
     if not binbounds1 is None:
         start1 = binbounds1[0, 0]
         stop1 = binbounds1[-1, 1]

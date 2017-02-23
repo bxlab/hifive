@@ -131,7 +131,7 @@ class Fragment(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[0].strip('chr')
+            chrom = temp[0]
             start = int(temp[1])
             stop = int(temp[2])
             name = temp[3]
@@ -174,7 +174,7 @@ class Fragment(object):
         region_array = []
         if len(regions) > 0:
             for region in regions:
-                chrint = chr2int[region[0].strip('chr')]
+                chrint = chr2int[region[0]]
                 start_frag = chr_indices[chrint]
                 while start_frag < chr_indices[chrint + 1] and fragments['mid'][start_frag] < region[1]:
                     start_frag += 1

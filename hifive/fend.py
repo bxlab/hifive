@@ -263,7 +263,7 @@ class Fend(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[chromosome_index].strip('chr')
+            chrom = temp[chromosome_index]
             fend = int(temp[fend_index]) - 1
             if chrom not in chr2int:
                 chr2int[chrom] = len(chromosomes)
@@ -308,7 +308,7 @@ class Fend(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[0].strip('chr')
+            chrom = temp[0]
             if chrom not in data:
                 data[chrom] = []
             stop = int(temp[2])
@@ -379,7 +379,7 @@ class Fend(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[0].strip('chr')
+            chrom = temp[0]
             if chrom not in data:
                 data[chrom] = []
             stop = int(temp[2])
@@ -420,7 +420,7 @@ class Fend(object):
         input = open(fname, 'r')
         for line in input:
             temp = line.strip('\n').split('\t')
-            chrom = temp[0].strip('chr')
+            chrom = temp[0]
             chromosomes.append(chrom)
             data[chrom] = int(temp[1])
         input.close()
@@ -438,51 +438,6 @@ class Fend(object):
             bins['chr'][chr_indices[i]:chr_indices[i + 1]] = i
         bins['mid'][:] = (bins['start'] + bins['stop']) / 2
         return [bins, chromosomes]
-
-    def plot_statistics(self):
-        width, height = 800, 400
-        c = Drawing(width + 5, height + 5)
-        data = []
-        where = numpy.where(numpy.sum(self.fend_sizes[:, :-1], axis=0))[0]
-        for i in where:
-            data.append(tuple(zip(self.fend_sizes[:, -1],
-                        self.fend_sizes[:, i] / float(numpy.sum(self.fend_sizes[:, i])))))
-        data.append(tuple(zip(self.fend_sizes[:, -1], numpy.sum(self.fend_sizes[:, :-1], axis=1) /
-                    float(numpy.sum(self.fend_sizes[:, :-1])))))
-        lp = LinePlot()
-        lp.x = 40
-        lp.y = 20
-        lp.height = height - 20
-        lp.width = width - 40
-        lp.data = data
-        lp.joinedLines = 1
-        def findcolor(i, n):
-            H = i * 6.0 / float(n)
-            X = 1.0 - abs(H % 2 - 1.0)
-            if H < 1.0:
-                return (1.0, X, 0., 1.0)
-            elif H < 2.0:
-                return (X, 1.0, 0., 1.0)
-            elif H < 3.0:
-                return (0., 1.0, X, 1.0)
-            elif H < 4.0:
-                return (0., X, 1.0, 1.0)
-            elif H < 5.0:
-                return (X, 0., 1.0, 1.0)
-            else:
-                return (1.0, 0., X, 1.0)
-
-        def axisstring(i):
-            return "%0.1E" % numpy.exp(i)
-
-        lp.xValueAxis.labelTextFormat = axisstring
-        for i in range(where.shape[0]):
-            lp.lines[i].strokeColor = Color(*findcolor(i, where.shape[0]))
-        c.add(lp)
-        #c.drawString(220, 0, "Length of fend (bp)")
-        #c.drawString(0, 110, "Percent of fends")
-        return c
-
 
 if __name__ == '__main__':
     filename = sys.argv[1]

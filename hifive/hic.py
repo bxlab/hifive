@@ -506,6 +506,12 @@ class HiC(object):
                 count_sum += self.comm.recv(source=i, tag=11)
                 logdistance_sum += self.comm.recv(source=i, tag=11)
             valid = numpy.where(count_sum > 0)[0]
+            if valid.shape[0] < 3:
+                if not self.silent:
+                    print >> sys.stderr, ('\r%s\rInsufficient data to construct a distance function\n') % (' ' * 80),
+                for i in range(1, self.num_procs):
+                    self.comm.send(None, dest=i, tag=11)
+                return None
             count_means = numpy.log(count_sum[valid].astype(numpy.float64) / bin_size[valid, 1])
             binary_means = numpy.log(bin_size[valid, 0].astype(numpy.float64) / bin_size[valid, 1])
             distance_means = logdistance_sum[valid] / bin_size[valid, 1]
@@ -531,6 +537,8 @@ class HiC(object):
             self.comm.send(count_sum, dest=0, tag=11)
             self.comm.send(logdistance_sum, dest=0, tag=11)
             distance_parameters = self.comm.recv(source=0, tag=11)
+            if distance_parameters is None:
+                return None
             bin_distance_parameters = self.comm.recv(source=0, tag=11)
         self.distance_parameters = distance_parameters
         self.bin_distance_parameters = bin_distance_parameters

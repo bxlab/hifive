@@ -457,6 +457,8 @@ def add_hicdataset_subparser(subparsers):
 def add_hicproject_subparser(subparsers):
     """Add command 'hic-project' arguments to parser. This command is MPI-compatible.}"""
     parser = subparsers.add_parser("hic-project", help="HiFive HiC Project Creation Function: Creata a HiFive HiC project associated with a specific HiC dataset, filter out low-coverage fends and calculate the distance-dependence function.")
+    parser.add_argument("-c", "--chromosomes", dest="chroms", required=False, type=str, default=None,
+        action='store', help="A comma-separated list of chromosomes to learn correction values for (None indicates all chromosomes). [default: %(default)s]")
     parser.add_argument("-f", "--min-interactions", dest="minint", required=False, type=int, default=20,
         action='store', help="The minimum number of interactions needed for valid fragment. [default: %(default)s]")
     parser.add_argument("-m", "--min-distance", dest="mindist", required=False, type=int, default=0,

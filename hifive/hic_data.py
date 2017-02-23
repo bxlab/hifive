@@ -241,8 +241,6 @@ class HiCData(object):
             new_reads = 0
             for line in input:
                 temp = line.strip('\n').split('\t')
-                temp[0] = temp[0].strip('chr')
-                temp[3] = temp[3].strip('chr')
                 if temp[0] not in self.chr2int or temp[3] not in self.chr2int:
                     self.stats['chr_not_in_fends'] += 1
                     continue
@@ -438,7 +436,7 @@ class HiCData(object):
             input = pysam.Samfile(filepair[0], 'rb')
             idx2int = {}
             for i in range(len(input.header['SQ'])):
-                chrom = input.header['SQ'][i]['SN'].strip('chr')
+                chrom = input.header['SQ'][i]['SN']
                 if chrom in self.chr2int:
                     idx2int[i] = self.chr2int[chrom]
             for read in input.fetch(until_eof=True):
@@ -468,7 +466,7 @@ class HiCData(object):
             input = pysam.Samfile(filepair[1], 'rb')
             idx2int = {}
             for i in range(len(input.header['SQ'])):
-                chrom = input.header['SQ'][i]['SN'].strip('chr')
+                chrom = input.header['SQ'][i]['SN']
                 if chrom in self.chr2int:
                     idx2int[i] = self.chr2int[chrom]
             a = 0
