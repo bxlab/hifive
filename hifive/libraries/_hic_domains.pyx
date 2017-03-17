@@ -355,7 +355,181 @@ def find_band_score(
     return None
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def dynamically_bin(
+        np.ndarray[DTYPE_int_t, ndim=2] unbinned_c not None,
+        np.ndarray[DTYPE_t, ndim=2] unbinned_e not None,
+        np.ndarray[DTYPE_int_t, ndim=2] binned_c not None,
+        np.ndarray[DTYPE_t, ndim=2] binned_e not None,
+        np.ndarray[DTYPE_int_t, ndim=1] valid not None,
+        np.ndarray[DTYPE_int_t, ndim=1] X_coords not None,
+        np.ndarray[DTYPE_int_t, ndim=1] Y_coords not None,
+        int minobservations):
+    cdef long long int X, Y, lX, elX, uX, euX, eX, lY, elY, uY, euY, eY, i, j, k, iteration
+    cdef long long int num_bins = binned_c.shape[0]
+    cdef long long int num_coords = X_coords.shape[0]
+    with nogil:
+        for i in range(num_coords):
+            X = X_coords[i]
+            Y = Y_coords[i]
+            if valid[X] == 0 or valid[Y] == 0:
+                continue
+            if unbinned_c[X, Y] >= minobservations:
+                binned_c[X, Y] = unbinned_c[X, Y]
+                binned_c[Y, X] = unbinned_c[X, Y]
+                binned_e[X, Y] = unbinned_e[X, Y]
+                binned_e[Y, X] = unbinned_e[X, Y]
+                lX = X - 1
+                uX = X + 1
+                lY = Y - 1
+                uY = Y + 1
+                continue
+            elif (i > 0 and Y == Y_coords[i - 1] + 1 and X == X_coords[i - 1] and
+                  binned_c[X, Y - 1] > 0 and lX - uX > 3):
+                lX += 1
+                uX -= 1
+                lY += 2
+            else:
+                lX = X - 1
+                uX = X + 1
+                lY = Y - 1
+                uY = Y + 1
+            elX = max(lX, 0)
+            euX = min(uX, num_bins - 1)
+            elY = max(lY, 0)
+            euY = min(uY, num_bins - 1)
+            for j in range(max(lX + 1, 0), euX):
+                for k in range(max(j, lY + 1), euY):
+                    binned_c[X, Y] += unbinned_c[j, k]
+                    binned_e[X, Y] += unbinned_e[j, k]
+            iteration  = 1
+            while binned_c[X, Y] < minobservations:
+                if lX >= 0 and valid[lX] == 1:
+                    for j in range(elY, euY + 1):
+                        binned_c[X, Y] += unbinned_c[lX, j]
+                        binned_e[X, Y] += unbinned_e[lX, j]
+                if uY < num_bins and valid[uY] == 1:
+                    for j in range(elX + 1, euX + 1):
+                        binned_c[X, Y] += unbinned_c[j, uY]
+                        binned_e[X, Y] += unbinned_e[j, uY]
+                if uX < uY and uX < num_bins and valid[uX] == 1:
+                    eY = max(uX, lY)
+                    for j in range(eY, euY):
+                        binned_c[X, Y] += unbinned_c[uX, j]
+                        binned_e[X, Y] += unbinned_e[uX, j]
+                if lY > lX and lY >= 0 and valid[lY] == 1:
+                    eX = min(uX - 1, lY)
+                    for j in range(elX + 1, eX + 1):
+                        binned_c[X, Y] += unbinned_c[j, lY]
+                        binned_e[X, Y] += unbinned_e[j, lY]
+                lX -= 1
+                elX = max(lX, 0)
+                uX += 1
+                euX = min(uX, num_bins - 1)
+                lY -= 1
+                elY = max(lY, 0)
+                uY += 1
+                euY = min(uY, num_bins - 1)
+                iteration += 1
+            binned_c[Y, X] = binned_c[X, Y]
+            binned_e[Y, X] = binned_e[X, Y]
+    return None
 
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def find_distance_parameters(
+        np.ndarray[DTYPE_int_t, ndim=1] counts not None,
+        np.ndarray[DTYPE_t, ndim=1] expected not None,
+        np.ndarray[DTYPE_int_t, ndim=1] valid not None,
+        np.ndarray[DTYPE_int_t, ndim=1] states not None,
+        np.ndarray[DTYPE_int_t, ndim=1] indices0 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] indices1 not None,
+        np.ndarray[DTYPE_int_t, ndim=2] dcounts not None,
+        np.ndarray[DTYPE_64_t, ndim=2] dexpected not None,
+        np.ndarray[DTYPE_int_t, ndim=2] binsizes not None):
+    cdef long long int i, j, x, y, start, dist, index, bin1, bin2
+    cdef long long int num_bins = indices0.shape[0]
+    with nogil:
+        for i in range(num_bins):
+            bin1 = indices0[i]
+            if valid[bin1] <= 0:
+                continue
+            bin2 = indices1[i]
+            if valid[bin2] <= 0:
+                continue
+            if expected[i] == 0.0:
+                continue
+            if states[bin1] == states[bin2]:
+                if states[bin1] == 1:
+                    index = 1
+                else:
+                    index = 0
+            else:
+                index = 2
+            dist = bin2 - bin1
+            dcounts[dist, index] += counts[i]
+            dexpected[dist, index] += expected[i]
+            binsizes[dist, index] += 1
+    return None
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+def optimize_compartment_bounds(
+        np.ndarray[DTYPE_int_t, ndim=1] counts not None,
+        np.ndarray[DTYPE_t, ndim=1] expected not None,
+        np.ndarray[DTYPE_int_t, ndim=1] valid not None,
+        np.ndarray[DTYPE_int_t, ndim=1] states not None,
+        np.ndarray[DTYPE_int_t, ndim=1] indices0 not None,
+        np.ndarray[DTYPE_int_t, ndim=1] indices1 not None,
+        np.ndarray[DTYPE_64_t, ndim=1] paramsA not None,
+        np.ndarray[DTYPE_64_t, ndim=1] paramsB not None,
+        np.ndarray[DTYPE_64_t, ndim=1] paramsAB not None,
+        np.ndarray[DTYPE_64_t, ndim=2] scores not None):
+    cdef long long int i, X, Y, dist
+    cdef double muA, muB, lambdaA, lambdaB, temp1, temp2
+    cdef long long int num_indices = indices0.shape[0]
+    with nogil:
+        for i in range(num_indices):
+            X = indices0[i]
+            if valid[X] == 0:
+                continue
+            Y = indices1[i]
+            if valid[Y] == 0:
+                continue
+            dist = Y - X
+            if states[Y] == 1:
+                muA = paramsAB[dist]
+                muB = paramsB[dist]
+            else:
+                muA = paramsA[dist]
+                muB = paramsAB[dist]
+            lambdaA = muA * expected[i]
+            lambdaB = muB * expected[i]
+            temp1 = counts[i] * log(lambdaA) - lambdaA
+            temp2 = counts[i] * log(lambdaB) - lambdaB
+            scores[X, 1] += temp1
+            scores[X, 0] += temp2
+            if states[X] == states[Y]:
+                scores[Y, 1] += temp1
+                scores[Y, 0] += temp2
+            else:
+                if states[X] == 1:
+                    muA = paramsAB[dist]
+                    muB = paramsB[dist]
+                else:
+                    muA = paramsA[dist]
+                    muB = paramsAB[dist]
+                lambdaA = muA * expected[i]
+                lambdaB = muB * expected[i]
+                scores[Y, 1] += counts[i] * log(lambdaA) - lambdaA
+                scores[Y, 0] += counts[i] * log(lambdaB) - lambdaB
+    return None
 
 
 

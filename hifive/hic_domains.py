@@ -53,6 +53,7 @@ class TAD( object ):
         self.__dict__[key] = value
         return None
 
+    """
     def find_BI_TADs(self, binsize, width, minbins, maxbins, chroms=[]):
         if isinstance(chroms, str):
             chroms = [chroms]
@@ -153,6 +154,7 @@ class TAD( object ):
                 i -= path[i]
         if not self.silent:
             print >> sys.stderr, ("\r%s\rFinished finding TADs\n") % (' ' * 80),
+    """
 
     def find_DI_TADs(self, binsize=20000, step=2500, window=500000, minsize=25000, maxsize=1500000, smoothing=6,
                      joindomains=True, chroms=[]):
@@ -381,9 +383,10 @@ class TAD( object ):
 class Compartment( object ):
     """
     """
-    def __init__(self, hic, binsize, chroms=[], out_fname=None, silent=False):
+    def __init__(self, hic, binsize, chroms=[], minreads=3, out_fname=None, silent=False):
         self.hic = hic
         self.binsize = binsize
+        self.minreads = minreads
         if 'mpi4py' in sys.modules.keys():
             self.comm = MPI.COMM_WORLD
             self.rank = self.comm.Get_rank()
@@ -401,163 +404,553 @@ class Compartment( object ):
                 storage = h5py.File(out_fname, 'a')
             else:
                 storage = None
-            needed = []
             if chroms == "" or (isinstance(chroms, list) and len(chroms) == 0):
                 chroms = hic.fends['chromosomes'][...]
             elif isinstance(chroms, str):
                 chroms = [chroms]
             self.chroms = chroms
-            for chrom in chroms:
-                if storage is None or ("%s.correlations" % chrom not in storage and
-                                       "%s.enrichments" % chrom not in storage):
-                    needed.append(chrom)
-            if len(needed) > 0:
-                node_ranges = numpy.round(numpy.linspace(0, len(needed), self.num_procs + 1)).astype(numpy.int32)
-                for i in range(1, self.num_procs):
-                    self.comm.send(needed[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
-                node_needed = needed[:node_ranges[1]]
-            else:
-                node_needed = []
-                for i in range(1, self.num_procs):
-                    self.comm.send([], dest=i, tag=11)
+            for i in range(1, self.num_procs):
+                self.comm.send(chroms, dest=i, tag=11)
         else:
-            node_needed = self.comm.recv(source=0, tag=11)
-        data = {}
-        self.positions = {}
+            self.chroms = self.comm.recv(source=0, tag=11)
         if hic.binned is None:
             chr_indices = hic.fends['chr_indices'][...]
+            fends = hic.fends['fends'][...]
         else:
             chr_indices = hic.fends['bin_indices'][...]
-        for chrom in node_needed:
-            if self.rank == 0 and not self.silent:
-                print >> sys.stderr, ("\r%s\rHeatmapping %s") % (' '*80, chrom),
+            fends = hic.fends['bins'][...]
+        if 'eigenv' not in self.__dict__.keys():
+            self.eigenv = {}
+            self.positions = {}
+        for chrom in self.chroms:
+            corrs = None
             chrint = hic.chr2int[chrom]
             startfend = chr_indices[chrint]
             while hic.filter[startfend] == 0:
                 startfend += 1
-            if hic.binned is None:
-                start = (hic.fends['fends']['mid'][startfend] / binsize) * binsize
-            else:
-                start = (hic.fends['bins']['mid'][startfend] / binsize) * binsize
+            start = (fends['mid'][startfend] / binsize) * binsize
             stopfend = chr_indices[chrint + 1]
             while hic.filter[stopfend - 1] == 0:
                 stopfend -= 1
-            if hic.binned is None:
-                stop = ((hic.fends['fends']['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
-            else:
-                stop = ((hic.fends['bins']['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
-            temp = hic.cis_heatmap(chrom, binsize=binsize / 2, start=start, stop=stop, datatype='enrichment',
-                                   arraytype='upper', returnmapping=True, silent=True)
-            temp1 = hic_binning.bin_cis_array(temp[0], temp[1], binsize, arraytype='upper', returnmapping=True,
-                                              silent=True, diagonal_included=(hic.binned is not None))
-            hic_binning.dynamically_bin_cis_array(temp[0], temp[1], temp1[0], temp1[1], minobservation=5, silent=True,
-                                                  diagonal_included=(hic.binned is not None))
-            indices = numpy.triu_indices(temp1[1].shape[0], int(hic.binned is None))
-            hm = numpy.zeros((temp1[1].shape[0], temp1[1].shape[0], 2), dtype=numpy.float32)
-            hm[indices[0], indices[1], :] = temp1[0]
-            hm[indices[1], indices[0], :] = temp1[0]
-            valid = numpy.where(numpy.sum(hm[:, :, 1], axis=0) > 0)[0]
-            hm = hm[valid, :, :][:, valid, :]
-            self.positions[chrom] = temp1[1][valid, :]
-            data[chrom] = hm
-        if self.rank == 0:
-            for i in range(1, self.num_procs):
-                data.update(self.comm.recv(source=i, tag=11))
-                self.positions.update(self.comm.recv(source=i, tag=11))
-            if storage is not None:
-                for chrom in data:
-                    storage.create_dataset(name="%s.counts" % chrom, data=data[chrom][:, :, 0])
-                    storage.create_dataset(name="%s.expected" % chrom, data=data[chrom][:, :, 1])
-                    where = numpy.where(data[chrom][:, :, 1] > 0)
-                    data[chrom][where[0], where[1], 0] = numpy.log(data[chrom][where[0], where[1], 0] /
-                                                                   data[chrom][where[0], where[1], 1])
-                    data[chrom] = data[chrom][:, :, 0]
-                    storage.create_dataset(name="%s.enrichments" % chrom, data=data[chrom])
-                    storage.create_dataset(name="%s.positions" % chrom, data=self.positions[chrom])
-        else:
-            self.comm.send(data, dest=0, tag=11)
-            del data
-            self.comm.send(self.positions, dest=0, tag=11)
-        if self.rank == 0:
-            for chrom in chroms:
-                if chrom not in data and "%s.correlations" % chrom not in storage:
-                    data[chrom] = storage["%s.enrichments" % chrom][...]
-                if chrom not in self.positions:
-                    self.positions[chrom] = storage["%s.positions" % chrom][...]
-            correlations = {}
-            for chrom in data:
-                if not self.silent:
-                    print >> sys.stderr, ("\r%s\rCorrelating %s") % (' '*80, chrom),
-                cdata = numpy.copy(data[chrom])
+            stop = ((fends['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
+            N = (stop - start) / binsize
+            if self.rank == 0:
+                if (storage is None or ('%s.eigenv' % chrom not in storage and
+                    '%s.correlations' % chrom not in storage)):
+                    indices = list(numpy.triu_indices(N, 1))
+                    if storage is None or '%s.dbinned_expected' % chrom not in storage:
+                        if storage is None or '%s.expected' not in storage:
+                            expected = self.hic.cis_heatmap(chrom, binsize=binsize, start=start, stop=stop,
+                                datatype='expected', arraytype='full', returnmapping=False, silent=True)[:, :, 1]
+                            valid = (numpy.sum(expected > 0, axis=1) > 0).astype(numpy.int32)
+                            positions = numpy.zeros((N, 2), dtype=numpy.int32)
+                            positions[:, 0] = start + numpy.arange(N) * binsize
+                            positions[:, 1] = positions[:, 0] + binsize
+                            if storage is not None:
+                                storage.create_dataset(name='%s.expected' % chrom, data=expected[indices])
+                                storage.create_dataset(name='%s.positions' % chrom, data=positions)
+                                storage.create_dataset(name='%s.valid' % chrom, data=valid)
+                        else:
+                            expected = numpy.zeros((N, N), dtype=numpy.float32)
+                            expected[indices] = storage['%s.expected' % chrom][...]
+                            expected[indices[1], indices[0]] = expected[indices]
+                            valid = storage['%s.valid' % chrom][...]
+                            positions = storage['%s.positions' % chrom][...]
+                        if storage is None or '%s.counts' not in storage:
+                            start_index = hic.data['cis_indices'][startfend]
+                            stop_index = hic.data['cis_indices'][stopfend]
+                            data = hic.data['cis_data'][start_index:stop_index, :].astype(numpy.int64)
+                            data = data[numpy.where(hic.filter[data[:, 0]] * hic.filter[data[:, 1]])[0], :]
+                            data[:, :2] = fends['mid'][data[:, :2]]
+                            data[:, :2] -= start
+                            data[:, :2] /= binsize
+                            counts = numpy.bincount(data[:, 0] * N + data[:, 1], weights=data[:, 2],
+                                                    minlength=(N * N)).reshape(N, N).astype(numpy.int32)
+                            counts[indices[1], indices[0]] = counts[indices]
+                            if storage is not None:
+                                storage.create_dataset(name='%s.counts' % chrom, data=counts[indices])
+                        else:
+                            counts = numpy.zeros((N, N), dtype=numpy.int32)
+                            counts[indices] = storage['%s.counts' % chrom][...]
+                            counts[indices[1], indices[0]] = counts[indices]
+                        for i in range(1, self.num_procs):
+                            self.comm.send(0, dest=i, tag=11)
+                        binned_c, binned_e = self._dynamically_bin(counts, expected, valid)
+                        if storage is not None:
+                            storage.create_dataset(name='%s.dbinned_expected' % chrom, data=binned_e[indices])
+                            storage.create_dataset(name='%s.dbinned_counts' % chrom, data=binned_c[indices])
+                    else:
+                        binned_c = numpy.zeros((N, N), dtype=numpy.int32)
+                        binned_c[indices] = storage['%s.dbinned_counts' % chrom][...]
+                        binned_c[indices[1], indices[0]] = binned_c[indices]
+                        binned_e = numpy.zeros((N, N), dtype=numpy.float32)
+                        binned_e[indices] = storage['%s.dbinned_expected' % chrom][...]
+                        binned_e[indices[1], indices[0]] = binned_e[indices]
+                        valid = storage['%s.valid' % chrom][...]
+                        positions = storage['%s.positions' % chrom][...]
+                        for i in range(1, self.num_procs):
+                            self.comm.send(1, dest=i, tag=11)
+                    corrs = self._find_correlations(binned_c, binned_e, valid)
+                    if storage is not None:
+                        storage.create_dataset(name='%s.correlations' % chrom,
+                                               data=corrs[numpy.triu_indices(numpy.sum(valid), 1)])
+                else:
+                    for i in range(1, self.num_procs):
+                        self.comm.send(-1, dest=i, tag=11)
+                if (corrs is None and storage is not None and
+                    '%s.eigenv' % chrom not in storage and
+                    '%s.correlations' % chrom in storage):
+                    valid = storage['%s.valid' % chrom][...]
+                    N = numpy.sum(valid)
+                    indices = numpy.triu_indices(N, 1)
+                    corrs = numpy.ones((N, N), dtype=numpy.float32)
+                    corrs[indices] = storage['%s.correlations' % chrom][...]
+                    corrs[indices[1], indices[0]] = corrs[indices]
+                    positions = storage['%s.positions' % chrom][...]
+                if storage is None or '%s.eigenv' % chrom not in storage:
+                    self.eigenv[chrom] = scipy.sparse.linalg.eigs(corrs, k=1)[1][:, 0]
+                    if storage is not None:
+                        storage.create_dataset(name="%s.eigenv" % chrom, data=self.eigenv[chrom])
+                    self.positions[chrom] = positions[numpy.where(valid)[0], :]
+                else:
+                    self.eigenv[chrom] = storage['%s.eigenv' % chrom][...]
+                    valid = storage['%s.valid' % chrom][...]
+                    self.positions[chrom] = storage['%s.positions' % chrom][...][numpy.where(valid)[0], :]
                 for i in range(1, self.num_procs):
-                    self.comm.send(1, dest=i, tag=11)
-                    self.comm.send(cdata, dest=i, tag=11)
-                corr = numpy.zeros(cdata.shape, dtype=numpy.float32)
-                self.find_correlations(cdata, corr)
-                if storage is not None:
-                    storage.create_dataset(name="%s.correlations" % chrom, data=corr)
-                correlations[chrom] = corr
-            for i in range(1, self.num_procs):
-                self.comm.send(0, dest=i, tag=11)
-        else:
-            task = self.comm.recv(source=0, tag=11)
-            while task == 1:
-                data = self.comm.recv(source=0, tag=11)
-                self.find_correlations(data)
-                task = self.comm.recv(source=0, tag=11)
+                    self.comm.send(self.eigenv[chrom], dest=i, tag=11)
+                    self.comm.send(self.positions[chrom], dest=i, tag=11)
+            else:
+                job = self.comm.recv(source=0, tag=11)
+                if job == 0:
+                    self._dynamically_bin()
+                if job >= 0:
+                    self._find_correlations()
+                self.eigenv[chrom] = self.comm.recv(source=0, tag=11)
+                self.positions[chrom] = self.comm.recv(source=0, tag=11)
         if self.rank == 0:
-            self.eigenv = {}
-            for chrom in chroms:
-                if chrom not in correlations:
-                    correlations[chrom] = storage["%s.correlations" % chrom][...]
-                self.eigenv[chrom] = scipy.sparse.linalg.eigs(correlations[chrom], k=1)[1][:, 0]
-                storage.create_dataset(name="%s.eigenv", data=self.eigenv[chrom])
             storage.close()
-            self.find_clusters()
-            if not self.silent:
-                print >> sys.stderr, ("\r%s\r") % (' '*80),
 
-    def find_correlations(self, data, correlations=None):
-        node_ranges = numpy.round(numpy.linspace(0, data.shape[0], self.num_procs + 1)).astype(numpy.int32)
-        means = (numpy.sum(data[node_ranges[self.rank]:node_ranges[self.rank + 1], :], axis=1) -
-            data[numpy.arange(node_ranges[self.rank], node_ranges[self.rank + 1]),
-            numpy.arange(node_ranges[self.rank], node_ranges[self.rank + 1])]) / (data.shape[0] - 1)
-        stds = (numpy.sum(data[node_ranges[self.rank]:node_ranges[self.rank + 1], :] ** 2, axis=1) -
-            data[numpy.arange(node_ranges[self.rank], node_ranges[self.rank + 1]),
-            numpy.arange(node_ranges[self.rank], node_ranges[self.rank + 1])] ** 2) / (data.shape[0] - 1)
-        stds = (stds - means ** 2) ** 0.5
-        data[node_ranges[self.rank]:node_ranges[self.rank + 1], :] -= means.reshape(-1, 1)
-        data[node_ranges[self.rank]:node_ranges[self.rank + 1], :] /= stds.reshape(-1, 1)
+    def _dynamically_bin(self, counts=None, expected=None, valid=None):
         if self.rank == 0:
+            if not self.silent:
+                print >> sys.stderr, ("\rDynamically binning"),
+            N = counts.shape[0]
+            node_ranges = numpy.round(numpy.linspace(0, N * (N - 1) / 2, self.num_procs + 1)).astype(numpy.int32)
+            indices = numpy.triu_indices(N, 1)
             for i in range(1, self.num_procs):
-                data[node_ranges[i]:node_ranges[i + 1], :] = self.comm.recv(source=i, tag=13)
+                self.comm.send(N, dest=i, tag=11)
+                self.comm.send(counts, dest=i, tag=13)
+                self.comm.send(expected, dest=i, tag=13)
+                self.comm.send(valid, dest=i, tag=13)
+                self.comm.send(indices[0][node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+                self.comm.send(indices[1][node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+            binned_c = numpy.zeros(counts.shape, dtype=numpy.int32)
+            binned_e = numpy.zeros(counts.shape, dtype=numpy.float32)
+            _hic_domains.dynamically_bin(counts, expected, binned_c, binned_e, valid,
+                indices[0][:node_ranges[1]].astype(numpy.int32), indices[1][:node_ranges[1]].astype(numpy.int32),
+                self.minreads)
             for i in range(1, self.num_procs):
-                self.comm.Send(data, dest=i, tag=13)
+                binned_c[indices[0][node_ranges[i]:node_ranges[i + 1]],
+                         indices[1][node_ranges[i]:node_ranges[i + 1]]] = self.comm.recv(source=i, tag=11)
+                binned_e[indices[0][node_ranges[i]:node_ranges[i + 1]],
+                         indices[1][node_ranges[i]:node_ranges[i + 1]]] = self.comm.recv(source=i, tag=11)
+            binned_c[indices[1], indices[0]] = binned_c[indices]
+            binned_e[indices[1], indices[0]] = binned_e[indices]
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\r") % (' ' * 80),
+            return binned_c, binned_e
         else:
-            self.comm.send(data[node_ranges[self.rank]:node_ranges[self.rank + 1], :], dest=0, tag=13)
-            self.comm.Recv(data, source=0, tag=13)
-        indices = numpy.triu_indices(data.shape[0], 1)
-        node_ranges = numpy.round(numpy.linspace(0, indices[0].shape[0], self.num_procs + 1)).astype(numpy.int32)
-        corr = numpy.zeros(node_ranges[self.rank + 1] - node_ranges[self.rank], dtype=numpy.float32)
-        for i in range(node_ranges[self.rank], node_ranges[self.rank + 1]):
-            a = indices[0][i]
-            b = indices[1][i]
-            if a > 0:
-                corr[i - node_ranges[self.rank]] += numpy.sum(data[a, :a] * data[b, :a])
-            if b - a > 1:
-                corr[i - node_ranges[self.rank]] += numpy.sum(data[a, (a + 1):b] * data[b, (a + 1):b])
-            if b < data.shape[0] - 1:
-                corr[i - node_ranges[self.rank]] += numpy.sum(data[a, (b + 1):] * data[b, (b + 1):])
+            N = self.comm.recv(source=0, tag=11)
+            counts = self.comm.recv(source=0, tag=13)
+            expected = self.comm.recv(source=0, tag=13)
+            valid = self.comm.recv(source=0, tag=13)
+            indices0 = self.comm.recv(source=0, tag=11)
+            indices1 = self.comm.recv(source=0, tag=11)
+            binned_c = numpy.zeros((N, N), dtype=numpy.int32)
+            binned_e = numpy.zeros((N, N), dtype=numpy.float32)
+            _hic_domains.dynamically_bin(counts, expected, binned_c, binned_e, valid, indices0.astype(numpy.int32),
+                            indices1.astype(numpy.int32), self.minreads)
+            self.comm.send(binned_c[indices0, indices1], dest=0, tag=11)
+            self.comm.send(binned_e[indices0, indices1], dest=0, tag=11)
+        return None
+
+    def _find_correlations(self, counts=None, expected=None, valid=None):
         if self.rank == 0:
-            correlations[indices[0][:node_ranges[1]], indices[1][:node_ranges[1]]] = corr
+            if not self.silent:
+                print >> sys.stderr, ("\rFinding correlations"),
+            valid2 = numpy.where(valid)[0]
+            M = valid2.shape[0]
+            data = numpy.ones((M, M), dtype=numpy.float32)
+            indices = numpy.triu_indices(M, 1)
+            data[indices] = counts[valid2, :][:, valid2][indices]
+            data[indices] /= expected[valid2, :][:, valid2][indices]
+            data[indices[1], indices[0]] = data[indices]
+            data = numpy.log(data)
+            data -= numpy.mean(data, axis=1).reshape(-1, 1)
+            data /= numpy.std(data, axis=1).reshape(-1, 1)
+            node_ranges = numpy.round(numpy.linspace(0, indices[0].shape[0], self.num_procs + 1)).astype(numpy.int32)
             for i in range(1, self.num_procs):
-                corr = self.comm.recv(source=i, tag=11)
+                self.comm.send(M, dest=i, tag=11)
+                self.comm.send(data, dest=i, tag=11)
+                self.comm.send(indices[0][node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+                self.comm.send(indices[1][node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+            indices0 = indices[0][:node_ranges[1]]
+            indices1 = indices[1][:node_ranges[1]]
+        else:
+            M = self.comm.recv(source=0, tag=11)
+            data = self.comm.recv(source=0, tag=11)
+            indices0 = self.comm.recv(source=0, tag=11)
+            indices1 = self.comm.recv(source=0, tag=11)
+        correlations = numpy.ones((M, M), dtype=numpy.float32)
+        for i in range(indices0.shape[0]):
+            correlations[indices0[i], indices1[i]] = numpy.mean(data[indices0[i], :] * data[indices1[i], :])
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
                 correlations[indices[0][node_ranges[i]:node_ranges[i + 1]],
-                             indices[1][node_ranges[i]:node_ranges[i + 1]]] = corr
-            correlations[numpy.arange(correlations.shape[0]), numpy.arange(correlations.shape[0])] = 1
+                      indices[1][node_ranges[i]:node_ranges[i + 1]]] = self.comm.recv(source=i, tag=11)
             correlations[indices[1], indices[0]] = correlations[indices]
+            if not self.silent:
+                print >> sys.stderr, ("\r%s\r") % (' ' * 80),
+            return correlations
         else:
-            self.comm.send(corr, dest=0, tag=11)
+            self.comm.send(correlations[indices0, indices1], dest=0, tag=11)
+        return None
+
+    def orient_eigenvectors(self, fname, storage_fname=None, higher='A'):
+        if self.rank != 0:
+            self.eigenv = self.comm.recv(source=0, tag=11)
+            self.positions = self.comm.recv(source=0, tag=11)
+            return None
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\rOrienting eigenvector scores") % (' '*80),
+        chroms = self.eigenv.keys()
+        scores = {}
+        for chrom in chroms:
+            scores[chrom] = []
+        for line in open(fname):
+            temp = line.rstrip('\n').split('\t')
+            if line[0] == '#':
+                continue
+            temp[0] = temp[0].strip('chr')
+            if temp[0] not in scores:
+                continue
+            scores[temp[0]].append((int(temp[1]), int(temp[2]), float(temp[3])))
+        temp = numpy.zeros(0, dtype=numpy.float64)
+        for chrom in chroms:
+            scores[chrom].sort()
+            scores[chrom] = numpy.array(scores[chrom], dtype=numpy.dtype([('start', numpy.int32),
+                                        ('stop', numpy.int32), ('score', numpy.float64)]))
+            temp = numpy.hstack((scores[chrom]['score'], temp))
+        if storage_fname is not None:
+            storage = h5py.File(storage_fname, 'a')
+        else:
+            storage = None
+        temp.sort()
+        minval = temp[int(0.01 * temp.shape[0])]
+        maxval = temp[int(0.99 * temp.shape[0])]
+        for chrom in chroms:
+            scores[chrom]['score'] = numpy.maximum(minval, numpy.minimum(maxval, numpy.array(scores[chrom]['score'])))
+            signs = numpy.sign(self.eigenv[chrom])
+            changes = numpy.r_[0, numpy.where(signs[1:] != signs[:-1])[0] + 1, signs.shape[0]]
+            bounds = numpy.zeros((changes.shape[0] - 1, 3), dtype=numpy.int32)
+            bounds[:, 0] = self.positions[chrom][changes[:-1], 0]
+            bounds[:, 1] = self.positions[chrom][changes[1:] - 1, 1]
+            bounds[:, 2] = signs[changes[:-1]]
+            A = numpy.zeros(2, dtype=numpy.float64)
+            B = numpy.zeros(2, dtype=numpy.float64)
+            mids = (scores[chrom]['start'] + scores[chrom]['stop']) / 2
+            starts = numpy.searchsorted(mids, bounds[:, 0])
+            stops = numpy.searchsorted(mids, bounds[:, 1])
+            where = numpy.where(bounds[:, 2] == 1)[0]
+            for i in where:
+                B[0] += numpy.sum(scores[chrom]['score'][starts[i]:stops[i]])
+                B[1] += numpy.sum(scores[chrom]['stop'][starts[i]:stops[i]] -
+                                  scores[chrom]['start'][starts[i]:stops[i]])
+            where = numpy.where(bounds[:, 2] == -1)[0]
+            for i in where:
+                A[0] += numpy.sum(scores[chrom]['score'][starts[i]:stops[i]])
+                A[1] += numpy.sum(scores[chrom]['stop'][starts[i]:stops[i]] -
+                                  scores[chrom]['start'][starts[i]:stops[i]])
+            if A[0] / A[1] > B[0] / B[1] and higher != 'A':
+                self.eigenv[chrom] = -self.eigenv[chrom]
+                if storage is not None:
+                    storage['%s.eigenv' % chrom][:] = self.eigenv[chrom]
+        for i in range(1, self.num_procs):
+            self.comm.send(self.eigenv, dest=i, tag=11)
+            self.comm.send(self.positions, dest=i, tag=11)
+        if storage is not None:
+            storage.close()
+        if not self.silent:
+            print >> sys.stderr, ("\r%s\r") % (' '*80),
+        return None
+
+    def find_likelihood_scores(self, fname=None, max_iterations=200, burnin_iterations=20, min_reads=10000, min_distance=1000000, min_interactions=5, update_fraction=0.5, chroms=[]):
+        if self.rank == 0:
+            if fname is not None:
+                storage = h5py.File(fname, 'a')
+            else:
+                storage = None
+            if len(chroms) == 0:
+                chroms = self.eigenv.keys()
+            elif isinstance(chroms, str) and chroms in self.eigenv:
+                chroms = [chroms]
+            else:
+                for i in range(len(chroms))[::-1]:
+                    if chroms[i] not in self.eigenv:
+                        del chroms[i]
+            chroms.sort()
+            for i in range(1, self.num_procs):
+                self.comm.send(chroms, dest=i, tag=11)
+        self.likelihood_scores = {}
+        minbin = min_distance / self.binsize
+        self.minreads = min_reads
+        self.update_fraction = max(0.0, min(1.0, update_fraction))
+        for chrom in chroms:
+            if self.rank == 0:
+                binsize = self.binsize
+                if storage is not None and '%s.counts' % chrom in storage:
+                    start = storage['%s.positions' % chrom][0, 0]
+                    N = valid.shape[0]
+                    counts = numpy.zeros((N, N), numpy.int32)
+                    counts[numpy.triu_indices(N, 1)] = storage['%s.counts' % chrom][...]
+                else:
+                    if self.hic.binned is None:
+                        chr_indices = self.hic.fends['chr_indices'][...]
+                        fends = self.hic.fends['fends'][...]
+                    else:
+                        chr_indices = self.hic.fends['bin_indices'][...]
+                        fends = self.hic.fends['bins'][...]
+                    chrint = self.hic.chr2int[chrom]
+                    startfend = chr_indices[chrint]
+                    while self.hic.filter[startfend] == 0:
+                        startfend += 1
+                    start = (fends['mid'][startfend] / binsize) * binsize
+                    stopfend = chr_indices[chrint + 1]
+                    while self.hic.filter[stopfend - 1] == 0:
+                        stopfend -= 1
+                    stop = ((fends['mid'][stopfend - 1] - 1) / binsize + 1) * binsize
+                    N = (stop - start) / binsize
+                    start_index = self.hic.data['cis_indices'][startfend]
+                    stop_index = self.hic.data['cis_indices'][stopfend]
+                    data = self.hic.data['cis_data'][start_index:stop_index, :].astype(numpy.int64)
+                    data = data[numpy.where(self.hic.filter[data[:, 0]] * self.hic.filter[data[:, 1]])[0], :]
+                    data[:, :2] = fends['mid'][data[:, :2]]
+                    data[:, :2] -= start
+                    data[:, :2] /= binsize
+                    counts = numpy.bincount(data[:, 0] * N + data[:, 1], weights=data[:, 2],
+                                            minlength=(N * N)).reshape(N, N).astype(numpy.int32)
+                counts += counts.T
+                N = counts.shape[0]
+                stop = start + N * binsize
+                signs = numpy.sign(self.eigenv[chrom])
+                changes = numpy.r_[0, numpy.where(signs[1:] != signs[:-1])[0] + 1, signs.shape[0]]
+                bounds = numpy.zeros((changes.shape[0] - 1, 3), dtype=numpy.int32)
+                bounds[:, 0] = self.positions[chrom][changes[:-1], 0]
+                bounds[:, 1] = self.positions[chrom][changes[1:] - 1, 1]
+                bounds[:, 2] = signs[changes[:-1]]
+                indices = numpy.searchsorted(numpy.linspace(start, stop, N + 1), numpy.r_[bounds[:, 0], bounds[-1, 1]])
+                states = numpy.zeros(N, dtype=numpy.int32)
+                for i in range(bounds.shape[0]):
+                    states[indices[i]:indices[i + 1]] = bounds[i, 2]
+                expected = self.hic.cis_heatmap(chrom, binsize=binsize, start=start, stop=stop,
+                                datatype='fend', arraytype='full', returnmapping=False, silent=True)[:, :, 1]
+                indices = numpy.triu_indices(N, min_distance / binsize)
+                valid = numpy.bincount(indices[0], weights=(counts[indices] > 0), minlength=N)
+                valid += numpy.bincount(indices[1], weights=(counts[indices] > 0), minlength=N)
+                valid = (valid >= min_interactions).astype(numpy.int32)
+                expected = expected[indices]
+                counts = counts[indices]
+                indices = list(indices)
+                indices[0] = indices[0].astype(numpy.int32)
+                indices[1] = indices[1].astype(numpy.int32)
+                node_ranges = numpy.round(numpy.linspace(0, indices[0].shape[0],
+                                                         self.num_procs + 1)).astype(numpy.int32)
+                for i in range(1, self.num_procs):
+                    self.comm.send(counts[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+                    self.comm.send(expected[node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+                    self.comm.send(indices[0][node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+                    self.comm.send(indices[1][node_ranges[i]:node_ranges[i + 1]], dest=i, tag=11)
+                    self.comm.send(valid, dest=i, tag=11)
+                    self.comm.send(states, dest=i, tag=11)
+                counts = counts[:node_ranges[1]]
+                expected = expected[:node_ranges[1]]
+                indices0 = indices[0][:node_ranges[1]]
+                indices1 = indices[1][:node_ranges[1]]
+                del indices
+            else:
+                counts = self.comm.recv(source=0, tag=11)
+                expected = self.comm.recv(source=0, tag=11)
+                indices0 = self.comm.recv(source=0, tag=11)
+                indices1 = self.comm.recv(source=0, tag=11)
+                valid = self.comm.recv(source=0, tag=11)
+                states = self.comm.recv(source=0, tag=11)
+            N = valid.shape[0]
+            valid1 = numpy.where(valid > 0)[0]
+            score_sums = numpy.zeros(N, dtype=numpy.float64)
+            new_states = numpy.copy(states)
+            new_scores = numpy.zeros(N, dtype=numpy.float64)
+            score_changes = numpy.zeros(N, dtype=numpy.float64)
+            new_score_changes = numpy.zeros(N, dtype=numpy.float64)
+            where = numpy.zeros(2)
+            iteration = 0
+            while iteration < burnin_iterations or (iteration < max_iterations and not where.shape[0] == 0):
+                prev_score_changes = score_changes
+                states = new_states
+                score_changes = new_score_changes
+                scores = new_scores
+                paramsA, paramsB, paramsAB = self._find_distance_relationship(counts, expected, states, valid,
+                                                                              indices0, indices1, minbin)
+                new_states, new_scores = self._optimize_bound_iteration(counts, expected, states, valid, indices0,
+                                                                        indices1, paramsA, paramsB, paramsAB)
+                if iteration >= burnin_iterations:
+                    score_sums += new_scores
+                where = valid1[numpy.where(states[valid1] != new_states[valid1])[0]]
+                new_score_changes = new_scores[where]
+                if where.shape[0] > 0 and self.rank == 0 and not self.silent:
+                    print >> sys.stderr, ("\nIteration: %i\tDifferences: %i\tDelta: %0.6f     ") % (iteration, where.shape[0], numpy.mean(numpy.abs(new_scores[where] - scores[where]))),
+                iteration += 1
+                if where.shape[0] == 0:
+                    score_sums = new_scores
+                    iteration = burnin_iterations
+                    break
+                if numpy.array_equal(prev_score_changes, new_score_changes):
+                    score_sums = scores + new_scores
+                    iteration = burnin_iterations + 1
+                    break
+            score_sums /= iteration - burnin_iterations + 1
+            self.likelihood_scores[chrom] = score_sums[valid1]
+            if self.rank == 0 and storage is not None:
+                if '%s.likelihood' % chrom not in storage:
+                    storage.create_dataset(name='%s.likelihood' % chrom, data=self.likelihood_scores[chrom])
+                else:
+                    storage['%s.likelihood' % chrom][:] = self.likelihood_scores[chrom]
+        if self.rank == 0 and storage is not None:
+            storage.close()
+        return None
+
+    def write_likelihood_scores(self, fname):
+        if self.rank > 0:
+            return None
+        outfile = open(fname, 'w')
+        chroms = self.likelihood_scores.keys()
+        chroms.sort()
+        for chrom in chroms:
+            for i in range(self.likelihood_scores[chrom].shape[0]):
+                print >> outfile, "%s\t%i\t%i\t%f" % (chrom, self.positions[chrom][i, 0], self.positions[chrom][i, 1],
+                                                      self.likelihood_scores[chrom][i])
+        outfile.close()
+        return None
+
+    def write_eigen_scores(self, fname):
+        if self.rank > 0:
+            return None
+        outfile = open(fname, 'w')
+        chroms = self.eigenv.keys()
+        chroms.sort()
+        for chrom in chroms:
+            for i in range(self.eigenv[chrom].shape[0]):
+                print >> outfile, "%s\t%i\t%i\t%f" % (chrom, self.positions[chrom][i, 0], self.positions[chrom][i, 1],
+                                                      self.eigenv[chrom][i])
+        outfile.close()
+        return None
+
+    def _find_distance_relationship(self, counts, expected, states, valid, indices0, indices1, minbin):
+        N = states.shape[0]
+        dist_counts = numpy.zeros((N, 3), dtype=numpy.int32)
+        dist_expected = numpy.zeros((N, 3), dtype=numpy.float64)
+        binsizes = numpy.zeros((N, 3), dtype=numpy.int32)
+        _hic_domains.find_distance_parameters(
+            counts,
+            expected,
+            valid,
+            states,
+            indices0,
+            indices1,
+            dist_counts,
+            dist_expected,
+            binsizes)
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                dist_counts += self.comm.recv(source=i, tag=11)
+                dist_expected += self.comm.recv(source=i, tag=11)
+                binsizes += self.comm.recv(source=i, tag=11)
+            distances = numpy.log(numpy.r_[0.5, numpy.arange(1, N)].astype(numpy.float64))
+            params = []
+            for i in range(3):
+                data = []
+                pos = minbin
+                c_sum = 0
+                e_sum = 0.0
+                d_sum = 0.0
+                n_sum = 0
+                while pos < N:
+                    c_sum += dist_counts[pos, i]
+                    e_sum += dist_expected[pos, i]
+                    n_sum += binsizes[pos, i]
+                    d_sum += distances[pos] * binsizes[pos, i]
+                    if c_sum >= self.minreads:
+                        data.append([d_sum / n_sum, numpy.log(c_sum / e_sum)])
+                        c_sum = 0
+                        e_sum = 0.0
+                        d_sum = 0.0
+                        n_sum = 0
+                    pos  += 1
+                if n_sum > 0 and e_sum > 0 and c_sum > self.minreads:
+                    data.append([d_sum / n_sum, numpy.log(c_sum / e_sum)])
+                data = numpy.array(data, dtype=numpy.float64)
+                slopes = (data[1:, 1] - data[:-1, 1]) / (data[1:, 0] - data[:-1, 0])
+                intercepts = data[1:, 1] - data[1:, 0] * slopes
+                indices = numpy.searchsorted(data[1:-1, 0], distances)
+                distance_parameters = numpy.exp(distances * slopes[indices] + intercepts[indices]).astype(numpy.float64)
+                params.append(distance_parameters)
+            for i in range(1, self.num_procs):
+                self.comm.send(params, dest=i, tag=11)
+        else:
+            self.comm.send(dist_counts, dest=0, tag=11)
+            self.comm.send(dist_expected, dest=0, tag=11)
+            self.comm.send(binsizes, dest=0, tag=11)
+            params = self.comm.recv(source=0, tag=11)
+        return params
+
+    def _optimize_bound_iteration(self, counts, expected, states, valid, indices0, indices1, paramsA, paramsB, paramsAB):
+        N = valid.shape[0]
+        scores = numpy.zeros((N, 2), dtype=numpy.float64)
+        _hic_domains.optimize_compartment_bounds(
+            counts,
+            expected,
+            valid,
+            states,
+            indices0,
+            indices1,
+            paramsA,
+            paramsB,
+            paramsAB,
+            scores)
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                scores += self.comm.recv(source=i, tag=11)
+            scores = scores[:, 0] - scores[:, 1]
+            temp_states = numpy.sign(scores)
+            valid1 = numpy.where(valid > 0)[0]
+            where2 = valid1[numpy.where(states[valid1] != temp_states[valid1])[0]]
+            temp = numpy.abs(numpy.copy(scores[where2]))
+            temp.sort()
+            new_states = numpy.copy(states)
+            if temp.shape[0] > 0:
+                cutoff = temp[int(numpy.floor((1.0 - self.update_fraction) * temp.shape[0]))]
+                where3 = where2[numpy.where(numpy.abs(scores[where2]) >= cutoff)[0]]
+                new_states[where3] = numpy.copy(temp_states[where3])
+            scores[numpy.where(valid == 0)] = numpy.nan
+            for i in range(1, self.num_procs):
+                self.comm.Send(scores, dest=i, tag=13)
+                self.comm.Send(new_states, dest=i, tag=13)
+        else:
+            self.comm.send(scores, dest=0, tag=11)
+            scores = numpy.zeros(N, dtype=numpy.float64)
+            new_states = numpy.zeros(N, dtype=numpy.int32)
+            self.comm.Recv(scores, source=0, tag=13)
+            self.comm.Recv(new_states, source=0, tag=13)
+        return new_states, scores
 
     def find_clusters(self):
         means = numpy.zeros(2, dtype=numpy.float64)
@@ -647,6 +1040,107 @@ class Boundary( object ):
         self.__dict__[key] = value
         return None
 
+    def find_BI_scores(self, binsize=10000, width=50000, window=250000, chroms=[]):
+        if isinstance(chroms, str):
+            chroms = [chroms]
+        if len(chroms) == 0:
+            chroms = list(self.hic.fends['chromosomes'][...])    
+        self.binsize = binsize
+        self.width = width
+        self.window = window
+        widthB = width / binsize
+        windowB = window / binsize
+        if 'scores' not in self.__dict__.keys():
+            self.scores = {}
+        for chrom in chroms:
+            chrint = self.hic.chr2int[chrom]
+            if 'binned' in self.hic.__dict__.keys() and self.hic['binned'] is not None:
+                fends = self.hic.fends['bins'][...]
+                chr_indices = self.hic.fends['bin_indices'][...]
+            else:
+                fends = self.hic.fends['fends'][...]
+                chr_indices = self.hic.fends['chr_indices'][...]
+            start_fend = chr_indices[chrint]
+            stop_fend = chr_indices[chrint + 1]
+            while self.hic.filter[start_fend] == 0:
+                start_fend += 1
+            while self.hic.filter[stop_fend - 1] == 0:
+                stop_fend -= 1
+            start = (fends['mid'][start_fend] / binsize) * binsize
+            stop = ((fends['mid'][stop_fend - 1] - 1) / binsize + 1) * binsize
+            N = (stop - start) / binsize
+            temp = self.hic.cis_heatmap(chrom, binsize=binsize, datatype='expected', arraytype='compact',
+                                        maxdistance=window, returnmapping=False)
+            if temp is None:
+                continue
+            temp = temp[:, :, 1]
+            expected = numpy.zeros((N, N), dtype=numpy.float32)
+            for i in range(N - 1):
+                expected[i, (i + 1):min(N, i + temp.shape[1] + 1)] = temp[i, :min(N - i - 1, temp.shape[1])]
+            expected += expected.T
+            start_index = self.hic.data['cis_indices'][start_fend]
+            stop_index = self.hic.data['cis_indices'][stop_fend]
+            data = self.hic.data['cis_data'][start_index:stop_index, :].astype(numpy.int64)
+            data = data[numpy.where(self.hic.filter[data[:, 0]] * self.hic.filter[data[:, 1]])[0], :]
+            data[:, :2] = fends['mid'][data[:, :2]]
+            data[:, :2] -= start
+            data[:, :2] /= binsize
+            counts = numpy.bincount(data[:, 0] * N + data[:, 1], weights=data[:, 2],
+                                    minlength=(N * N)).reshape(N, N).astype(numpy.int32)
+            counts += counts.T
+            M = N - widthB + 1
+            hm = numpy.zeros((M, M, 2), dtype=numpy.float32)
+            for i in range(widthB):
+                hm[:, :, 0] += counts[i:(M + i), :M]
+                hm[:, :, 1] += expected[i:(M + i), :M]
+            hm2 = numpy.copy(hm)
+            for i in range(1, widthB):
+                hm[:, :(M - i), :] += hm2[:, i:, :]
+                for j in range(widthB):
+                    hm[:, (M - i):, 0] += counts[j:(M + j), M:(M + i)]
+                    hm[:, (M - i):, 1] += expected[j:(M + j), M:(M + i)]
+            del counts
+            del expected
+            del hm2
+            N = hm.shape[1]
+            mapping = numpy.zeros((N, 2), dtype=numpy.int32)
+            mapping[:, 0] = numpy.arange(N) * binsize + start
+            mapping[:, 1] = numpy.arange(1, N + 1) * binsize + start
+            scores = []
+            for i in range(widthB, N):
+                if i - windowB < 0:
+                    start = i - (i / binsize) * binsize
+                else:
+                    start = i - windowB
+                if i + windowB > N:
+                    stop = i + ((N - i) / binsize) * binsize - widthB + 1
+                else:
+                    stop = i + windowB - widthB + 1
+                valid = numpy.r_[
+                            numpy.where((hm[i - widthB, start:(i - 2 * widthB + 1), 0] > 0) *
+                                        (hm[i, start:(i - 2 * widthB + 1), 0] > 0))[0] + start,
+                            numpy.where((hm[i - widthB, (i + widthB):stop, 0] > 0) *
+                                        (hm[i, (i + widthB):stop, 0] > 0))[0] + i + widthB]
+                if valid.shape[0] > 5:
+                    set1 = numpy.log(hm[i - widthB, valid, 0] / hm[i - widthB, valid, 1])
+                    set2 = numpy.log(hm[i, valid, 0] / hm[i, valid, 1])
+                    scores.append((mapping[i, 0], numpy.corrcoef(set1, set2)[0, 1]))
+            scores.sort()
+            scores = numpy.array(scores, dtype=numpy.dtype([('position', numpy.int32), ('score', numpy.float32)]))
+            self.scores[chrom] = scores
+        return None
+
+    def write_scores(self, fname):
+        chroms = self.scores.keys()
+        chroms.sort()
+        outfile = open(fname, 'w')
+        for chrom in chroms:
+            for i in self.scores[chrom].shape[0]:
+                if not numpy.isnan(self.scores[chrom]['score'][i]):
+                    print >> outfile, "%s\t%i\t%f" % (chrom, self.scores[chrom]['position'][i],
+                                                      self.scores[chrom]['score'][i])
+        outfile.close()
+
     def find_band_scores(self, chrom):
         temp = self.hic.cis_heatmap(chrom, binsize=self.step, datatype='fend', arraytype='compact',
                                     maxdistance=self.bands[-1, 1], returnmapping=True)
@@ -658,6 +1152,7 @@ class Boundary( object ):
         for i in range(scores.shape[1]):
             _hic_domains.find_band_score(hm, scores, self.bands[i, 0] / self.step, self.bands[i, 1] / self.step, i)
         return scores
+
 
 
 
