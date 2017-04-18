@@ -349,6 +349,8 @@ def add_fivec_heatmap_subparser(subparsers):
     parser.add_argument("-a", "--arraytype", dest="arraytype", default="full",
         help="The type of array layout to store data in ('compact' only valid for unbinned data). [default: %(default)s]",
         choices=["compact", "full"])
+    parser.add_argument("-F", "--format", dest="format", default="hdf5",
+        help="Format of output. [default: %(default)s]", choices=["hdf5", "txt", "npz"])
     parser.add_argument("-y", "--dynamically-bin", dest="dynamic", default=False, action="store_true",
         help="Dynamically bin heatmap.")
     parser.add_argument("-x", "--expansion-binsize", dest="expbinsize", default=10000, type=int,

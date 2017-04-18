@@ -1438,7 +1438,7 @@ class FiveC(object):
 
     def write_heatmap(self, filename, binsize, includetrans=True, datatype='enrichment', arraytype='full',
                       regions=[], dynamically_binned=False, minobservations=0,  searchdistance=0, expansion_binsize=0,
-                      removefailed=False):
+                      removefailed=False, format='hdf5'):
         """
         Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
@@ -1463,6 +1463,8 @@ class FiveC(object):
         :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
         :type expansion_binsize: int.
         :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
+        :param format: A string indicating whether to save heatmaps as text matrices ('txt'), an HDF5 file of numpy arrays ('hdf5'), or a numpy npz file ('npz').
+        :type format: str.
         :returns: None
 
         The following attributes are created within the hdf5 dictionary file. Arrays are accessible as datasets while the resolution is held as an attribute.
@@ -1478,7 +1480,11 @@ class FiveC(object):
                      * **N_by_M.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each region pair N and M if trans data are included, containing the expected counts for valid fend combinations. The chromosome name order specifies which axis corresponds to which region. If data are in the 'compact' format, both region index orders will be present.
         """
         history = self.history
-        history += "FiveC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', arraytype='%s', regions=%s, dynamically_binned=%s, minobservations=%i, searchdistance=%i, expansion_binsize=%i, removefailed=%s)" % (filename, binsize, includetrans, datatype, arraytype, str(regions), dynamically_binned, minobservations, searchdistance, expansion_binsize, removefailed)
+        history += "FiveC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', arraytype='%s', regions=%s, dynamically_binned=%s, minobservations=%i, searchdistance=%i, expansion_binsize=%i, removefailed=%s, format=%s)" % (filename, binsize, includetrans, datatype, arraytype, str(regions), dynamically_binned, minobservations, searchdistance, expansion_binsize, removefailed, format)
+        if format not in ['hdf5', 'txt', 'npz']:
+            if not self.silent:
+                print >> sys.stderr, ("Unrecognized output format. No data written.\n"),
+            return None
         if (regions is None or
                 (isinstance(regions, list) and
                 (len(regions) == 0 or
@@ -1488,10 +1494,10 @@ class FiveC(object):
         else:
             for i in range(len(regions)):
                 regions[i] = int(regions[i])
-        fivec_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
+        arrays = fivec_binning.write_heatmap_dict(self, filename, binsize, includetrans=includetrans,
                                          datatype=datatype, arraytype=arraytype,
                                          regions=regions, silent=self.silent, history=history,
                                          dynamically_binned=dynamically_binned, minobservations=minobservations,
                                          searchdistance=searchdistance, expansion_binsize=expansion_binsize,
-                                         removefailed=removefailed)
-        return None
+                                         removefailed=removefailed, format=format)
+        return arrays

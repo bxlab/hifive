@@ -10,7 +10,7 @@ except:
     pass
 
 from ..fivec import FiveC
-from ..plotting import plot_fivec_heatmap, plot_key
+from ..plotting import plot_fivec_dict, plot_key
 
 
 def run(args):
@@ -32,10 +32,11 @@ def run(args):
             print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
             return 1
     fivec = FiveC(args.project, 'r', silent=args.silent)
-    fivec.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans, arraytype=args.arraytype,
-                        datatype=args.datatype, regions=regions, dynamically_binned=args.dynamic,
-                        expansion_binsize=args.expbinsize, minobservations=args.minobs, searchdistance=args.search,
-                        removefailed=args.remove)
+    heatmaps = fivec.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans,
+                        arraytype=args.arraytype, datatype=args.datatype, regions=regions,
+                        dynamically_binned=args.dynamic, expansion_binsize=args.expbinsize,
+                        minobservations=args.minobs, searchdistance=args.search,
+                        removefailed=args.remove, format=args.format)
     if not args.image is None:
         kwargs = {}
         for arg in args.keywords:
@@ -68,7 +69,7 @@ def run(args):
                 kwargs['symmetricscaling'] = True
             else:
                 kwargs['symmetricscaling'] = False
-        img, minscore, maxscore = plot_fivec_heatmap(args.output, returnscale=True, silent=args.silent, **kwargs)
+        img, minscore, maxscore = plot_fivec_dict(heatmaps, returnscale=True, silent=args.silent, **kwargs)
         if not args.pdf:
             img_format = args.image.split('.')[-1].upper()
             if img_format not in ['PNG', 'TIF', 'JPG', 'JPEG']:

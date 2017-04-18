@@ -856,7 +856,8 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
 
 def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='enrichment',
                        regions=[], arraytype='full', dynamically_binned=False, minobservations=0,
-                       searchdistance=0, expansion_binsize=0, removefailed=False, **kwargs):
+                       searchdistance=0, expansion_binsize=0, removefailed=False, format='hdf5',
+                    **kwargs):
     """
     Create an h5dict file containing binned interaction arrays, bin positions, and an index of included regions.
 
@@ -883,12 +884,18 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     :param expansion_binsize: The size of bins to use for data to pull from when expanding dynamic bins. If set to zero, unbinned data is used.
     :type expansion_binsize: int.
     :param removefailed: If a non-zero 'searchdistance' is given, it is possible for a bin not to meet the 'minobservations' criteria before stopping looking. If this occurs and 'removefailed' is True, the observed and expected values for that bin are zero.
-    :returns: None
+    :param format: A string indicating whether to save heatmaps as text matrices ('txt'), an HDF5 file of numpy arrays ('hdf5'), or a numpy npz file ('npz').
+    :type format: str.
+    :returns: dict with 3D array (N by M by 2, third axis is observed and expected) and either 1 (binned/full) or 2 (compact) mapping arrays
     """
     if 'silent' in kwargs and kwargs['silent']:
         silent = True
     else:
         silent = False
+    if format not in ['hdf5', 'txt', 'npz']:
+        if not silent:
+            print >> sys.stderr, ("Unrecognized output format. No data written.\n"),
+        return None
     if binsize > 0:
         arraytype='full'
     elif dynamically_binned:
@@ -903,14 +910,10 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
         subprocess.call('rm %s' % filename, shell=True)
     if not silent:
         print >> sys.stderr, ("Creating binned heatmap...\n"),
-    output = h5py.File(filename, 'w')
+    heatmaps = {}
     # If regions not specified, fill list
     if len(regions) == 0:
         regions = list(numpy.arange(fivec.frags['regions'].shape[0]))
-    if binsize > 0:
-        output.attrs['resolution'] = binsize
-    else:
-        output.attrs['resolution'] = 'fragment'
     # Find cis heatmaps
     remove = []
     for region in regions:
@@ -934,17 +937,10 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
         if results is None or results[0].shape[0] == 0:
             remove.append(region)
             continue
-        output.create_dataset('%i.counts' % region, data=results[0][:, :, 0])
-        output.create_dataset('%i.expected' % region, data=results[0][:, :, 1])
-        if binsize > 0 or arraytype == 'full':
-            output.create_dataset('%i.positions' % region, data=results[1][:, :2])
-        else:
-            output.create_dataset('%i.forward_positions' % region, data=results[1][:, :2])
-            output.create_dataset('%i.reverse_positions' % region, data=results[2][:, :2])
+        heatmaps[(region,)] = results
     for region in remove:
         del regions[regions.index(region)]
     all_regions = fivec.frags['regions'][...]
-    output.create_dataset('regions', data=all_regions[regions][...])
     # If requested, find trans heatmaps
     if includetrans:
         for i in range(len(regions)-1):
@@ -961,16 +957,14 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
                         dynamically_bin_trans_array(expansion, exp_map1, exp_map2, binned, mapping1, mapping2,
                                                     minobservations=minobservations, searchdistance=searchdistance,
                                                     removefailed=removefailed, silent=silent)
-                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=binned[:, :, 0])
-                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=binned[:, :, 1])
+                        heatmaps[(regions[i], regions[j])] = binned
                         binned, mapping1, mapping2 = find_trans_signal(fivec, regions[j], regions[i], binsize=binsize,
                                                                        datatype=datatype, arraytype=arraytype,
                                                                        skipfiltered=True, silent=silent)
                         dynamically_bin_trans_array(expansion, exp_map1, exp_map2, binned, mapping1, mapping2,
                                                     minobservations=minobservations, searchdistance=searchdistance,
                                                     removefailed=removefailed, silent=silent)
-                        output.create_dataset('%s_by_%s.counts' % (regions[j], regions[i]), data=binned[:, :, 0])
-                        output.create_dataset('%s_by_%s.expected' % (regions[j], regions[i]), data=binned[:, :, 1])
+                        heatmaps[(regions[j], regions[i])] = binned
                     else:
                         binned, mapping1, mapping2 = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize,
                                                                        datatype=datatype, arraytype=arraytype,
@@ -978,27 +972,156 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
                         dynamically_bin_trans_array(expansion, exp_map1, exp_map2, binned, mapping1, mapping2,
                                                     minobservations=minobservations, searchdistance=searchdistance,
                                                     removefailed=removefailed, silent=silent)
-                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
-                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
+                        heatmaps[(regions[i], regions[j])] = binned
                 else:   
                     if arraytype == 'compact':
                         results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
                                                     arraytype=arraytype, skipfiltered=True, silent=silent)
-                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
-                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
+                        heatmaps[(regions[i], regions[j])] = results
                         results = find_trans_signal(fivec, regions[j], regions[i], binsize=binsize, datatype=datatype,
                                                     arraytype=arraytype, skipfiltered=True, silent=silent)
-                        output.create_dataset('%s_by_%s.counts' % (regions[j], regions[i]), data=results[:, :, 0])
-                        output.create_dataset('%s_by_%s.expected' % (regions[j], regions[i]), data=results[:, :, 1])
+                        heatmaps[(regions[j], regions[i])] = results
                     else:
                         results = find_trans_signal(fivec, regions[i], regions[j], binsize=binsize, datatype=datatype,
                                                     arraytype=arraytype, skipfiltered=True, silent=silent)
-                        output.create_dataset('%s_by_%s.counts' % (regions[i], regions[j]), data=results[:, :, 0])
-                        output.create_dataset('%s_by_%s.expected' % (regions[i], regions[j]), data=results[:, :, 1])
-    if 'history' in kwargs:
-        output.attrs['history'] = kwargs['history']
-    output.attrs['filetype'] = 'fivec_heatmap'
-    output.close()
+                        heatmaps[(regions[i], regions[j])] = results
+    if format == 'hdf5':
+        output = h5py.File(filename, 'w')
+        if binsize > 0:
+            output.attrs['resolution'] = binsize
+        else:
+            output.attrs['resolution'] = 'fragment'
+        output.create_dataset('regions', data=all_regions[regions][...])
+        for region, results in heatmaps.iteritems():
+            if len(region) == 1:
+                output.create_dataset('%i.counts' % region[0], data=results[0][:, :, 0].astype(numpy.int32))
+                output.create_dataset('%i.expected' % region[0], data=results[0][:, :, 1])
+                if binsize > 0 or arraytype == 'full':
+                    output.create_dataset('%i.positions' % region[0], data=results[1][:, :2])
+                else:
+                    output.create_dataset('%i.forward_positions' % region[0], data=results[1][:, :2])
+                    output.create_dataset('%i.reverse_positions' % region[0], data=results[2][:, :2])
+            else:
+                if arraytype == 'compact':
+                    output.create_dataset('%s_by_%s.counts' % (region[0], region[1]),
+                        data=binned[:, :, 0].astype(numpy.int32))
+                    output.create_dataset('%s_by_%s.expected' % (region[0], region[1]), data=binned[:, :, 1])
+        if 'history' in kwargs:
+            output.attrs['history'] = kwargs['history']
+        output.attrs['filetype'] = 'fivec_heatmap'
+        output.close()
+    elif format == 'npz':
+        arrays = {}
+        for region, data in heatmaps.iteritems():
+            if len(region) == 1:
+                arrays['%s.counts' % region[0]] = data[0][:, :, 0].astype(numpy.int32)
+                arrays['%s.expected' % region[0]] = data[0][:, :, 1]
+                enrichment = numpy.copy(data[0][:, :, 0])
+                where = numpy.where(data[0][:, :, 1] > 0)
+                enrichment[where] /= data[0][where[0], where[1], 1]
+                arrays['%s.enrichment' % region[0]] = enrichment
+                if binsize > 0 or arraytype == 'full':
+                    arrays['%i.positions' % region[0]] = data[1][:, :2]
+                else:
+                    arrays['%i.forward' % region[0]] = data[1][:, :2]
+                    arrays['%i.reverse' % region[0]] = data[2][:, :2]
+            else:
+                arrays['%i_by_%i.counts' % region] = data[0][:, :, 0].astype(numpy.int32)
+                arrays['%i_by_%i.expected' % region] = data[0][:, :, 1]
+                enrichment = numpy.copy(data[0][:, :, 0])
+                where = numpy.where(data[0][:, :, 1] > 0)
+                enrichment[where] /= data[0][where[0], where[1], 1]
+                arrays['%i_by_%i.enrichment' % region] = enrichment
+        arrays['regions'] = all_regions[regions][...]
+        numpy.savez(filename, **arrays)
+    else:
+        labels = {}
+        for region, data in heatmaps.iteritems():
+            if len(region) == 1:
+                if arraytype == 'compact':
+                    labels[region[0]] = [[], []]
+                    for i in range(data[1].shape[0]):
+                        labels[region[0]][0].append("chr%s:%i-%i" % (all_regions[region[0]]['chromosome'].lstrip('chr'), data[1][i, 0], data[1][i, 1]))
+                    for i in range(data[2].shape[0]):
+                        labels[region[0]][1].append("chr%s:%i-%i" % (all_regions[region[0]]['chromosome'].lstrip('chr'), data[2][i, 0], data[2][i, 1]))
+                else:
+                    labels[region[0]] = []
+                    for i in range(data[1].shape[0]):
+                        labels[region[0]].append("chr%s:%i-%i" % (all_regions[region[0]]['chromosome'].lstrip('chr'), data[1][i, 0], data[1][i, 1]))
+        for region, data in heatmaps.iteritems():
+            for datatype in ['counts', 'expected', 'enrichment']:
+                if len(region) == 1:
+                    if datatype == 'counts':
+                        data1 = data[0][:, :, 0].astype(numpy.int32)
+                    elif datatype == 'expected':
+                        data1 = data[0][:, :, 1]
+                    else:
+                        data1 = numpy.zeros((data[0].shape[0], data[0].shape[1]), dtype=numpy.float32)
+                        where = numpy.where(data[0][:, :, 1] > 0)
+                        data1[where] = data[0][where[0], where[1], 0] / data[0][where[0], where[1], 1]
+                    prefix = "%s_chr%s_%i-%i" % (filename, all_regions[region[0]]['chromosome'].lstrip('chr'),
+                                                 data[1][0, 0], data[1][-1, 1])
+                    output = open("%s.%s" % (prefix, datatype), 'w')
+                    if arraytype == 'compact':
+                        temp = ['\t']
+                        for label in labels[region[0]][1]:
+                            temp.append(label)
+                        print >> output, '\t'.join(temp)
+                        for i in range(len(labels[region[0]][0])):
+                            temp = [labels[region[0]][0][i]]
+                            for j in range(data1.shape[1]):
+                                temp.append(str(data1[i, j]))
+                            print >> output, '\t'.join(temp)
+                    else:
+                        temp = ['\t']
+                        for label in labels[region[0]]:
+                            temp.append(label)
+                        print >> output, '\t'.join(temp)
+                        for i in range(len(labels[region[0]])):
+                            temp = [labels[region[0]][i]]
+                            for j in range(data1.shape[1]):
+                                temp.append(str(data1[i, j]))
+                            print >> output, '\t'.join(temp)
+                else:
+                    if datatype == 'counts':
+                        data1 = data[:, :, 0].astype(numpy.int32)
+                    elif datatype == 'expected':
+                        data1 = data[:, :, 1]
+                    else:
+                        data1 = numpy.zeros((data.shape[0], data.shape[1]), dtype=numpy.float32)
+                        where = numpy.where(data[:, :, 1] > 0)
+                        data1[where] = data[where[0], where[1], 0] / data[where[0], where[1], 1]
+                    if arraytype == 'compact':
+                        prefix = "%s_chr%s_%i-%i_Forward_by_chr%s_%i-%i_Reverse" % (filename,
+                            all_regions[region[0]]['chromosome'].lstrip('chr'), heatmaps[(region[0],)][1][0, 0],
+                            heatmaps[(region[0],)][1][-1, 1], all_regions[region[1]]['chromosome'].lstrip('chr'),
+                            heatmaps[(region[1],)][2][0, 0], heatmaps[(region[1],)][2][-1, 1])
+                        output = open("%s.%s" % (prefix, datatype), 'w')
+                        temp = ['\t']
+                        for label in labels[region[1]][1]:
+                            temp.append(label)
+                        print >> output, '\t'.join(temp)
+                        for i in range(len(labels[region[0]][0])):
+                            temp = [labels[region[0]][0][i]]
+                            for j in range(data1.shape[1]):
+                                temp.append(str(data1[i, j]))
+                            print >> output, '\t'.join(temp)
+                    else:
+                        prefix = "%s_chr%s_%i-%i_by_chr%s_%i-%i" % (filename,
+                            all_regions[region[0]]['chromosome'].lstrip('chr'), heatmaps[(region[0],)][1][0, 0],
+                            heatmaps[(region[0],)][1][-1, 1], all_regions[region[1]]['chromosome'].lstrip('chr'),
+                            heatmaps[(region[1],)][1][0, 0], heatmaps[(region[1],)][1][-1, 1])
+                        output = open("%s.%s" % (prefix, datatype), 'w')
+                        temp = ['\t']
+                        for label in labels[region[1]]:
+                            temp.append(label)
+                        print >> output, '\t'.join(temp)
+                        for i in range(len(labels[region[0]])):
+                            temp = [labels[region[0]][i]]
+                            for j in range(data1.shape[1]):
+                                temp.append(str(data1[i, j]))
+                            print >> output, '\t'.join(temp)
+                output.close()
     if not silent:
         print >> sys.stderr, ("Creating binned heatmap...Done\n"),
-    return None
+    return heatmaps

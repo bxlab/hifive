@@ -439,6 +439,74 @@ class Fend(object):
         bins['mid'][:] = (bins['start'] + bins['stop']) / 2
         return [bins, chromosomes]
 
+
+    def add_hdf5_feature(self, name, filename, window):
+        """
+        Load feature from an hdf5 file, finding mean values for bases within some distance upstream of restriction sites specified by 'window'.
+
+        :param name: A name to associate with this feature. This will be the key in the fend numpy object as well as in the hdf5 file that feature data are loaded from.
+        :type name: str.
+        :param filename: The file path of the hdf5 file containing the feature data. Each chromosome should have a numpy array dataset named "CHR.FEATURE" with 'FEATURE' matching the parameter 'name'. Features should have one line per base and start at base 0. 
+        :type filename: str.
+        :param window: A maximum number of bases upstream of restriction sites to pull feature data from. If a fragment is shorter than the window, the full length of the fragment is used instead.
+        :type window: int.
+        :returns: None
+        """
+        infile = h5py.File(filename, 'r')
+        self['%s_window' % name] = window
+        if self.binned is not None:
+            scores = numpy.zeros(self.bins.shape[0], dtype=numpy.float64)
+            bins = self.bins
+            bin_indices = self.bin_indices
+            for i, chrom in enumerate(self.chromosomes):
+                if "%s.%s" % (chrom, name) in infile:
+                    track = infile["%s.%s" % (chrom, name)][...]
+                else:
+                    continue
+                for j in range(bin_indices[i], bin_indices[i + 1]):
+                    start1 = self.bins['start'][j]
+                    stop1 = self.bins['start'][j] + window
+                    start2 = self.bins['stop'][j] - window
+                    stop2 = self.bins['stop'][j]
+                    if stop1 >= start2:
+                        scores[j] = numpy.sum(track[start1:stop2]) / float(stop2 - start1)
+                    else:
+                        scores[j] = ((numpy.sum(track[start1:stop1]) + numpy.sum(track[start2:stop2])) /
+                                     float(stop1 + stop2 - start1 - start2))
+        else:
+            scores = numpy.zeros(self.fends.shape[0], dtype=numpy.float64)
+            bins = self.fends
+            bin_indices = self.chr_indices
+            for i, chrom in enumerate(self.chromosomes):
+                if "%s.%s" % (chrom, name) in infile:
+                    track = infile["%s.%s" % (chrom, name)][...]
+                else:
+                    continue
+                for j in range(bin_indices[i], bin_indices[i + 1]):
+                    if bins['orientation'][j]:
+                        start = max(self.bins['start'][j - 1], self.bins['stop'][j] - window)
+                        stop = self.bins['stop'][j]
+                    else:
+                        start = self.bins['start'][j]
+                        stop = min(self.bins['stop'][j + 1], self.bins['start'][j] + window)
+                    scores[j] = numpy.sum(track[start:stop]) / float(stop - start)
+        if numpy.sum(numpy.abs(scores)) == 0.0:
+            if self.verbose > 0:
+                print >> sys.stderr, ("No valid data appears to have been loaded. Not adding feature.\nIt is possible that the feature name doesn't match the key values in the file.\n"),
+            return None
+        dtypes = bins.dtype.descr
+        dtypes.append((name, numpy.float64))
+        new_bins = numpy.zeros(bins.shape[0], dtype=dtypes)
+        for label in bins.dtype.names:
+            new_bins[label] = bins[label]
+        new_bins[name] = scores
+        if self.binned is not None:
+            self.bins = new_bins
+        else:
+            self.fends = new_bins
+        return None
+
+
 if __name__ == '__main__':
     filename = sys.argv[1]
     fend = Fend('.'.join(filename.split('.')[:-1] + ['.hdf5']), 'w')

@@ -638,11 +638,172 @@ def plot_fivec_heatmap(filename, maxscore=None, minscore=None, symmetricscaling=
         return pilImage
 
 
+def plot_fivec_dict(array_dict, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
+                       regions=[], min_color="0000ff", mid_color="ffffff", max_color="ff0000",
+                       returnscale=False, **kwargs):
+    """
+    Fill in and bitmap ifrom a 5C heatmap dictionary.
+
+    :param array_dict: Dictionary containing 5C data arrays and either 1 or two 2D mapping arrays (full or compact, respectively) with tuples are region name or pairs as keys.
+    :type data: dict.
+    :param maxscore: A ceiling value to cutoff scores at for plot color.
+    :type maxscore: float
+    :param minscore: A floor value to cutoff scores at for plot color.
+    :type minscore: float
+    :param symmetricscaling: Indicates whether to recenter data for scaling or maintain scores about zero.
+    :type symmetricscaling: bool.
+    :param logged: Indicates whether to use log2 values of scores for color values.
+    :type logged: bool.
+    :param regions: If specified, only the indicated regions are plotted. Otherwise all regions present in the h5dict are plotted.
+    :type regions: list
+    :param min_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This variable is used to create a color gradient for plotting along with max_color and mid_color.
+    :type min_color: str.
+    :param mid_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the minimum plot value. This can be set to None to create a gradient ranging from min_color to max_color or to a hex color to create a divergent gradient.
+    :type mid_color: str.
+    :param max_color: This is a hex color code ("rrggbb" where each pair ranges from 00-ff) specifying the color associated with the maximum plot value. This variable is used to create a color gradient for plotting along with min_color and mid_color.
+    :type max_color: str.
+    :param returnscale: Indicates whether to return a list containing the bitmap, minimum score, and maximum score, or just the bitmap.
+    :type returnscale: bool.
+    :returns: :mod:`PIL` bitmap object and if requested, minimum and maximum scores.
+    """
+    if 'silent' in kwargs and kwargs['silent']:
+        silent = True
+    else:
+        silent = False
+    if 'PIL' not in sys.modules.keys():
+        if not silent:
+            print >> sys.stderr, ("The PIL module must be installed to use this function.")
+        return None
+    if not silent:
+        print >> sys.stderr, ("Plotting heatmap dict..."),
+    min_color = (int(min_color[:2], 16) / 255.0, int(min_color[2:4], 16) / 255.0, int(min_color[4:6], 16) / 255.0)
+    max_color = (int(max_color[:2], 16) / 255.0, int(max_color[2:4], 16) / 255.0, int(max_color[4:6], 16) / 255.0)
+    if mid_color is None:
+        mid_color = ((min_color[0] + max_color[0]) / 2.0, (min_color[0] + max_color[0]) / 2.0,
+                     (min_color[0] + max_color[0]) / 2.0)
+    else:
+        mid_color = (int(mid_color[:2], 16) / 255.0, int(mid_color[2:4], 16) / 255.0, int(mid_color[4:6], 16) / 255.0)
+    if len(regions) == 0:
+        regions = []
+        for key in array_dict.keys():
+            regions.append(key[0])
+            if len(key) > 1:
+                regions.append(key[1])
+        regions = list(set(regions))
+        regions.sort()
+    else:
+        for i in range(len(regions))[::-1]:
+            if (i,) not in array_dict:
+                if not silent:
+                    print >> sys.stderr, ("Region %i not in heatmap, skipping\n"),
+                del regions[i]
+    if len(regions) == 0:
+        if not silent:
+            print >> sys.stderr, ("No valid data found.\n"),
+        return None
+    if len(array_dict[(regions[0],)]) == 2:
+        starts = [0]
+        arraytype = 'full'
+    else:
+        starts = [[0, 0]]
+        arraytype = 'compact'
+    sizes = []
+    for region in regions:
+        if arraytype == 'full':
+            sizes.append(array_dict[(region,)][1].shape[0])
+            starts.append(starts[-1] + sizes[-1] + 1)
+        else:
+            sizes.append([array_dict[(region,)][1].shape[0],
+                          array_dict[(region,)][2].shape[0]])
+            starts.append([starts[-1][0] + sizes[-1][0] + 1, starts[-1][1] + sizes[-1][1] + 1])
+    sizes = numpy.array(sizes, dtype=numpy.int32)
+    starts = numpy.array(starts, dtype=numpy.int32)
+    if len(sizes.shape) == 1:
+        data = numpy.zeros((starts[-1] - 1, starts[-1] - 1, 2), dtype=numpy.float64)
+    else:
+        data = numpy.zeros((starts[-1, 0] - 1, starts[-1, 1] - 1, 2), dtype=numpy.float64)
+    for i in range(len(regions)):
+        if arraytype == 'full':
+            data[starts[i]:(starts[i + 1] - 1),
+                 starts[i]:(starts[i + 1]  - 1), :] = array_dict[(regions[i],)][0]
+        else:
+            data[starts[i, 0]:(starts[i + 1, 0] - 1),
+                 starts[i, 1]:(starts[i + 1, 1]  - 1), :] = array_dict[(regions[i],)][0]
+        for j in range(i + 1, len(regions)):
+            key = (regions[i], regions[j])
+            if key in array_dict:
+                if arraytype == 'full':
+                    data[starts[i]:(starts[i + 1] - 1), starts[j]:(starts[j + 1] - 1), :] = array_dict[key]
+                    data[starts[j]:(starts[j + 1] - 1),
+                         starts[i]:(starts[i + 1] - 1), :] = array_dict[key].transpose(1, 0, 2)
+                else:
+                    data[starts[i, 0]:(starts[i + 1, 0] - 1), starts[j, 1]:(starts[j + 1, 1] - 1), :] = array_dict[key]
+                    data[starts[j, 0]:(starts[j + 1, 0] - 1),
+                         starts[i, 1]:(starts[i + 1, 1] - 1), :] = array_dict[(regions[j], regions[i])]
+    where = numpy.where(data[:, :, 1] > 0)
+    data[where[0], where[1], 0] /= data[where[0], where[1], 1]
+    if logged:
+        where = numpy.where(data[:, :, 0] <= 0)
+        data[where[0], where[1], 1] = 0
+        where = numpy.where(data[:, :, 1] > 0)
+        data[where[0], where[1], 0] = numpy.log2(data[where[0], where[1], 0])
+    data[where[0], where[1], 1] = 1
+    if maxscore is None:
+        maxscore = numpy.amax(data[where[0], where[1], 0])
+    if minscore is None:
+        minscore = numpy.amin(data[where[0], where[1], 0])
+    if symmetricscaling:
+        maxscore = max(abs(maxscore), abs(minscore))
+        minscore = -maxscore
+        data[where[0], where[1], 0] /= maxscore
+    else:
+        data[where[0], where[1], 0] -= minscore
+        data[where[0], where[1], 0] /= (maxscore - minscore) * 0.5
+        data[where[0], where[1], 0] -= 1.0
+    data = numpy.minimum(1.0, numpy.maximum(-1.0, data))
+    where1 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] >= 0))
+    where2 = numpy.where((data[:, :, 1] == 1) * (data[:, :, 0] < 0))
+    temp0 = data[where1[0], where1[1], 0]
+    temp1 = 1.0 - temp0
+    data[where1[0], where1[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * max_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * max_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * max_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    temp0 = -data[where2[0], where2[1], 0]
+    temp1 = 1.0 - temp0
+    data[where2[0], where2[1], 0] = (255.0 * 256.0 ** 3.0 +
+        numpy.round(255 * (temp0 * min_color[0] + temp1 * mid_color[0])) +
+        numpy.round(255 * (temp0 * min_color[1] + temp1 * mid_color[1])) * 256.0 +
+        numpy.round(255 * (temp0 * min_color[2] + temp1 * mid_color[2])) * 256.0 ** 2.0)
+    data = numpy.round(data).astype(numpy.uint32)
+    img = numpy.empty((data.shape[0], data.shape[1]), dtype=numpy.uint32)
+    img.shape = (img.shape[1], img.shape[0])
+    img[:, :] = int('ff999999', 16)
+    where = numpy.where(data[:, :, 1] > 0)
+    img[where[1], where[0]] = data[where[0], where[1], 0]
+    black = int('ff000000', 16)
+    if len(sizes.shape) == 1:
+        for i in range(1, starts.shape[0] - 1):
+            img[starts[i] - 1, :] = black
+            img[:, starts[i] - 1] = black
+    else:
+        for i in range(1, starts.shape[0] - 1):
+            img[starts[i, 1] - 1, :] = black
+            img[:, starts[i, 0] - 1] = black
+    pilImage = Image.frombuffer('RGBA', (data.shape[0], data.shape[1]), img, 'raw', 'RGBA', 0, 1)
+    if not silent:
+        print >> sys.stderr, ("Done\n"),
+    if returnscale:
+        return [pilImage, minscore, maxscore]
+    else:
+        return pilImage
+
+
 def plot_fivec_compact_heatmap_dict(filename, maxscore=None, minscore=None, symmetricscaling=True, logged=True,
                                     regions=[], min_color="0000ff", mid_color="ffffff", max_color="ff0000",
                                     returnscale=False, **kwargs):
     """
-    Fill in and rescale bitmap in a compact from a 5C heatmap h5dict file.
+    Fill in and rescale bitmap in a compact format from a 5C heatmap h5dict file.
 
     This plots the data in a 5C compact format such that the rows correspond to positive-strand primers and columns correspond to negative-strand primers.
 
