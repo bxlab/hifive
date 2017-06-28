@@ -29,7 +29,7 @@ import libraries._hic_binning as _hic_binning
 import libraries._hic_interactions as _hic_interactions
 
 def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=None, startfend=None, stopfend=None,
-                    datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
+                    datatype='enrichment', arraytype='upper', maxdistance=0, skipfiltered=False, returnmapping=False,
                     proportional=False, includediagonal=False, **kwargs):
     """
     Create an array of format 'arraytype' and fill with data requested in 'datatype'.

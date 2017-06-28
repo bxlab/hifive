@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+
+import sys
+import glob
+import argparse
+
+import h5py
+import numpy
+
+def main():
+    parser = generate_parser()
+    args = parser.parse_args()
+    infile = h5py.File(args.input, 'r')
+    resolutions = infile['resolutions'][...]
+    chroms = infile['chromosomes'][...]
+    data = load_data(infile, chroms, resolutions)
+    infile.close()
+    results = find_results(data)
+    write_results(results, resolutions, chroms, args)
+
+def load_data(infile, chroms, resolutions):
+    starts = infile['starts'][...]
+    chromosomes = infile['chromosomes'][...]
+    data = {}
+    for res in resolutions:
+        data[res] = {}
+        for i, chrom in enumerate(chromosomes):
+            if chrom not in chroms:
+                continue
+            start = (starts[i] / res) * res
+            dist = infile['dist.%s.%i' % (chrom, res)][...]
+            valid_rows = infile['valid.%s.%i' % (chrom, res)][...]
+            corr = infile['corr.%s.%i' % (chrom, res)][...]
+            valid = numpy.zeros(corr.shape, dtype=numpy.bool)
+            N, M = corr.shape
+            valid = numpy.zeros((N, M), dtype=numpy.int32)
+            for i in range(min(N - 1, M)):
+                P = N - i - 1
+                valid[:P, i] = valid_rows[(i + 1):] * valid_rows[:P]
+            valid[numpy.where((numpy.abs(dist) == numpy.inf) | (numpy.abs(corr) == numpy.inf))] = 0
+            data[res][chrom] = [corr, dist, corr * dist, valid]
+    return data
+
+def find_results(data):
+    resolutions = data.keys()
+    resolutions.sort()
+    chroms = data[resolutions[0]].keys()
+    chroms.sort()
+    results = numpy.zeros((len(resolutions), len(chroms) + 1), dtype=numpy.float64)
+    for i, res in enumerate(resolutions):
+        temp = numpy.zeros(4, dtype=numpy.float64)
+        for j, chrom in enumerate(chroms):
+            where = numpy.where(data[res][chrom][3])
+            if where[0].shape[0] == 0:
+                continue
+            dist = numpy.sum(data[res][chrom][1][where])
+            corr = numpy.sum(data[res][chrom][0][where])
+            corrdist = numpy.sum(data[res][chrom][2][where])
+            N = where[0].shape[0]
+            if N == 0:
+                continue
+            results[i, j] = corrdist / dist - corr / N
+            temp += [corrdist, dist, corr, N]
+        results[i, -1] = temp[0] / temp[1] - temp[2] / temp[3]
+    return results
+
+def write_results(results, resolutions, chroms, args):
+    resolutions.sort()
+    chroms.sort()
+    output = open(args.output, 'w')
+    temp = "Resolution\tAll"
+    for chrom in chroms:
+        temp += "\t%s" % chrom
+    print >> output, temp
+    for r, res in enumerate(resolutions):
+        temp = [str(res), str(results[r, -1])]
+        for i in range(results.shape[1] - 1):
+            temp.append(str(results[r, i]))
+        print >> output, '\t'.join(temp)
+    output.close()
+
+def generate_parser():
+    """Generate an argument parser."""
+    description = "%(prog)s -- Find a quality score for a HiC dataset"
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument(dest="input", type=str, action='store', help="Quasar file name")
+    parser.add_argument(dest="output", type=str, action='store', help="Results file name")
+    return parser
+
+if  __name__ == "__main__":
+    main()

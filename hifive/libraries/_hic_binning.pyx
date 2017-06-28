@@ -463,30 +463,30 @@ def find_cis_upper_expected(
                                 signal[index1 + m, 1] += value
         else:
             for j in range(num_bins - 1 + diag):
-                index = j * (num_bins - 1) - j * (j + 1 - diag2) / 2 - 1 + diag
+                index = j * (num_bins - 1) - (j * (j + 1 - diag2)) / 2 - 1 + diag
                 for k in range(j + 1 - diag, num_bins):
                     signal[index + k, 1] += correction_sums[j] * correction_sums[k]
             if diag == 1:
                 for j in range(num_bins):
-                    index = j * num_bins - j * (j - 1) / 2
+                    index = j * num_bins - (j * (j - 1)) / 2
                     signal[index, 1] /= 2.0
             for fend1 in range(num_fends - 1):
                 map1 = mapping[fend1]
                 if map1 == -1:
                     continue
-                index = map1 * (num_bins - 1) - map1 * (map1 + 1 - diag2) / 2 - 1 + diag
+                index = map1 * (num_bins - 1) - (map1 * (map1 + 1 - diag2)) / 2 - 1 + diag
                 map2 = mapping[fend1 + 1]
-                if diag == 1 or map2 > map1:
+                if map2 >= 0 and (diag == 1 or map2 > map1):
                     signal[index + map2, 1] -= corrections[fend1] * corrections[fend1 + 1]
                 if (fend1 + startfend) % 2 == 0 and fend1 + 3 < num_fends:
                     map2 = mapping[fend1 + 3]
-                    if diag == 1 or map2 > map1:
+                    if map2 >= 0 and (diag == 1 or map2 > map1):
                         signal[index + map2, 1] -= corrections[fend1] * corrections[fend1 + 3]
             if diag == 1:
                 for fend1 in range(num_fends):
                     map1 = mapping[fend1]
                     if map1 != -1:
-                        index = fend1 * num_bins - fend1 * (fend1 - 1) / 2
+                        index = map1 * num_bins - map1 * (map1 - 1) / 2
                         signal[index, 1] -= corrections[fend1] * corrections[fend1] / 2.0
     return None
 

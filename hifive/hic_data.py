@@ -1141,8 +1141,8 @@ class HiCData(object):
                 mapped_fends[:, 0] = numpy.searchsorted(self.cuts[j], data[i][j][:, 0])
                 mapped_fends[:, 1] = numpy.searchsorted(self.cuts[i], data[i][j][:, 1])
                 # make sure coordinates are within first and last cutsites
-                valid = numpy.where((mapped_fends[:, 0] > 0) * (mapped_fends[:, 0] < self.cuts[j].shape[0]) *
-                                    (mapped_fends[:, 1] > 0) * (mapped_fends[:, 1] < self.cuts[i].shape[0]))[0]
+                valid = numpy.where((mapped_fends[:, 0] > 0) & (mapped_fends[:, 0] < self.cuts[j].shape[0]) &
+                                    (mapped_fends[:, 1] > 0) & (mapped_fends[:, 1] < self.cuts[i].shape[0]))[0]
                 if skip_duplicate_filtering:
                     self.stats['out_of_bounds'] += numpy.sum(data[i][j][:, 2]) - numpy.sum(data[i][j][valid, 2])
                 else:
@@ -1223,15 +1223,15 @@ class HiCData(object):
                     print >> sys.stderr, ("\rMapping bins for %s by %s") % (chroms[i].ljust(10), chroms[j].ljust(10)),
                 starts = numpy.searchsorted(bins['start'][bin_indices[j]:bin_indices[j + 1]],
                                             data[i][j][:, 0], side='right') - 1
-                stops = numpy.searchsorted(bins['stop'][bin_indices[j]:bin_indices[j + 1]], data[i][j][:, 0])
+                stops = numpy.searchsorted(bins['stop'][bin_indices[j]:bin_indices[j + 1]], data[i][j][:, 0], side='right')
                 valid = numpy.where(starts == stops)[0]
                 mapped_bins[valid, 0] = starts[valid]
                 starts = numpy.searchsorted(bins['start'][bin_indices[i]:bin_indices[i + 1]],
                                             data[i][j][:, 1], side='right') - 1
-                stops = numpy.searchsorted(bins['stop'][bin_indices[i]:bin_indices[i + 1]], data[i][j][:, 1])
+                stops = numpy.searchsorted(bins['stop'][bin_indices[i]:bin_indices[i + 1]], data[i][j][:, 1], side='right')
                 valid = numpy.where(starts == stops)[0]
                 mapped_bins[valid, 1] = starts[valid]
-                valid = numpy.where((mapped_bins[:, 0] >= 0) * (mapped_bins[:, 1] >= 0))[0]
+                valid = numpy.where((mapped_bins[:, 0] >= 0) & (mapped_bins[:, 1] >= 0))[0]
                 if skip_duplicate_filtering:
                     self.stats['out_of_bounds'] += numpy.sum(data[i][j][:, 2]) - numpy.sum(data[i][j][valid, 2])
                 else:
@@ -1240,7 +1240,7 @@ class HiCData(object):
                 if i == j and maxinsert is not None:
                     distances = numpy.zeros(data[i][j].shape[0], dtype=numpy.int32)
                     distances[valid] = data[i][j][valid, 1] - data[i][j][valid, 0]
-                    valid1 = numpy.where((distances[valid] > maxinsert) + (signs[valid, 0] == signs[valid, 1]))[0]
+                    valid1 = numpy.where((distances[valid] > maxinsert) | (signs[valid, 0] == signs[valid, 1]))[0]
                     if skip_duplicate_filtering:
                         self.stats['insert_size'] += (numpy.sum(data[i][j][valid, 2]) -
                                                       numpy.sum(data[i][j][valid[valid1], 2]))
