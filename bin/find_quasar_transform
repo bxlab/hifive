@@ -31,10 +31,11 @@ def main():
             for i in range(1, 23):
                 if numpy.where(chromosomes == str(i))[0].shape[0] > 0:
                     chroms.append(str(i))
-            if numpy.where(chromosomes == 'X')[0].shape[0] > 0:
-                chroms.append('X')
+            for i in ['X', '2L', '2R', '3L', '3R']:
+                if numpy.where(chromosomes == str(i))[0].shape[0] > 0:
+                    chroms.append(str(i))
         else:
-            for chrom in args.chroms:
+            for chrom in args.chroms.split(','):
                 if numpy.where(chromosomes == chrom.strip('chr'))[0].shape[0] > 0:
                     chroms.append(chrom.strip('chr'))
         args.chroms = chroms
@@ -83,15 +84,15 @@ def main():
         if rank == 0:
             print >> sys.stderr, ("\r%s\r") % (' ' * 120),
         return None
-    chrom_ranges = numpy.round(numpy.linspace(0, len(args.chroms), num_procs + 1)).astype(numpy.int32)
+    args.chrom_ranges = numpy.round(numpy.linspace(0, len(args.chroms), num_procs + 1)).astype(numpy.int32)
     raw_counts = {}
     if rank == 0:
         print >> sys.stderr, ("\r%s\rTransferring counts") % (' ' * 120),
-        for i in range(chrom_ranges[1]):
+        for i in range(args.chrom_ranges[1]):
             chrom = args.chroms[i]
             raw_counts[chrom] = raw[indices[i]:indices[i + 1], :]
         for i in range(1, num_procs):
-            for j in range(chrom_ranges[i], chrom_ranges[i + 1]):
+            for j in range(args.chrom_ranges[i], args.chrom_ranges[i + 1]):
                 chrom = args.chroms[j]
                 comm.send(indices[j + 1] - indices[j], dest=i, tag=1)
                 comm.Send(raw[indices[j]:indices[j + 1], :], dest=i, tag=2)
@@ -100,7 +101,7 @@ def main():
         del raw
     else:
         mids = {}
-        for i in range(chrom_ranges[rank], chrom_ranges[rank + 1]):
+        for i in range(args.chrom_ranges[rank], args.chrom_ranges[rank + 1]):
             chrom = args.chroms[i]
             N = comm.recv(source=0, tag=1)
             raw_counts[chrom] = numpy.zeros((N, 3), dtype=numpy.int64)
@@ -120,16 +121,18 @@ def main():
         if rank == 0:
             print >> sys.stderr, ("\r%s\rResolution %i - Normalizing counts") % (' ' * 120, res),
         for chrom in raw_counts:
-            norm, dist, valid_rows = normalize(raw_counts[chrom], mids[chrom], res, args.width)
+            norm, dist, valid_rows = normalize(chrom, args, raw_counts[chrom], mids[chrom], res, args.width)
             dists[chrom] = dist
             norms[chrom] = norm
             valids[chrom] = valid_rows
         if rank == 0:
             for i in range(1, num_procs):
                 transfer_dict(dists, 0, i)
+                transfer_dict(norms, 0, i)
                 transfer_dict(valids, 0, i)
         else:
             transfer_dict(dists, 0, rank)
+            transfer_dict(norms, 0, rank)
             transfer_dict(valids, 0, rank)
             dists = None
 
@@ -137,45 +140,9 @@ def main():
         for i, chrom in enumerate(args.chroms):
             if rank == 0:
                 print >> sys.stderr, ("\r%s\rResolution %i - Correlating chrom %s") % (' ' * 120, res, chrom),
-            source = numpy.searchsorted(chrom_ranges, i, side='right') - 1
-            if rank == source:
-                norm = norms[chrom]
-                valid_rows = valids[chrom]
-                if norm is not None:
-                    N = norm.shape[0]
-                else:
-                    N = None
+                corrs[chrom] = find_correlations(args, norms[chrom], valids[chrom])
             else:
-                N = None
-            N = comm.bcast(N, root=source)
-            if N is None:
-                if rank == 0:
-                    corrs[chrom] = None
-                continue
-            if rank != source:
-                norm = numpy.zeros((N, N), dtype=numpy.float64)
-                valid_rows = numpy.zeros(N, dtype=numpy.bool)
-            comm.Bcast(norm, root=source)
-            comm.Bcast(valid_rows, root=source)
-            node_ranges = numpy.round(numpy.linspace(0, N, num_procs + 1)).astype(numpy.int32)
-            M = node_ranges[rank + 1] - node_ranges[rank]
-            corr = numpy.zeros((M, min(N, args.width)), dtype=numpy.float64)
-            for j in range(node_ranges[rank], node_ranges[rank + 1]):
-                X = j - node_ranges[rank]
-                if not valid_rows[j]:
-                    continue
-                for k in range(j + 1, min(j + corr.shape[1] + 1, N)):
-                    if not valid_rows[k]:
-                        continue
-                    Y = k - j - 1
-                    corr[X, Y] = numpy.mean(norm[j, valid_rows] * norm[k, valid_rows])
-            if rank == 0:
-                corrs[chrom] = numpy.zeros((N, min(N, args.width)), dtype=numpy.float64)
-                corrs[chrom][:node_ranges[1], :] = corr
-                for j in range(1, num_procs):
-                    comm.Recv(corrs[chrom][node_ranges[j]:node_ranges[j + 1], :], source=j, tag=9)
-            else:
-                comm.Send(corr, dest=0, tag=9)
+                find_correlations(args)
 
         # write resulting matrices to hdf5 file
         if rank == 0:
@@ -190,6 +157,8 @@ def main():
                     outfile.create_dataset(name="corr.%s.%i" % (chrom, res), data=corrs[chrom])
             outfile.close()
     if rank == 0:
+        #print_hm(corrs['1'], valids['1'], compact=True, logged=False).save('%s_corrs.png' % args.output.replace('.quasar',''))
+        #print_hm(corrs['1']*dists['1'], valids['1'], compact=True, logged=False).save('%s_trans.png' % args.output.replace('.quasar',''))
         print >> sys.stderr, ("\r%s\r") % (' ' * 120),
     return None
 
@@ -262,7 +231,8 @@ def downsample(data, indices, target_count, rng=None):
     new_data = new_data[numpy.where(new_data[:, 2] > 0)[0], :]
     return new_data, new_indices
 
-def normalize(raw, mids, binsize, width):
+def normalize(chrom, args, raw, mids, binsize, width):
+    # convert into square matrix
     start = (mids[0] / binsize) * binsize
     stop = ((mids[-1] - 1) / binsize + 1) * binsize
     N = ((stop - start) / binsize).astype(numpy.int64)
@@ -275,9 +245,12 @@ def normalize(raw, mids, binsize, width):
     data[indices[1], indices[0]] = data[indices]
     data[numpy.arange(N), numpy.arange(N)] *= 2
     data = data.astype(numpy.float64)
+
+    # filter rows with too few observations
     row_counts = numpy.bincount(mapping, minlength=N)
     prev_valid_rows = N + 1
-    valid_rows = numpy.sum(data > 0, axis=1) > 1
+    # we need several non-zero observations for finding correlations
+    valid_rows = numpy.sum(data > 0, axis=1) >= 5
     while prev_valid_rows > numpy.sum(valid_rows):
         data[numpy.logical_not(valid_rows), :] = 0
         data[:, numpy.logical_not(valid_rows)] = 0
@@ -285,56 +258,80 @@ def normalize(raw, mids, binsize, width):
         valid_rows = numpy.sum(data > 0, axis=1) > 1
     if prev_valid_rows == 0:
         return None, None, None
-    data /= numpy.maximum(1, row_counts).reshape(-1, 1)
-    data /= numpy.maximum(1, row_counts).reshape(1, -1)
-    dist = numpy.copy(data)
+
+    # find distance dependent signal
+    bg = numpy.ones(N, dtype=numpy.float64)
     for i in range(N):
         temp1 = numpy.arange(N - i)
         temp2 = numpy.arange(i, N)
-        bg = numpy.sum(data[temp1, temp2])
-        count = float(numpy.sum(valid_rows[temp1] & valid_rows[temp2]))
-        if bg > 0:
-            dist[temp1, temp2] /= bg / count
-            if i > 0:
-                dist[temp2, temp1] = dist[temp1, temp2]
-    corrections = numpy.ones(numpy.sum(valid_rows), dtype=numpy.float64)
-    temp = dist[valid_rows, :][:, valid_rows]
-    where = numpy.where(temp > 0)
-    temp = temp[where]
-    change = 1.0
-    iteration = 0
-    while change > 0.01 and iteration < 100:
-        weights1 = temp / corrections[where[0]]
-        weights2 = temp / corrections[where[1]]
-        new_corrections = numpy.bincount(where[0], weights=weights2, minlength=corrections.shape[0])
-        new_corrections += numpy.bincount(where[1], weights=weights1, minlength=corrections.shape[0])
-        new_corrections = numpy.maximum(0.1, numpy.minimum(10., new_corrections / corrections.shape[0]))
-        #new_corrections = numpy.maximum(0.1, numpy.minimum(10., numpy.mean(temp / corrections.reshape(1, -1), axis=1)))
-        change = numpy.amax(numpy.abs(corrections - new_corrections))
-        corrections = new_corrections ** 0.5 * corrections ** 0.5
-        iteration += 1
-    data[valid_rows, :] /= corrections.reshape(-1, 1)
-    data[:, valid_rows] /= corrections.reshape(1, -1)
-    dist = numpy.zeros((N, min(width, N)), dtype=numpy.float64)
-    for i in range(min(N - 1, 100)):
+        obs = numpy.sum(data[temp1, temp2])
+        pos = float(numpy.sum(valid_rows[temp1] & valid_rows[temp2]))
+        if obs > 0:
+            bg[i] = obs / pos
+
+    # find compact data array for weighting correlation matrix
+    dist = numpy.zeros((N, min(width, N - 1)), dtype=numpy.float64)
+    for i in range(dist.shape[1]):
         M = N - i - 1
         temp1 = numpy.arange(M)
         temp2 = numpy.arange(i + 1, N)
         dist[:M, i] = data[temp1, temp2]
-    for i in range(1, min(width, N) + 1):
+
+    # find fill data array for finding correlations
+    norm = numpy.zeros((N, N), dtype=numpy.float64)
+    for i in valid:
+        norm[i, valid] = data[i, valid]
+    for i in range(N):
         temp1 = numpy.arange(N - i)
         temp2 = numpy.arange(i, N)
-        bg = numpy.sum(data[temp1, temp2])
-        count = float(numpy.sum(valid_rows[temp1] * valid_rows[temp2]))
-        if bg > 0:
-            dist[:(N - i), i - 1] /= bg / count
-    norm = numpy.zeros(data.shape, dtype=data.dtype)
-    indices = numpy.triu_indices(N, 0)
-    norm[indices] = numpy.log(1 + data[indices])
-    norm[indices[1], indices[0]] = norm[indices]
-    norm[valid_rows, :] -= numpy.mean(norm[valid_rows, :][:, valid_rows], axis=1).reshape(-1, 1)
-    norm[valid_rows, :] /= numpy.std(norm[valid_rows, :][:, valid_rows], axis=1).reshape(-1, 1)
+        norm[temp1, temp2] /= bg[i]
+        norm[temp2, temp1] = norm[temp1, temp2]
+
+    # normalize array for reducing correlation calculation time
+    for i in valid:
+        norm[i, valid] -= numpy.mean(norm[i, valid])
+        norm[i, valid] /= numpy.std(norm[i, valid])
+
     return norm, dist, valid_rows
+
+def find_correlations(args, norm=None, vrows=None):
+    if rank == 0:
+        if norm is not None:
+            N = norm.shape[0]
+        else:
+            N = None
+    else:
+        N = None
+    N = comm.bcast(N, root=0)
+    if N is None:
+        return None
+    if rank != 0:
+        norm = numpy.zeros((N, N), dtype=numpy.float64)
+        vrows = numpy.zeros(N, dtype=numpy.bool)
+    comm.Bcast(norm, root=0)
+    comm.Bcast(vrows, root=0)
+    valid = numpy.where(vrows)[0]
+    node_ranges = numpy.round(numpy.linspace(0, N, num_procs + 1)).astype(numpy.int32)
+    M = node_ranges[rank + 1] - node_ranges[rank]
+    corr = numpy.zeros((M, min(N - 1, args.width)), dtype=numpy.float64)
+    for j in range(node_ranges[rank], node_ranges[rank + 1]):
+        X = j - node_ranges[rank]
+        if not vrows[j]:
+            continue
+        for k in range(j + 1, min(j + corr.shape[1] + 1, N)):
+            if not vrows[k]:
+                continue
+            Y = k - j - 1
+            corr[X, Y] = numpy.mean(norm[j, valid] * norm[k, valid])
+    if rank == 0:
+        corrs = numpy.zeros((N, min(N - 1, args.width)), dtype=numpy.float64)
+        corrs[:node_ranges[1], :] = corr
+        for j in range(1, num_procs):
+            comm.Recv(corrs[node_ranges[j]:node_ranges[j + 1], :], source=j, tag=9)
+        return corrs
+    else:
+        comm.Send(corr, dest=0, tag=9)
+    return None
 
 def generate_parser():
     """Generate an argument parser."""
@@ -349,6 +346,30 @@ def generate_parser():
     parser.add_argument('-s', dest="seed", type=int, action='store', default=1, help="Random seed")
     parser.add_argument('--chroms', dest="chroms", type=str, action='store', default='', help="A Comma-separated list of chromosomes to use. Defaults to Numbered chromosomes up to 22 (fewer if appropriate) and X.")
     return parser
+
+def print_hm(data, vrows, compact=False, logged=True):
+    invalid = vrows == False
+    temp = numpy.zeros((data.shape[0], data.shape[0], 2), dtype=numpy.float32)
+    if not compact:
+        temp[:, :, 0] = data
+        temp[:, :, 1] = data >= 0
+    else:
+        N = data.shape[0]
+        for i in range(data.shape[1]):
+            temp[numpy.arange(N - i), numpy.arange(i, N), 0] = data[:(N - i), i]
+        indices = numpy.triu_indices(N, 1)
+        temp[indices[1], indices[0], 0] = temp[indices[0], indices[1], 0]
+        temp[:, :, 1] = temp[:, :, 0] != 0
+    temp[invalid, :, 1] = 0
+    temp[:, invalid, 1] = 0
+    where = numpy.where(temp[:, :, 1])
+    temp1 = temp[where[0], where[1], 0]
+    temp1.sort()
+    temp[where[0], where[1], 0] = numpy.maximum(temp1[int(0.01 * temp1.shape[0])],
+                                  numpy.minimum(temp1[int(0.99 * temp1.shape[0])],
+                                  temp[where[0], where[1], 0]))
+    img = hifive.plotting.plot_full_array(temp, symmetricscaling=False, logged=logged, silent=True)
+    return img
 
 if __name__ == "__main__":
     main()

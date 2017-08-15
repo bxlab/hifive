@@ -27,7 +27,8 @@ def load_data(infile, chroms, resolutions):
         for i, chrom in enumerate(chromosomes):
             if chrom not in chroms:
                 continue
-            start = (starts[i] / res) * res
+            if '%s.%i.invalid' % (chrom, res) in infile.attrs:
+                continue
             dist = infile['dist.%s.%i' % (chrom, res)][...]
             valid_rows = infile['valid.%s.%i' % (chrom, res)][...]
             corr = infile['corr.%s.%i' % (chrom, res)][...]
