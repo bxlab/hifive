@@ -256,6 +256,7 @@ def normalize(chrom, args, raw, mids, binsize, width):
         data[:, numpy.logical_not(valid_rows)] = 0
         prev_valid_rows = numpy.sum(valid_rows)
         valid_rows = numpy.sum(data > 0, axis=1) > 1
+    valid = numpy.where(valid_rows)[0]
     if prev_valid_rows == 0:
         return None, None, None
 
