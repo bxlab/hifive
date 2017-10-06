@@ -39,7 +39,10 @@ def load_data(infile, chroms, resolutions):
                 P = N - i - 1
                 valid[:P, i] = valid_rows[(i + 1):] * valid_rows[:P]
             valid[numpy.where((numpy.abs(dist) == numpy.inf) | (numpy.abs(corr) == numpy.inf))] = 0
-            data[res][chrom] = [corr, dist, corr * dist, valid]
+            trans = numpy.zeros((N, M), dtype=numpy.float64)
+            where = numpy.where(valid)
+            trans[where] = corr[where] * dist[where]
+            data[res][chrom] = [corr, dist, trans, valid]
     return data
 
 def find_results(data):

@@ -79,7 +79,8 @@ def main():
         args = None
 
     # Transfer args and reads
-    args = comm.bcast(args, root=0)
+    if comm is not None:
+        args = comm.bcast(args, root=0)
     if args is None:
         if rank == 0:
             print >> sys.stderr, ("\r%s\r") % (' ' * 120),
@@ -287,12 +288,6 @@ def normalize(chrom, args, raw, mids, binsize, width):
         temp2 = numpy.arange(i, N)
         norm[temp1, temp2] /= bg[i]
         norm[temp2, temp1] = norm[temp1, temp2]
-
-    # normalize array for reducing correlation calculation time
-    for i in valid:
-        norm[i, valid] -= numpy.mean(norm[i, valid])
-        norm[i, valid] /= numpy.std(norm[i, valid])
-
     return norm, dist, valid_rows
 
 def find_correlations(args, norm=None, vrows=None):
@@ -303,18 +298,21 @@ def find_correlations(args, norm=None, vrows=None):
             N = None
     else:
         N = None
-    N = comm.bcast(N, root=0)
+    if comm is not None:
+        N = comm.bcast(N, root=0)
     if N is None:
         return None
     if rank != 0:
         norm = numpy.zeros((N, N), dtype=numpy.float64)
         vrows = numpy.zeros(N, dtype=numpy.bool)
-    comm.Bcast(norm, root=0)
-    comm.Bcast(vrows, root=0)
+    if comm is not None:
+        comm.Bcast(norm, root=0)
+        comm.Bcast(vrows, root=0)
     valid = numpy.where(vrows)[0]
     node_ranges = numpy.round(numpy.linspace(0, N, num_procs + 1)).astype(numpy.int32)
     M = node_ranges[rank + 1] - node_ranges[rank]
     corr = numpy.zeros((M, min(N - 1, args.width)), dtype=numpy.float64)
+    corr.fill(numpy.inf)
     for j in range(node_ranges[rank], node_ranges[rank + 1]):
         X = j - node_ranges[rank]
         if not vrows[j]:
@@ -323,7 +321,20 @@ def find_correlations(args, norm=None, vrows=None):
             if not vrows[k]:
                 continue
             Y = k - j - 1
-            corr[X, Y] = numpy.mean(norm[j, valid] * norm[k, valid])
+            start = max(0, k - corr.shape[1])
+            indices = numpy.where(vrows[start:min(N, j + corr.shape[1] + 1)])[0] + start
+            if indices.shape[0] < 5:
+                continue
+            try:
+                std1 = numpy.std(norm[j, indices])
+                std2 = numpy.std(norm[k, indices])
+                mean1 = numpy.mean(norm[j, indices])
+                mean2 = numpy.mean(norm[k, indices])
+            except:
+                continue
+            if std1 == 0 or std2 == 0:
+                continue
+            corr[X, Y] = numpy.mean((norm[j, indices] - mean1) * (norm[k, indices] - mean2) / (std1 * std2))
     if rank == 0:
         corrs = numpy.zeros((N, min(N - 1, args.width)), dtype=numpy.float64)
         corrs[:node_ranges[1], :] = corr
