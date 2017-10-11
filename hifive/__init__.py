@@ -10,6 +10,7 @@ import fivec_binning
 import hic_binning
 import plotting
 import hic_domains
+import quasar
 
 from hic import HiC
 from fivec import FiveC
@@ -19,6 +20,7 @@ from hic_data import HiCData
 from fivec_data import FiveCData
 from hic_domains import TAD
 from hic_domains import Compartment
+from quasar import Quasar
 
 from .version import version as __version__
 

@@ -8,6 +8,7 @@ import _hic_interactions
 import _hic_optimize
 import _hic_domains
 import _hmm
+import _quasar
 import hmm
 
 #------------------------------------------------

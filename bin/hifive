@@ -88,6 +88,9 @@ def main():
     elif subcommand == "hic-combine-replicates" and rank == 0:
         from hifive.commands.combine_hic_replicates import run
         run(args)
+    elif subcommand == "quasar":
+        from hifive.commands.find_quasar_scores import run
+        run(args)
 
 def generate_parser():
     """Generate an argument parser."""
@@ -115,6 +118,7 @@ def generate_parser():
     add_hic_mrheatmap_subparser(subparsers)
     add_hic_interval_subparser(subparsers)
     add_hic_combine_replicates_subparser(subparsers)
+    add_quasar_subparser(subparsers)
     return parser
 
 def add_connect_subparser(subparsers):
@@ -473,7 +477,7 @@ def add_hicdataset_subparser(subparsers):
     return
 
 def add_hicproject_subparser(subparsers):
-    """Add command 'hic-project' arguments to parser. This command is MPI-compatible.}"""
+    """Add command 'hic-project' arguments to parser. This command is MPI-compatible."""
     parser = subparsers.add_parser("hic-project", help="HiFive HiC Project Creation Function: Creata a HiFive HiC project associated with a specific HiC dataset, filter out low-coverage fends and calculate the distance-dependence function.")
     parser.add_argument("-c", "--chromosomes", dest="chroms", required=False, type=str, default=None,
         action='store', help="A comma-separated list of chromosomes to learn correction values for (None indicates all chromosomes). [default: %(default)s]")
@@ -783,6 +787,32 @@ def add_hic_interval_subparser(subparsers):
         help="The name of a HiFive HiC project file to pull data from.")
     parser.add_argument(dest="output", type=str,
         help="The name of the file to write HiC interval to.")
+    return
+
+def add_quasar_subparser(subparsers):
+    """Add command 'quasar' arguments to parser. This command is MPI-compatible."""
+    parser = subparsers.add_parser("quasar", help="HiFive HiC QuASAR scoring function: Create a new QuASAR transformation file or use an existing one and find quality and/or replicate scores from it.")
+    parser.add_argument("-p", "--hic", dest="hic", type=str, required=False, default=None,
+        help="The name of the HiFive HiC project to use for QuASAR transformation.")
+    parser.add_argument("-P", "--hic2", dest="hic2", type=str, required=False, default=None,
+        help="The name of the second HiFive HiC project to use for QuASAR replicate scoring.")
+    parser.add_argument("-Q", "--quasar2", dest="quasar2", type=str, required=False, default=None,
+        help="The name of the second HiFive QuASAR file to write to and pull data from for QuASAR replicate scoring.")
+    parser.add_argument("-o", "--report", dest="report", type=str, required=False, default=None,
+        help="The name of the file to write all scoring results to. This can be either a txt or PDF file and format will be determined by the file suffix.")
+    parser.add_argument("-c", "--chromosomes", dest="chroms", required=False, type=str, default=None,
+        action='store', help="A comma-separated list of chromosomes to find QuASAR transformations for (None indicates all chromosomes). [default: %(default)s]")
+    parser.add_argument("-r", "--resolutions", dest="resolutions", required=False, type=str,
+        default="10000,40000,200000,1000000", action='store', help="A comma-separated list of resolutions to find QuASAR transformations for. [default: %(default)s]")
+    parser.add_argument("-d", "--coverages", dest="coverages", required=False, type=str,
+        default="0,1000000,2000000,4000000,8000000,16000000,32000000", action='store', help="A comma-separated list of coverages to find QuASAR transformations for. [default: %(default)s]")
+    parser.add_argument("-f", "--force", dest="force", default=False, action="store_true",
+        help="Calculate QuASAR scores from scratch, even if they already have been calculated previously. [default: %(default)s]")
+    parser.add_argument("--seed", dest="seed", default=None, type=int,
+        help="The seed value for the random number generating function. [default: %(default)s]")
+    add_silent_argument(parser)
+    parser.add_argument(dest="quasar", type=str,
+        help="The name of the HiFive QuASAR file to write to and pull data from.")
     return
 
 def add_common_heatmap_arguments(parser):

@@ -17,9 +17,9 @@ ez_setup.use_setuptools()
 from distutils.extension import Extension
 
 MAJOR = 1
-MINOR = 4
-PATCH = 1
-ISRELEASED = False
+MINOR = 5
+PATCH = None
+ISRELEASED = True
 VERSION = '%d.%d' % (MAJOR, MINOR)
 if not PATCH is None:
     VERSION += '.%d' % (PATCH)
@@ -178,6 +178,10 @@ def get_extension_modules(include_dirs):
                                 include_dirs=include_dirs, language="c++",
                                 extra_compile_args=[]))
     extensions.append(Extension("hifive.libraries._hmm", ["hifive/libraries/_hmm.pyx"],
+                                include_dirs=include_dirs, language="c++",
+                                extra_compile_args=[]))
+    # Quasar functions
+    extensions.append(Extension("hifive.libraries._quasar", ["hifive/libraries/_quasar.pyx"],
                                 include_dirs=include_dirs, language="c++",
                                 extra_compile_args=[]))
     return extensions
