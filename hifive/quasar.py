@@ -1293,7 +1293,9 @@ class Quasar(object):
         c.stroke(path.rect(hoffset, voffset, pwidth, pheight))
         return c
 
-    def _plot_line(self, Xs, Ys, width, minX, maxX, minY, maxY, color=color.rgb.black):
+    def _plot_line(self, Xs, Ys, width, minX, maxX, minY, maxY, pcolor=None):
+        if pcolor is None:
+            pcolor = color.rgb.black
         spanX = maxX - minX
         spanY = maxY - minY
         hoffset = 0.9
@@ -1307,7 +1309,7 @@ class Quasar(object):
         lpath = path.path(path.moveto(xs[0], ys[0]))
         for i in range(1, xs.shape[0]):
             lpath.append(path.lineto(xs[i], ys[i]))
-        c.stroke(lpath, [color])
+        c.stroke(lpath, [pcolor])
         return c
 
     def _num2str(self, n):
