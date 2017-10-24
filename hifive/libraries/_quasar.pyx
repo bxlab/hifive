@@ -93,7 +93,7 @@ def find_correlations(
                 X2 = X2 / n - X1  * X1
                 Y1 /= n
                 Y2 = Y2 / n - Y1 * Y1
-                if X2 == 0.0 or Y2 == 0.0:
+                if X2 <= 0.0 or Y2 <= 0.0:
                     continue
                 XY /= n
                 corrs[X - start, Y - X - 1] = (XY - X1 * Y1) / pow(X2 * Y2, 0.5)

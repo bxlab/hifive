@@ -483,7 +483,8 @@ class Quasar(object):
         if 'replicate_results' in self.storage and 'replicate_results' in replicate.storage and not force:
             if (numpy.array_equal(self.storage['replicate_results'][...],
                 replicate.storage['replicate_results'][...]) and
-                self.storage['replicate_results'].shape == (chroms + 1, resolutions.shape[0], coverages.shape[0])):
+                self.storage['replicate_results'].shape ==
+                (chroms.shape[0] + 1, resolutions.shape[0], coverages.shape[0])):
                 scores = self.storage['replicate_results'][...]
                 results = numpy.zeros(scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
                     ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
@@ -492,18 +493,26 @@ class Quasar(object):
                 results['coverage'] = numpy.tile(tcoverages, resolutions.shape[0])
                 return results
             else:
-                del self.storage['replicate_results']
-                del replicate.storage['replicate_results']
+                if 'replicate_results' in self.storage:
+                    del self.storage['replicate_results']
+                if 'replicate_results' in replicate.storage:
+                    del replicate.storage['replicate_results']
         else:
             if 'replicate_results' in self.storage:
-                del self.storage['replicate_chromosomes']
                 del self.storage['replicate_results']
+            if 'replicate_chromosomes' in self.storage:
+                del self.storage['replicate_chromosomes']
+            if 'replicate_resolutions' in self.storage:
                 del self.storage['replicate_resolutions']
+            if 'replicate_coverages' in self.storage:
                 del self.storage['replicate_coverages']
             if 'replicate_results' in replicate.storage:
                 del replicate.storage['replicate_results']
+            if 'replicate_chromosomes' in replicate.storage:
                 del replicate.storage['replicate_chromosomes']
+            if 'replicate_resolutions' in replicate.storage:
                 del replicate.storage['replicate_resolutions']
+            if 'replicate_coverages' in replicate.storage:
                 del replicate.storage['replicate_coverages']
         starts1 = numpy.zeros(chroms.shape[0], dtype=numpy.int64)
         starts2 = numpy.zeros(chroms.shape[0], dtype=numpy.int64)
@@ -595,10 +604,10 @@ class Quasar(object):
         self.storage.create_dataset(name='replicate_results', data=scores)
         self.storage.create_dataset(name='replicate_chromosomes', data=chroms)
         self.storage.create_dataset(name='replicate_resolutions', data=resolutions)
+        self.storage.create_dataset(name='replicate_coverages', data=tcoverages)
         replicate.storage.create_dataset(name='replicate_results', data=scores)
         replicate.storage.create_dataset(name='replicate_chromosomes', data=chroms)
         replicate.storage.create_dataset(name='replicate_resolutions', data=resolutions)
-        self.storage.create_dataset(name='replicate_coverages', data=tcoverages)
         replicate.storage.create_dataset(name='replicate_coverages', data=tcoverages)
         results = numpy.zeros(scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
             ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
@@ -727,7 +736,7 @@ class Quasar(object):
         stop = ((mids[-1] - 1) / binsize + 1) * binsize
         N = ((stop - start) / binsize).astype(numpy.int64)
         mapping = (mids - start) / binsize
-        data = numpy.bincount(mapping[counts[:, 0]] * N + mapping[counts[:, 0]], minlength=(N * N),
+        data = numpy.bincount(mapping[raw[:, 0]] * N + mapping[raw[:, 1]], minlength=(N * N),
                               weights=raw[:, 2]).reshape(N, N)
         indices = numpy.triu_indices(N, 0)
         data[indices[1], indices[0]] = data[indices]
@@ -824,6 +833,7 @@ class Quasar(object):
             corrs[:node_ranges[1], :] = corr
             for j in range(1, self.num_procs):
                 self.comm.Recv(corrs[node_ranges[j]:node_ranges[j + 1], :], source=j, tag=9)
+            corrs[numpy.where(numpy.isnan(corrs))] = numpy.inf
             return corrs
         else:
             self.comm.Send(corr, dest=0, tag=9)
