@@ -15,7 +15,7 @@ def main():
     chroms = infile['chromosomes'][...]
     data = load_data(infile, chroms, resolutions)
     infile.close()
-    results = find_results(data)
+    results = find_results(data, chroms)
     write_results(results, resolutions, chroms, args)
 
 def load_data(infile, chroms, resolutions):
@@ -45,15 +45,15 @@ def load_data(infile, chroms, resolutions):
             data[res][chrom] = [corr, dist, trans, valid]
     return data
 
-def find_results(data):
+def find_results(data, chroms):
     resolutions = data.keys()
     resolutions.sort()
-    chroms = data[resolutions[0]].keys()
-    chroms.sort()
     results = numpy.zeros((len(resolutions), len(chroms) + 1), dtype=numpy.float64)
     for i, res in enumerate(resolutions):
         temp = numpy.zeros(4, dtype=numpy.float64)
         for j, chrom in enumerate(chroms):
+            if chrom not in data[res]:
+                continue
             where = numpy.where(data[res][chrom][3])
             if where[0].shape[0] == 0:
                 continue

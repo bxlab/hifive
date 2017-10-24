@@ -20,7 +20,7 @@ def main():
     infile1.close()
     infile2.close()
     results = {}
-    results[(args.input1.split('/')[-1].strip('.quasar'), args.input2.split('/')[-1].strip('.quasar'))] = correlate_samples(data1, data2)
+    results[(args.input1.split('/')[-1].strip('.quasar'), args.input2.split('/')[-1].strip('.quasar'))] = correlate_samples(data1, data2, chroms)
     write_results(results, resolutions, chroms, args)
 
 def load_data(infile, chroms, resolutions):
@@ -30,7 +30,7 @@ def load_data(infile, chroms, resolutions):
     for res in resolutions:
         data[res] = {}
         for i, chrom in enumerate(chromosomes):
-            if chrom not in chroms:
+            if chrom not in chroms or '%s.%i.invalid' % (chrom, res) in infile.attrs:
                 continue
             start = (starts[i] / res) * res
             dist = infile['dist.%s.%i' % (chrom, res)][...]
@@ -42,20 +42,22 @@ def load_data(infile, chroms, resolutions):
             for i in range(min(N - 1, M)):
                 P = N - i - 1
                 valid[:P, i] = valid_rows[(i + 1):] * valid_rows[:P]
-            temp = corr * dist
-            valid[numpy.where(numpy.abs(temp) == numpy.inf)] = False
-            data[res][chrom] = [start, temp, valid]
+            valid[numpy.where(numpy.abs(corr) == numpy.inf)] = False
+            trans = numpy.zeros(dist.shape, dtype=dist.dtype)
+            where = numpy.where(valid)
+            trans[where] = corr[where] * dist[where]
+            data[res][chrom] = [start, trans, valid]
     return data
 
-def correlate_samples(data1, data2):
+def correlate_samples(data1, data2, chroms):
     resolutions = data1.keys()
     resolutions.sort()
-    chroms = data1[resolutions[0]].keys()
-    chroms.sort()
     results = numpy.zeros((len(resolutions), len(chroms) + 1), dtype=numpy.float64)
     for i, res in enumerate(resolutions):
         temp = numpy.zeros(6, dtype=numpy.float64)
         for j, chrom in enumerate(chroms):
+            if chrom not in data1[res] or chrom not in data2[res]:
+                continue
             start1 = data1[res][chrom][0]
             start2 = data2[res][chrom][0]
             if start2 > start1:
