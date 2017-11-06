@@ -42,7 +42,6 @@ Recommended Packages
   * `Pyx <http://pyx.sourceforge.net/>`_ for generating PDF images
   * `PIL <http://www.pythonware.com/products/pil/>`_ for generating bitmap images
   * `mpi4py <http://mpi4py.scipy.org>`_ for utilizing MPI capabilities of several HiC functions
-  * `mlpy <http://mlpy.sourceforge.net>`_ for modeling 3D structure
 
 For a more traditional Python installation simply setup a virtualevn for :mod:`HiFive` (this example creates one in .venv in your home directory) and then install the required packages and HiFive.
 

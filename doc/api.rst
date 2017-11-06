@@ -13,5 +13,6 @@ Contents:
    hic.rst
    fivec_binning.rst
    hic_binning.rst
+   quasar.rst
    plotting.rst
 

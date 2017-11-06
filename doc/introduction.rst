@@ -16,11 +16,11 @@ HiFive Overview
 
   hifive [-h] [--version]
               {fragments,5c-data,5c-project,5c-normalize,5c-complete,
-              5c-heatmap,5c-interval,combine-5c-replicates,
-              fends,hic-data,hic-project,hic-normalize,hic-complete,
-              hic-heatmap,hic-interval,combine-hic-replicates}
+              5c-heatmap,5c-interval,combine-5c-replicates,fends,
+              hic-data,hic-project,hic-normalize,hic-complete,
+              hic-heatmap,hic-interval,combine-hic-replicates, quasar}
 
-There are eight major functions for both 5C and HiC data types available as subcommands in HiFive.
+There are eight major functions for 5C and nine for HiC data types available as subcommands in HiFive.
 
 5C
 ---
@@ -39,13 +39,15 @@ There are eight major functions for both 5C and HiC data types available as subc
 HiC
 ----
 
-:fends:                   Create a fend file from either a BED or HiCPipe-style fend file containing RE fragment data or create an arbitrarily-binned interval file from chromosome length file.Create a data file from mapped BAM, MAT, or paired coordinate text (RAW) files or from binned matrix files.
+:fends:                   Create a fend file from either a BED or HiCPipe-style fend file containing RE fragment data or create an arbitrarily-binned interval file from chromosome length file.
+:hic-data:                Create a data file from mapped BAM, MAT, or paired coordinate text (RAW) files or from binned matrix files.
 :hic-project:             Create a project file, filter fends, and estimate distance-dependence.
 :hic-normalize:           Find correction parameter values using one of the available algorithms (see normalization_).
 :hic-complete:            Perform all of the steps of the subcommands fends, hic-data, hic-project, and hic-normalization in one command.
 :hic-heatmap:             Using an already created HiC project, generate an HDF5-formatted heatmap file and optional image.
-:hic-interval:            Using an already created HiC project, generate a tabular genomic-interval file for a specified region and optional image.
+:hic-interval:            Using an already created HiC project, generate a tabular genomic-interval file or a numpy, HDF5, or text matrix for a specified region and optional image.
 :hic-combine-replicates:  Combine multiple HiC data files into a single file without needing to reload the data.
+:quasar:                  Create a quasar transformation and calculate quality and/or replicate scores.
 
 A more detailed explanation of the subcommands and all of the command options is here_.
 
@@ -65,9 +67,10 @@ Restriction enzyme information    :class:`Fragment <hifive.fragment.Fragment>` /
 Read counts and orientations      :class:`FiveCData <hifive.fivec_data.FiveCData>` / :class:`HiCData <hifive.hic_data.HiCData>`
 Model parameters and filtering    :class:`FiveC <hifive.fivec.FiveC>` / :class:`HiC <hifive.hic.HiC>`
 Plotting functions                :mod:`plotting <hifive.plotting>`
+Quality control                   :class:`Quasar <hifive.quasar.Quasar>`
 ================================  ====================================
 
-The classes :class:`Fragment <hifive.fragment.Fragment>`, :class:`Fend <hifive.fend.Fend>`, :class:`FiveCData <hifive.fivec_data.FiveCData>`, :class:`HiCData <hifive.hic_data.HiCData>`, :class:`FiveC <hifive.fivec.FiveC>`, and :class:`HiC <hifive.hic.HiC>` are all available from the top level of the :mod:`HiFive` namespace and can be imported using::
+The classes :class:`Fragment <hifive.fragment.Fragment>`, :class:`Fend <hifive.fend.Fend>`, :class:`FiveCData <hifive.fivec_data.FiveCData>`, :class:`HiCData <hifive.hic_data.HiCData>`, :class:`FiveC <hifive.fivec.FiveC>`, :class:`HiC <hifive.hic.HiC>`, and :class:`Quasar <hifive.quasar.Quasar>` are all available from the top level of the :mod:`HiFive` namespace and can be imported using::
 
   from hifive import *
 
@@ -80,6 +83,8 @@ HiFive is organized into a hierarchy of data structures. Each structure represen
 Release History
 ================
 
+- :ref:`1_5`
+- :ref:`1_4`
 - :ref:`1_3`
 - :ref:`1_2_2`
 - :ref:`1_2`

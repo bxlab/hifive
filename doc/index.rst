@@ -20,6 +20,7 @@ Contents:
    normalization.rst
    binning.rst
    mrheatmap.rst
+   quasar_scoring.rst
    hifive.rst
    fivec_tutorial.rst
    hic_tutorial.rst

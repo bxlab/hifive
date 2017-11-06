@@ -287,7 +287,7 @@ In the above call, All valid possible interactions were queried from chromosome 
 Accessing heatmap data
 ======================
 
-When a heatmap is generated, data are stored in an HDF5 dictionary, a binary file format that allows easy access through python. In order to access data from your heatmap, you can load it as follows::
+When a heatmap is generated, data are stored in an HDF5 dictionary by default, a binary file format that allows easy access through python. In order to access data from your heatmap, you can load it as follows::
 
   import h5py
   import numpy
@@ -301,6 +301,13 @@ When a heatmap is generated, data are stored in an HDF5 dictionary, a binary fil
   enrichment[where, 1] = 1
 
 Note that we used the 'r' option when opening the file with h5py. This ensures that we are in 'read' mode. You could also use 'a' for 'append' mode, which is the default. First we printed out the available dataset names in our heatmap file. These are all of the arrays that are accessible to us by calling them like any other key value in a dictionary. Next, in order to load data from the heatmap into memory rather than access it from the disk every time we refer to it, we use the '[...]' indexing call after pass the heatmap filestream the name of the data we want. In this case, we asked for the counts and expected values for region zero. In order to look at the enrichments, we took the log of the ratio of observed to expected values for each bin. However, there are likely bins that contain no observed counts which would give us a divide by zero error in the log function. So, we can use numpy's 'where' function to get a index list of places that match our criterion, in this case non-zero counts. Finally, we have made the enrichment array 2D so we can keep track of which bins are valid (nonzero counts). If we were looking at trans data, we would need one more dimension as the counts and expected arrays would be two-dimensional instead of one.
+
+Alternatively, the data may be saved in a text or npz format using the '-F' argument. If the text format is selected, the output argument is used as a file prefix and three files will be created for each chromosome data is generated from, one for raw counts, one for expected counts, and one for enrichments (raw / expected). If the npz format is selected, data are saved in the numpy archive format. This acts as a standard python dictionary of numpy arrays once loaded::
+
+  data = numpy.load('output.npz')
+  print data.keys()
+
+As with the text format, for each chromosome there will be a counts array, an expected array, and an enrichment array.
 
 .. _plotting_a_hic_heatmap:
 
@@ -333,3 +340,24 @@ In order to make use of this MRH file, we could either visualize it in `Galaxy <
   > fetch_mrh_data -c 1 -s 10000000 -e 20000000 -R 10000 mrh_fname img_fname
 
 This would pull data from the MRH file 'mrh_fname' and plot it as an image in the file 'img_fname'. For specifics of the 'fetch_mrh_data' options, see :ref:`mrh_program`.
+
+Determining sample quality
+===========================
+
+HiFive includes a class :class:`Quasar <hifive.quasar.Quasar>`, which performs a tranformation on each Hi-C chromosome interaction matrix in order to calculate sample quality and/or replicate quality statistics. For more details on the transformation and scoring, see :ref:`quasar`. In order to use QuASAR, you need to determine which resolutions and coverages to test. In this context, coverage is defined as the number of raw intra-chromosomal reads in a sample. A simple quality or replicate score can be determined with a single resolution and coverage value, although testing across multiple resolutions and be used to determine sample resolution limits while multiple coverages can be used to model quality as a function of sequencing depth and determine the maximum sample quality score. HiFive will create a file for each sample. This file is in the HDF5 format and contains transformation matrices for each chromosome, resolution, and coverage. In order to use all reads (no downsampling), a coverage value of zero can be used.
+
+To create a QuASAR transformation file, use the quasar subcommand::
+
+  hifive quasar -p hic_file -r 1000000,40000 -d 0 quasar_file
+
+This creates a QuASAR file 'quasar_file' with no downsampling and two resolutions, 1 Mb and 40 Kb. The '-p' argument specifies the HiFive project to use for sample data. We could have also specified the '-o' argument with a filename to output a report with sample scores and other statistics if available such as resolution cutoff and the coverage-quality relationship. However, we can also generate this report after the fact::
+
+  hifive quasar -o report_file quasar_file
+
+The file format of the report is determined by the file suffix of the output file name. Valid formats are 'txt' and 'pdf'. The PDF format requires that :mod:'pyx' is installed.
+
+We can also find replicate scores between two samples by specifying two QuASAR files (and two HiFive projects if transformations haven't been calculated yet)::
+
+  hifive quasar -p hic_file -P hic2_file -r 1000000,40000 -d 0 -Q quasar2_file quasar_file
+
+If both transformation files had already been created, we could have left out the '-p' and '-P' arguments. If we were to generate the report after running the replicate comparison, both quality and replicate scores would appear in it.

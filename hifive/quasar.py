@@ -39,9 +39,6 @@ class Quasar(object):
     :param silent: Indicates whether to print information about function execution for this object.
     :type silent: bool.
     :returns: :class:`Quasar` class object.
-
-    :Attributes: * **file** (*str.*) A string containing the name of the file passed during object creation for saving the object to.
-                 * **silent** (*bool.*) - A boolean indicating whether to suppress all of the output messages.
     """
 
     def __init__(self, filename, mode='a', silent=False):
@@ -108,7 +105,7 @@ class Quasar(object):
                 self.storage.attrs[key] = self[key]
         return None
 
-    def load(self, mode):
+    def load(self, mode='a'):
         """
         Load data from h5dict specified at object creation.
 
@@ -395,8 +392,6 @@ class Quasar(object):
         :type force: bool.
 
         :returns: A structured numpy array with the fields resolution', 'coverage', and 'score'.
-
-        :Attributes: * **quality_results** (*numpy array*) A numpy array with dimensions corresponding to 'chromosomes', resolution' and 'coverage', respectively.
         """
         if self.rank > 0:
             return None
@@ -464,8 +459,6 @@ class Quasar(object):
         :type force: bool.
 
         :returns: A structured numpy array with the fields 'resolution', 'coverage', and 'score'.
-
-        :Attributes: * **quality_results** (*numpy array*) A numpy array with dimensions corresponding to 'chromosomes', resolution' and 'coverage', respectively.
         """
         if self.rank > 0:
             return None
@@ -605,10 +598,11 @@ class Quasar(object):
         self.storage.create_dataset(name='replicate_chromosomes', data=chroms)
         self.storage.create_dataset(name='replicate_resolutions', data=resolutions)
         self.storage.create_dataset(name='replicate_coverages', data=tcoverages)
-        replicate.storage.create_dataset(name='replicate_results', data=scores)
-        replicate.storage.create_dataset(name='replicate_chromosomes', data=chroms)
-        replicate.storage.create_dataset(name='replicate_resolutions', data=resolutions)
-        replicate.storage.create_dataset(name='replicate_coverages', data=tcoverages)
+        if 'replicate_results' not in replicate.storage:
+            replicate.storage.create_dataset(name='replicate_results', data=scores)
+            replicate.storage.create_dataset(name='replicate_chromosomes', data=chroms)
+            replicate.storage.create_dataset(name='replicate_resolutions', data=resolutions)
+            replicate.storage.create_dataset(name='replicate_coverages', data=tcoverages)
         results = numpy.zeros(scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
             ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
         results['score'] = scores[-1, :, :].ravel(order='C')
@@ -1331,9 +1325,3 @@ class Quasar(object):
         if len(n1) > 0:
             s = [n1] + s
         return ','.join(s)
-
-
-
-
-
-

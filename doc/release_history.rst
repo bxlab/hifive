@@ -4,6 +4,23 @@
 Release History
 *******************
 
+.. _1_5:
+
+1.5 (2017-08-15)
+------------------
+- Updated quasar to final version
+
+.. _1_4:
+
+1.4 (2017-06-28)
+------------------
+
+- Added conversion scripts for butlr and cooler heatmp formats
+- Added perliminary QuASAR scripts
+- Added support for matrix output in text and npz formats
+- Added hdf5 feature loading for fend files
+- Added boundary index and comportment likelihood scoring
+
 .. _1_3:
 
 1.3 (2016-04-28)

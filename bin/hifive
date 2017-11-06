@@ -834,9 +834,14 @@ def add_silent_argument(parser):
 
 if __name__ == "__main__":
     if "mpi4py" in sys.modules.keys():
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        num_procs = comm.Get_size()
+        try:
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            num_procs = comm.Get_size()
+        except:
+            comm = None
+            rank = 0
+            num_procs = 1
     else:
         comm = None
         rank = 0

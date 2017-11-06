@@ -204,7 +204,7 @@ This returns the region's index, chromosome, starting fragment, stopping fragmen
 Accessing heatmap data
 ======================
 
-When a heatmap is generated, data are stored in an HDF5 dictionary, a binary file format that allows easy access through python. In order to access data from your heatmap, you can load it as follows::
+When a heatmap is generated, data are stored in an HDF5 dictionary by default, a binary file format that allows easy access through python. In order to access data from your heatmap, you can load it as follows::
 
   import h5py
   import numpy
@@ -218,6 +218,13 @@ When a heatmap is generated, data are stored in an HDF5 dictionary, a binary fil
   enrichment[where, 1] = 1
 
 Note that we used the 'r' option when opening the file with h5py. This ensures that we are in 'read' mode. You could also use 'a' for 'append' mode, which is the default. First we printed out the available dataset names in our heatmap file. These are all of the arrays that are accessible to us by calling them like any other key value in a dictionary. Next, in order to load data from the heatmap into memory rather than access it from the disk every time we refer to it, we use the '[...]' indexing call after pass the heatmap filestream the name of the data we want. In this case, we asked for the counts and expected values for region zero. In order to look at the enrichments, we took the log of the ratio of observed to expected values for each bin. However, there are likely bins that contain no observed counts which would give us a divide by zero error in the log function. So, we can use numpy's 'where' function to get a index list of places that match our criterion, in this case non-zero counts. Finally, we have made the enrichment array 2D so we can keep track of which bins are valid (nonzero counts). If we were looking at trans data, we would need one more dimension as the counts and expected arrays would be two-dimensional instead of one.
+
+Alternatively, the data may be saved in a text or npz format using the '-F' argument. If the text format is selected, the output argument is used as a file prefix and three files will be created for each region data is generated from, one for raw counts, one for expected counts, and one for enrichments (raw / expected). If the npz format is selected, data are saved in the numpy archive format. This acts as a standard python dictionary of numpy arrays once loaded::
+
+  data = numpy.load('output.npz')
+  print data.keys()
+
+As with the text format, for each region there will be a counts array, an expected array, and an enrichment array.
 
 .. _plotting_a_fivec_heatmap:
 

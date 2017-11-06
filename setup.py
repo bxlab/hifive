@@ -18,7 +18,7 @@ from distutils.extension import Extension
 
 MAJOR = 1
 MINOR = 5
-PATCH = 2
+PATCH = 3
 ISRELEASED = True
 VERSION = '%d.%d' % (MAJOR, MINOR)
 if not PATCH is None:
@@ -141,7 +141,6 @@ def setup_package():
     else:
         include_dirs = [numpy.get_include()]
         metadata['packages'] = find_packages(exclude=['examples', 'test', 'ez_setup.py'], where='./')
-        print metadata['packages']
         metadata['ext_modules'] = get_extension_modules(include_dirs)
 
     setup(**metadata)
