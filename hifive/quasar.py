@@ -724,7 +724,7 @@ class Quasar(object):
         width = 100
         # convert into square matrix
         start = (mids[0] / binsize) * binsize
-        stop = ((mids[-1] - 1) / binsize + 1) * binsize
+        stop = ((mids[-1]) / binsize + 1) * binsize
         N = ((stop - start) / binsize).astype(numpy.int64)
         mapping = (mids - start) / binsize
         data = numpy.bincount(mapping[raw[:, 0]] * N + mapping[raw[:, 1]], minlength=(N * N),
