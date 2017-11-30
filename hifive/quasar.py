@@ -634,10 +634,7 @@ class Quasar(object):
             return None
         format = filename.split('.')[-1]
         if format not in ['pdf', 'txt']:
-            if not self.silent:
-                print >> sys.stderr, ("\r%s\rThe output format was not recognized.\n") % (
-                    ' ' * 80),
-            return None
+            format = 'txt'
         if format == 'txt':
             self._print_txt_report(filename, qscores, rscores)
         elif format == 'pdf':
