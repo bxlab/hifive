@@ -790,7 +790,7 @@ class Quasar(object):
             temp2 = numpy.arange(i, N)
             norm[temp1, temp2] /= bg[i]
             norm[temp2, temp1] = norm[temp1, temp2]
-        return norm, dist, valid_rows
+        return norm, dist, valid_rows.astype(numpy.int32)
 
     def _find_correlations(self, norm=None, vrows=None):
         width = 100
@@ -807,7 +807,7 @@ class Quasar(object):
             return None
         if self.rank != 0:
             norm = numpy.zeros((N, N), dtype=numpy.float64)
-            vrows = numpy.zeros(N, dtype=numpy.bool)
+            vrows = numpy.zeros(N, dtype=numpy.int32)
         if self.comm is not None:
             self.comm.Bcast(norm, root=0)
             self.comm.Bcast(vrows, root=0)
