@@ -2046,7 +2046,12 @@ class HiC(object):
         self.history += "HiC.find_trans_mean() - "
         if not self.silent:
             print >> sys.stderr, ("Finding mean signals across trans interactions..."),
-        chr_indices = self.fends['chr_indices'][...]
+        if 'binned' in self.__dict__ and self.binned is not None:
+            chr_indices = self.fends['bin_indices'][...]
+            fends = self.fends['bins'][...]
+        else:
+            chr_indices = self.fends['chr_indices'][...]
+            fends = self.fends['fends'][...]
         num_chroms = chr_indices.shape[0] - 1
         possible = numpy.zeros(num_chroms * (num_chroms - 1) / 2, dtype=numpy.int32)
         pos = 0
@@ -2060,9 +2065,9 @@ class HiC(object):
         valid = numpy.where(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]])[0]
         trans_data = trans_data[valid, :]
         del valid
-        chrom = self.fends['fends']['chr'][trans_data[:, 0]]
+        chrom = fends['chr'][trans_data[:, 0]]
         indices = chrom * (num_chroms - 1) - (chrom * (chrom + 1) / 2) - 1
-        indices += self.fends['fends']['chr'][trans_data[:, 1]]
+        indices += fends['chr'][trans_data[:, 1]]
         del chrom
         if self.corrections is None:
             counts = trans_data[:, 2]
