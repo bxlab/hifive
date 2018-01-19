@@ -21,6 +21,7 @@ except:
     pass
 
 import libraries._quasar as _quasar
+from hic import HiC
 
 
 class Quasar(object):
@@ -41,7 +42,7 @@ class Quasar(object):
     :returns: :class:`Quasar` class object.
     """
 
-    def __init__(self, filename, mode='a', silent=False):
+    def __init__(self, filename=None, mode='a', silent=False):
         """Create a :class:`Quasar` object."""
         try:
             self.comm = MPI.COMM_WORLD
@@ -51,18 +52,20 @@ class Quasar(object):
             self.comm = None
             self.rank = 0
             self.num_procs = 1
-        self.file = os.path.abspath(filename)
-        self.hic_fname = None
+        if filename is not None:
+            self.file = os.path.abspath(filename)
+        else:
+            self.file = None
         self.silent = silent
         self.filetype = 'quasar'
         self.strict_qcutoff = 0.05798399
         self.loose_qcutoff = 0.04345137
         self.strict_rcutoff = 0.85862067
         self.loose_rcutoff = 0.80026913
-        if mode != "w":
+        if mode != "w" and self.file is not None:
             self.load(mode)
         else:
-            if self.rank == 0:
+            if self.rank == 0 and self.file is not None:
                 self.storage = h5py.File(self.file, 'w')
             else:
                 self.storage = None
@@ -138,8 +141,409 @@ class Quasar(object):
             self.storage.close()
         return None
 
-    def find_transformation(self, hic, chroms=[], resolutions=[1000000, 200000, 40000, 10000],
-        coverages=[0, 40000000, 20000000, 10000000, 5000000, 2000000, 1000000], seed=None):
+    def find_max_rep_scores(self, hic1, hic2, chroms=[], coverage=0, seed=None, max_resolution=4000000, min_step=10000):
+        if self.rank == 0:
+            if seed is None:
+                RNG = numpy.random.RandomState(seed=seed)
+            else:
+                RNG = numpy.random.RandomState()
+
+            # find minimum interval, if one exists
+            minint = 1
+            if 'binned' in hic1.__dict__ and hic1.binned is not None:
+                minint = hic1.binned
+            if 'binned' in hic2.__dict__ and hic2.binned is not None:
+                minint = self._find_lcm(minint, hic2.binned)
+            min_step = self._find_lcm(min_step, minint)
+
+            # find first two datapoints
+            firstres = int(round((max_resolution / 8.0) / minint)) * minint
+            scores = None
+            for res in [firstres, firstres * 2]:
+                print >> sys.stderr, ("\r%s\rFinding replicate scores for resolution %i") % (" " * 80, res),
+                if self.comm is not None:
+                    res = self.comm.bcast(res, root=0)
+                temp = self.find_rep_scores(hic1, hic2, chroms, res, coverage, RNG)
+                if scores is None:
+                    scores = numpy.r_[float(res), temp[0]].reshape(1, -1)
+                    chroms = temp[1]
+                else:
+                    scores = numpy.vstack((scores, numpy.r_[float(res), temp[0]].reshape(1, -1)))
+            scores = scores[numpy.argsort(scores[:, 0]), :]
+            maxval = numpy.where(scores[:, -1] == numpy.amax(scores[:, -1]))[0][0]
+
+            # determine next resolutions to check
+            needed = []
+            if maxval == 0:
+                needed.append(int(round(scores[maxval, 0] / 2 / minint)) * minint)
+                needed.append(int(round((scores[maxval + 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+            elif maxval == scores.shape[0] - 1:
+                needed.append(int(round((max_resolution + scores[maxval, 0]) / 2 / minint)) * minint)
+                needed.append(int(round((scores[maxval - 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+            else:
+                needed.append(int(round((scores[maxval - 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+                needed.append(int(round((scores[maxval + 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+
+            # filter out invalid resolutions
+            for i in range(len(needed))[::-1]:
+                if numpy.where(scores[:, 0] == needed[i])[0].shape[0] > 0:
+                    del needed[i]
+
+            while len(needed) > 0:
+                for res in needed:
+                    print >> sys.stderr, ("\r%s\rFinding replicate scores for resolution %i") % (" " * 80, res),
+                    if self.comm is not None:
+                        res = self.comm.bcast(res, root=0)
+                    temp = self.find_rep_scores(hic1, hic2, chroms, res, coverage, RNG)
+                    scores = numpy.vstack((scores, numpy.r_[float(res), temp[0]].reshape(1, -1)))
+                scores = scores[numpy.argsort(scores[:, 0]), :]
+                maxval = numpy.where(scores[:, -1] == numpy.amax(scores[:, -1]))[0][0]
+
+                # determine next resolutions to check
+                needed = []
+                if maxval == 0:
+                    needed.append(int(round(scores[maxval, 0] / 2 / minint)) * minint)
+                    needed.append(int(round((scores[maxval + 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+                elif maxval == scores.shape[0] - 1:
+                    needed.append(int(round((max_resolution + scores[maxval, 0]) / 2 / minint)) * minint)
+                    needed.append(int(round((scores[maxval - 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+                else:
+                    needed.append(int(round((scores[maxval - 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+                    needed.append(int(round((scores[maxval + 1, 0] + scores[maxval, 0]) / 2 / minint)) * minint)
+
+                # filter out invalid resolutions
+                for i in range(len(needed))[::-1]:
+                    if numpy.where(scores[:, 0] == needed[i])[0].shape[0] > 0:
+                        del needed[i]
+            if self.comm is not None:
+                res = self.comm.bcast(0, root=0)
+            print >> sys.stderr, ("\r%s\rF") % (" " * 80),
+            return scores, chroms
+        else:
+            RNG = None
+            res = self.comm.bcast(None, root=0)
+            while res > 0:
+                self.find_rep_scores(None, None, chroms, res, coverage, None)
+            return None, None
+
+    def find_rep_scores(self, hic1, hic2, chroms=[], resolution=1000000, coverage=0, rng=None):
+
+        if self.rank == 0:
+            if rng is not None:
+                RNG = numpy.random.RandomState()
+            else:
+                RNG = rng
+
+            # fill in chromosome list if empty. Otherwise check that all specified chromosomes exist.
+            if not isinstance(chroms, list) or len(chroms) == 0:
+                chroms = numpy.intersect1d(hic1.fends['chromosomes'][...], hic2.fends['chromosomes'][...])
+            else:
+                chroms = numpy.array(chroms)
+
+            # load partition information
+            if 'binned' in hic1.__dict__ and hic1.binned is not None:
+                chr_indices1 = hic1.fends['bin_indices'][...]
+            else:
+                chr_indices1 = hic1.fends['chr_indices'][...]
+            if 'binned' in hic2.__dict__ and hic2.binned is not None:
+                chr_indices2 = hic2.fends['bin_indices'][...]
+            else:
+                chr_indices2 = hic2.fends['chr_indices'][...]
+
+            # if coverage is not 0, determine current and target coverage levels
+            target_coverages = numpy.zeros((chroms.shape[0], 2), dtype=numpy.int64)
+            if coverage > 0:
+                coverages = numpy.zeros((len(chroms), 2), dtype=numpy.int64)
+                for i, chrom in enumerate(chroms):
+                    if chrom in hic1.fends['chromosomes']:
+                        chrint = hic1.chr2int[chrom]
+                        starti = hic1.data['cis_indices'][chr_indices1[chrint]]
+                        stopi = hic1.data['cis_indices'][chr_indices1[chrint + 1]]
+                        coverages[i, 0] = numpy.sum(hic1.data['cis_data'][starti:stopi, 2])
+                    if chrom in hic2.fends['chromosomes']:
+                        chrint = hic2.chr2int[chrom]
+                        starti = hic2.data['cis_indices'][chr_indices2[chrint]]
+                        stopi = hic2.data['cis_indices'][chr_indices2[chrint + 1]]
+                        coverages[i, 1] = numpy.sum(hic2.data['cis_data'][starti:stopi, 2])
+
+                # determine total number of reads
+                coverages = numpy.cumsum(coverages, axis=0)
+                if coverage < numpy.amin(coverages[-1, :]):
+                    if comm is not None:
+                        err = comm.bcast(True, root=0)
+                    raise RunTtmeError('Coverage is below total reads in one of the datasets')
+                target_coverages = numpy.zeros(coverages.shape, dtype=numpy.int64)
+                cutoffs = coverages[:, 0].astype(numpy.float64) / coverages[-1, 0]
+                target_coverages[:, 0] = numpy.bincount(numpy.searchsorted(cutoffs, RNG.uniform(0, 1, coverages[-1, 0])))
+                cutoffs = coverages[:, 1].astype(numpy.float64) / coverages[-1, 1]
+                target_coverages[:, 1] = numpy.bincount(numpy.searchsorted(cutoffs, RNG.uniform(0, 1, coverages[-1, 1])))
+
+            # if all is well, tell workers to proceed
+            if self.comm is not None:
+                err = self.comm.bcast(False, root=0)
+                chroms = self.comm.bcast(chroms, root=0)
+                target_coverages = self.comm.bcast(target_coverages, root=0)
+        else:
+            err = self.comm.bcast(None, root=0)
+            if err:
+                sys.exit(1)
+            chroms = self.comm.bcast(None, root=0)
+            target_coverages = self.comm.bcast(None, root=0)
+            results = None
+
+        if self.rank == 0:
+            results = numpy.zeros(len(chroms) + 1, dtype=numpy.float64)
+            valid_chroms = numpy.zeros(len(chroms), dtype=numpy.bool)
+            stats = numpy.zeros(6, dtype=numpy.float64)
+        # cycle through chromosomes, finding transformations
+        for i, chrom in enumerate(chroms):
+            counts, bounds1 = self._load_counts(hic1, chrom, target_coverages[i, 0], resolution)
+            if counts is None:
+                continue
+            correlations1, interactions = self._find_transformation(counts)
+            if correlations1 is None:
+                continue
+            if self.rank == 0:
+                correlations1 *= interactions
+                del interactions
+            counts, bounds2 = self._load_counts(hic2, chrom, target_coverages[i, 0], resolution)
+            if counts is None:
+                continue
+            correlations2, interactions = self._find_transformation(counts)
+            if correlations2 is None:
+                continue
+            if self.rank == 0:
+                correlations2 *= interactions
+                del interactions
+                cstats = self._find_rep_correlation_stats(correlations1, correlations2, bounds1, bounds2)
+                stats += cstats
+                results[i] = self._find_correlation_from_stats(cstats)
+                valid_chroms[i] = True
+        if self.rank == 0:
+            results[-1] = self._find_correlation_from_stats(stats)
+            chroms = chroms[numpy.where(valid_chroms)]
+            results = results[numpy.where(numpy.r_[valid_chroms, [True]])]
+        else:
+            results = None
+        return results, chroms
+
+    def _load_counts(self, hic, chrom, coverage, resolution, rng=None):
+        if self.rank == 0:
+            # check if chrom is in hic dataset
+            if chrom not in hic.fends['chromosomes']:
+                if self.comm is not None:
+                    valid = self.comm.bcast(False, root=0)
+                return None, None
+
+            # load raw counts
+            if 'binned' in hic.__dict__ and hic.binned is not None:
+                chr_indices = hic.fends['bin_indices'][...]
+            else:
+                chr_indices = hic.fends['chr_indices'][...]
+            bounds = numpy.zeros(2, dtype=numpy.int64)
+            chrint = hic.chr2int[chrom]
+            startf = chr_indices[chrint]
+            stopf = chr_indices[chrint + 1]
+            if 'binned' in hic.__dict__ and hic.binned is not None:
+                mids = hic.fends['bins']['mid'][startf:stopf]
+            else:
+                mids = hic.fends['fends']['mid'][startf:stopf]
+            starti = hic.data['cis_indices'][chr_indices[chrint]]
+            stopi = hic.data['cis_indices'][chr_indices[chrint + 1]]
+            bounds[0] = (mids[0] / resolution) * resolution
+            bounds[1] = (mids[-1] / resolution + 1) * resolution
+            raw = hic.data['cis_data'][starti:stopi, :].astype(numpy.int64)
+            mapping = (mids - bounds[0]) / resolution
+            N = mapping[-1] + 1
+            raw[:, 0] = mapping[raw[:, 0] - startf]
+            raw[:, 1] = mapping[raw[:, 1] - startf]
+            indices = raw[:, 0] * N + raw[:, 1]
+            uindices = numpy.unique(indices)
+            counts = numpy.zeros((uindices.shape[0], 3), dtype=numpy.int64)
+            counts[:, 0] = uindices / N
+            counts[:, 1] = uindices % N
+            counts[:, 2] = numpy.bincount(numpy.searchsorted(uindices, indices), weights=raw[:, 2])
+
+            # if coverage is not zero, downsample counts
+            if coverage > 0:
+                counts = self._downsample(counts, coverage, rng)
+            return counts, bounds
+        else:
+            valid = self.comm.bcast(None, root=0)
+            if valid:
+                return True, True
+            else:
+                return None, None
+
+    def _find_transformation(self, counts):
+        width = 100
+        if self.rank == 0:
+            # convert counts into square matrix
+            N = numpy.amax(counts[:, 1]) + 1
+            data = numpy.zeros((N, N), dtype=numpy.float64)
+            data[counts[:, 0], counts[:, 1]] = counts[:, 2]
+            data[counts[:, 1], counts[:, 0]] = counts[:, 2]
+            data[numpy.arange(N), numpy.arange(N)] *= 2
+
+            # we need several non-zero observations for finding correlations
+            sums = numpy.zeros(N, dtype=numpy.int32)
+            for i in range(min(width, N - 1)):
+                temp1 = numpy.arange(N - i - 1)
+                temp2 = numpy.arange(i + 1, N)
+                sums[:(N - i - 1)] += data[temp1, temp2] > 0
+                sums[(i + 1):N] += data[temp1, temp2] > 0
+            valid_rows = sums >= 1
+            prev_valid_rows = numpy.sum(valid_rows) + 1
+            while prev_valid_rows > numpy.sum(valid_rows):
+                data[numpy.logical_not(valid_rows), :] = 0
+                data[:, numpy.logical_not(valid_rows)] = 0
+                prev_valid_rows = numpy.sum(valid_rows)
+                sums = numpy.zeros(N, dtype=numpy.int32)
+                for i in range(min(width, N - 1)):
+                    temp1 = numpy.arange(N - i - 1)
+                    temp2 = numpy.arange(i + 1, N)
+                    sums[:(N - i - 1)] += data[temp1, temp2] > 0
+                    sums[(i + 1):N] += data[temp1, temp2] > 0
+                valid_rows = sums >= 1
+            valid_rows = valid_rows.astype(numpy.int32)
+            valid = numpy.where(valid_rows)[0]
+
+            # if there are no valid rows, send error message to workers
+            if valid.shape[0] == 0:
+                if self.comm is not None:
+                    err = self.comm.bcast(True, root=0)
+                return None, None
+
+            # find distance dependent signal
+            bg = numpy.ones(N, dtype=numpy.float64)
+            for i in range(N):
+                temp1 = numpy.arange(N - i)
+                temp2 = numpy.arange(i, N)
+                obs = numpy.sum(data[temp1, temp2])
+                pos = float(numpy.sum(valid_rows[temp1] & valid_rows[temp2]))
+                if obs > 0:
+                    bg[i] = obs / pos
+
+            # find compact data array for weighting correlation matrix
+            interactions = numpy.zeros((N, min(width, N - 1)), dtype=numpy.float64)
+            for i in range(interactions.shape[1]):
+                M = N - i - 1
+                temp1 = numpy.arange(M)
+                temp2 = numpy.arange(i + 1, N)
+                interactions[:M, i] = (data[temp1, temp2] + 1) ** 0.5
+
+            # find fill data array for finding correlations
+            norm = numpy.zeros((N, 2 * width), dtype=numpy.float64)
+            norm.fill(numpy.nan)
+            for i in valid:
+                offset = max(0, width - i)
+                start = i - width + offset
+                stop = min(N, i + width + 1)
+                where = numpy.where(valid_rows[start:i])[0]
+                norm[i, where + offset] = data[i, where + start]
+                where = numpy.where(valid_rows[(i + 1):stop])[0]
+                norm[i, where + width] = data[i, where + i + 1]
+            for i in range(min(N, width)):
+                if bg[i] == 0:
+                    continue
+                where = numpy.where(numpy.logical_not(numpy.isnan(norm[:, width + i])))[0]
+                norm[where, width + i] /= bg[i]
+                where = numpy.where(numpy.logical_not(numpy.isnan(norm[:, width + i])))[0]
+                norm[where, width - i - 1] /= bg[i]
+
+            # let workers know to proceed
+            if self.comm is not None:
+                err = self.comm.bcast(False, root=0)
+                N = self.comm.bcast(N, root=0)
+                self.comm.Bcast(norm, root=0)
+                self.comm.Bcast(valid_rows, root=0)
+
+        else:
+            err = self.comm.bcast(None, root=0)
+            if err:
+                return None, None
+            N = self.comm.bcast(None, root=0)
+            norm = numpy.zeros((N, 2 * width), dtype=numpy.float64)
+            valid_rows = numpy.zeros(N, dtype=numpy.int32)
+            self.comm.Bcast(norm, root=0)
+            self.comm.Bcast(valid_rows, root=0)
+
+        node_ranges = numpy.round(numpy.linspace(0, N, self.num_procs + 1)).astype(numpy.int32)
+        corr = numpy.zeros((node_ranges[self.rank + 1] - node_ranges[self.rank], min(width, N - 1)), dtype=numpy.float64)
+        corr.fill(numpy.nan)
+        _quasar.find_correlations(
+            norm,
+            valid_rows,
+            corr,
+            node_ranges[self.rank],
+            node_ranges[self.rank + 1])
+        del norm
+
+        if self.rank == 0:
+            # return data from workers to root
+            if self.comm is not None:
+                corrs = numpy.zeros((N, min(width, N - 1)), dtype=numpy.float64)
+                corrs[:node_ranges[1], :] = corr
+                for i in range(1, self.num_procs):
+                    self.comm.Recv(corrs[node_ranges[i]:node_ranges[i + 1], :], source=i)
+            else:
+                corrs = corr
+            return corrs, interactions
+        else:
+            self.comm.Send(corr, dest=0)
+            return True, True
+
+    def _find_rep_correlation_stats(self, corr1, corr2, bound1, bound2):
+        N, M = corr1.shape
+        binsize = (bound1[1] - bound1[0]) / N
+        start = max(bound1[0], bound2[0])
+        stop = min(bound1[1], bound2[1])
+        N = (stop - start) / binsize
+        start1 = max(0, (start - bound1[0]) / binsize)
+        start2 = max(0, (start - bound2[0]) / binsize)
+        stop1 = start1 + N
+        stop2 = start2 + N
+        M = min(corr1.shape[1], corr2.shape[1])
+        # X, Y, X2, Y2, XY, n
+        stats = numpy.zeros(6, dtype=numpy.float64)
+        for i in range(N - 1):
+            valid = numpy.where(numpy.logical_not(numpy.isnan(corr1[i + start1, :min(M, N - i)])) &
+                                numpy.logical_not(numpy.isnan(corr2[i + start2, :min(M, N - i)])))[0]
+            if valid.shape[0] == 0:
+                continue
+            stats[0] += numpy.sum(corr1[i + start1, valid])
+            stats[1] += numpy.sum(corr2[i + start2, valid])
+            stats[2] += numpy.sum(corr1[i + start1, valid] ** 2.0)
+            stats[3] += numpy.sum(corr2[i + start2, valid] ** 2.0)
+            stats[4] += numpy.sum(corr1[i + start1, valid] * corr2[i + start2, valid])
+            stats[5] += valid.shape[0]
+        return stats
+
+    def _find_correlation_from_stats(self, stats):
+        X_mu = stats[0] / stats[5]
+        Y_mu = stats[1] / stats[5]
+        X_var = stats[2] / stats[5] - X_mu * X_mu
+        Y_var = stats[3] / stats[5] - Y_mu * Y_mu
+        if X_var <= 0.0 or Y_var <= 0.0:
+            return numpy.nan
+        XY_mu = stats[4] / stats[5]
+        return (XY_mu - X_mu * Y_mu) / (X_var * Y_var) ** 0.5
+
+    def _find_lcm(self, x, y):
+        x, y = abs(x), abs(y)
+        m = x * y
+        if not m:
+            return 0
+        while True:
+            x %= y
+            if not x:
+                return m // y
+            y %= x
+            if not y:
+                return m // x
+
+    def find_transformation(self, chroms=[], resolution=1000000, coverage=0, seed=None):
+
         """
         Find QuASAR transformation from the specified HiC project.
 
@@ -156,140 +560,67 @@ class Quasar(object):
         :returns: :class:`Quasar` class object.
         """
         if self.rank == 0:
-            coverages = numpy.array(coverages, dtype=numpy.int64)
-            resolutions = numpy.array(resolutions, dtype=numpy.int64)
-            resolutions.sort()
-            hic_fname = hic.file
-            if self.hic_fname is not None and self.hic_fname != hic_fname:
-                for key in self.storage.keys():
-                    if key.split('.')[0] in ['valid', 'dist', 'corr']:
-                        del self.storage[key]
-                    if 'chromosomes' in self.storage:
-                        del self.storage['chromosomes']
-            self.hic_fname = hic_fname
             if seed is not None:
                 RNG = numpy.random.RandomState(seed=seed)
             else:
                 RNG = numpy.random.RandomState()
 
             # load partition information
-            if 'binned' in hic.__dict__ and hic.binned is not None:
-                temp_mids = hic.fends['bins']['mid'][...]
-                chr_indices = hic.fends['bin_indices'][...]
+            if 'binned' in self.hic.__dict__ and hic.binned is not None:
+                temp_mids = self.hic.fends['bins']['mid'][...]
+                chr_indices = self.hic.fends['bin_indices'][...]
             else:
-                temp_mids = hic.fends['fends']['mid'][...]
-                chr_indices = hic.fends['chr_indices'][...]
+                temp_mids = self.hic.fends['fends']['mid'][...]
+                chr_indices = self.hic.fends['chr_indices'][...]
 
             # fill in chromosome list if empty. Otherwise check that all specified chromosomes exist.
             if not isinstance(chroms, list) or len(chroms) == 0:
-                chroms = hic.fends['chromosomes'][...]
+                chroms = self.hic.fends['chromosomes'][...]
                 valid = numpy.ones(chroms.shape[0], dtype=numpy.bool)
                 for i in range(chroms.shape[0]):
                     if chr_indices[i + 1] - chr_indices[i] == 0:
                         valid[i] = False
-                    elif hic.data['cis_indices'][chr_indices[i + 1]] - hic.data['cis_indices'][chr_indices[i]] == 0:
+                    elif self.hic.data['cis_indices'][chr_indices[i + 1]] - self.hic.data['cis_indices'][chr_indices[i]] == 0:
                         valid[i] = False
                 chroms = chroms[valid]
 
-            # Load raw counts
+            # Load raw count info
+            counts = []
             bounds = numpy.zeros((len(chroms), 2), numpy.int64)
+            coverages = numpy.zeros(len(chroms), numpy.int64)
             for i, chrom in enumerate(chroms):
-                chrint = hic.chr2int[chrom]
-                bounds[i, 0] = hic.data['cis_indices'][chr_indices[chrint]]
-                bounds[i, 1] = hic.data['cis_indices'][chr_indices[chrint + 1]]
-            raw = numpy.zeros((numpy.sum(bounds[:, 1] - bounds[:, 0]), 3), dtype=numpy.int64)
-            indices = numpy.zeros(len(chroms) + 1, dtype=numpy.int64)
-            mids = {}
-            starts = numpy.zeros(len(chroms), dtype=numpy.int32)
-            for i, chrom in enumerate(chroms):
-                chrint = hic.chr2int[chrom]
-                indices[i + 1] = indices[i] + bounds[i, 1] - bounds[i, 0]
-                temp = hic.data['cis_data'][bounds[i, 0]:bounds[i, 1], :]
-                temp[:, :2] -= chr_indices[chrint]
-                raw[indices[i]:indices[i + 1], :] = temp
-                mids[chrom] = temp_mids[chr_indices[chrint]:chr_indices[chrint + 1]]
-                starts[i] = mids[chrom][0]
+                chrint = self.hic.chr2int[chrom]
+                startf = chr_indices[chrint]
+                stopf = chr_indices[chrint + 1]
+                starti = self.hic.data['cis_indices'][chr_indices[chrint]]
+                stopi = self.hic.data['cis_indices'][chr_indices[chrint + 1]]
+                bounds[i, 0] = (temp_mids[startf] / resolution) * resolution
+                bounds[i, 1] = (temp_mids[stopf - 1] / resolution + 1) * resolution
+                coverages[i] = numpy.sum(self.hic.data['cis_data'][starti:stopi, 2])
+            # determine total number of reads
+            coverages = numpy.cumsum(coverages)
 
-            # only consider coverage levels that are less than or equal to the number of cis reads
-            coverages = coverages[numpy.where(numpy.sum(raw[:, 2]) >= coverages)]
-            coverages.sort()
-            if coverages[0] == 0:
-                coverages[:-1] = coverages[1:]
-                coverages[-1] = 0
-            store_coverages = numpy.copy(coverages)
-            total_reads = numpy.sum(raw[:, 2])
-            if coverages.shape[0] > 0 and coverages[-1] == 0:
-                coverages[-1] = total_reads
-            coverages = coverages[::-1]
+            # if downsampling is needed, deetermine how many reads from each chromosome
+            if coverage != 0:
+                if coverage < coverages[-1]:
+                    if comm is not None:
+                        err = comm.bcast(True, root=0)
+                    raise RunTtmeError('Coverage is below total reads in dataset')
+                cutoffs = coverages.astype(numpy.float64) / coverages[-1]
+                target_coverages = numpy.bincount(numpy.searchsorted(cutoffs, RNG.uniform(0, 1, coverages[-1])))
+            else:
+                target_coverages = None
+
+            # if all is well, tell workers to proceed
+            if comm is not None:
+                err = comm.bcast(False, root=0)
         else:
-            coverages = None
-            resolutions = None
-        if self.comm is not None:
-            coverages = self.comm.bcast(coverages, root=0)
-            resolutions = self.comm.bcast(resolutions, root=0)
-            chroms = self.comm.bcast(chroms, root=0)
-        if coverages.shape[0] == 0:
-            return None
+            err = comm.bcast(None, root=0)
+            if err:
+                sys.exit(1)
+            counts
 
-        if self.rank == 0:
-            # write arguements to h5dict
-            if 'chromosomes' in self.storage:
-                del self.storage['chromosomes']
-            self.storage.create_dataset(name='chromosomes', data=numpy.array(chroms))
-            if 'resolutions' in self.storage:
-                del self.storage['resolutions']
-            self.storage.create_dataset(name='resolutions', data=numpy.array(resolutions))
-            if 'coverages' in self.storage:
-                del self.storage['coverages']
-            self.storage.create_dataset(name='coverages', data=numpy.array(store_coverages))
-            if 'starts' in self.storage:
-                del self.storage['starts']
-            self.storage.create_dataset(name='starts', data=starts)
-            self.storage.attrs['total_reads'] = total_reads
 
-            # rebin data to highest resolution for faster processing
-            remapped = {}
-            new_mids = {}
-            new_indices = numpy.zeros(len(chroms) + 1, dtype=numpy.int64)
-            for i, chrom in enumerate(chroms):
-                start = (starts[i] / resolutions[0]) * resolutions[0]
-                stop = ((mids[chrom][-1] - 1) / resolutions[0] + 1) * resolutions[0]
-                N = (stop - start) / resolutions[0]
-                mapping = (mids[chrom] - start) / resolutions[0]
-                raw[indices[i]:indices[i + 1], 0] = mapping[raw[indices[i]:indices[i + 1], 0]]
-                raw[indices[i]:indices[i + 1], 1] = mapping[raw[indices[i]:indices[i + 1], 1]]
-                new_index = numpy.unique(raw[indices[i]:indices[i + 1], 0] * N + raw[indices[i]:indices[i + 1], 1])
-                index = numpy.searchsorted(new_index, raw[indices[i]:indices[i + 1], 0] * N +
-                                                      raw[indices[i]:indices[i + 1], 1])
-                remapped[chrom] = numpy.zeros((new_index.shape[0], 3), dtype=numpy.int64)
-                remapped[chrom][:, 0] = new_index / N
-                remapped[chrom][:, 1] = new_index % N
-                remapped[chrom][:, 2] = numpy.bincount(index, weights=raw[indices[i]:indices[i + 1], 2])
-                new_indices[i + 1] = new_index.shape[0] + new_indices[i]
-                new_mids[chrom] = (start + resolutions[0] / 2 + numpy.arange(N) *
-                                   resolutions[0]).astype(numpy.int32)
-            indices = new_indices.astype(numpy.int64)
-            mids = new_mids
-            raw = numpy.zeros((indices[-1], 3), dtype=numpy.int64)
-            for i, chrom in enumerate(chroms):
-                raw[indices[i]:indices[i + 1], :] = remapped[chrom]
-            del remapped
-
-        # Transfer mids data
-        chrom_ranges = numpy.round(numpy.linspace(0, len(chroms), self.num_procs + 1)).astype(numpy.int32)
-        if self.rank == 0:
-            for i in range(1, self.num_procs):
-                for j in range(chrom_ranges[i], chrom_ranges[i + 1]):
-                    chrom = chroms[j]
-                    self.comm.send(mids[chrom].shape[0], dest=i, tag=3)
-                    self.comm.Send(mids[chrom], dest=i, tag=4)
-        else:
-            mids = {}
-            for i in range(chrom_ranges[self.rank], chrom_ranges[self.rank + 1]):
-                chrom = chroms[i]
-                N = self.comm.recv(source=0, tag=3)
-                mids[chrom] = numpy.zeros(N, dtype=numpy.int32)
-                self.comm.Recv(mids[chrom], source=0, tag=4)
 
         # cycle through coverages
         for c, cov in enumerate(coverages):
@@ -668,17 +999,15 @@ class Quasar(object):
             self.comm.send(False, dest=dest, tag=5)
         return None
 
-    def _downsample(self, data, indices, target_count, rng=None):
-        if target_count == 0:
-            return numpy.copy(data), numpy.copy(indices)
-        elif numpy.sum(data[:, 2]) == target_count:
-            return numpy.copy(data), numpy.copy(indices)
+    def _downsample(self, data, target_count, rng=None):
+        if numpy.sum(data[:, 2]) == target_count:
+            return data
         if rng is None:
             rng = numpy.random.RandomState()
         initial_count = numpy.sum(data[:, 2])
         percent = target_count / float(initial_count)
 
-        # select which reads to keep, based on percent of reads to keep
+        # select wself.hich reads to keep, based on percent of reads to keep
         keep = rng.rand(initial_count) < percent
 
         # adjust mismatch between selected read count and target read count by selecting reads to add/remove
@@ -714,11 +1043,8 @@ class Quasar(object):
         counts = numpy.repeat(numpy.arange(data.shape[0]), data[:, 2])
         new_data = numpy.copy(data)
         new_data[:, 2] = numpy.bincount(counts, weights=keep, minlength=data.shape[0])
-        new_indices = numpy.zeros(indices.shape[0], dtype=numpy.int64)
-        for i in range(1, new_indices.shape[0]):
-            new_indices[i] = numpy.sum(new_data[indices[i - 1]:indices[i], 2] > 0) + new_indices[i - 1]
         new_data = new_data[numpy.where(new_data[:, 2] > 0)[0], :]
-        return new_data, new_indices
+        return new_data
 
     def _normalize(self, chrom, raw, mids, binsize):
         width = 100
