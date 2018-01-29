@@ -275,146 +275,78 @@ class Quasar(object):
                 raw[indices[i]:indices[i + 1], :] = remapped[chrom]
             del remapped
 
-        # Transfer mids data
-        chrom_ranges = numpy.round(numpy.linspace(0, len(chroms), self.num_procs + 1)).astype(numpy.int32)
-        if self.rank == 0:
-            for i in range(1, self.num_procs):
-                for j in range(chrom_ranges[i], chrom_ranges[i + 1]):
-                    chrom = chroms[j]
-                    self.comm.send(mids[chrom].shape[0], dest=i, tag=3)
-                    self.comm.Send(mids[chrom], dest=i, tag=4)
-        else:
-            mids = {}
-            for i in range(chrom_ranges[self.rank], chrom_ranges[self.rank + 1]):
-                chrom = chroms[i]
-                N = self.comm.recv(source=0, tag=3)
-                mids[chrom] = numpy.zeros(N, dtype=numpy.int32)
-                self.comm.Recv(mids[chrom], source=0, tag=4)
-
         # cycle through coverages
         for c, cov in enumerate(coverages):
-            raw_counts = {}
             if self.rank == 0:
                 if not self.silent:
                     print >> sys.stderr, ("\r%s\rDownsampling to %i coverage") % (' ' * 120, cov),
                 raw, indices = self._downsample(raw, indices, cov, RNG)
-                for i in range(chrom_ranges[1]):
-                    chrom = chroms[i]
-                    raw_counts[chrom] = raw[indices[i]:indices[i + 1], :]
-                for i in range(1, self.num_procs):
-                    for j in range(chrom_ranges[i], chrom_ranges[i + 1]):
-                        chrom = chroms[j]
-                        self.comm.send(indices[j + 1] - indices[j], dest=i, tag=1)
-                        self.comm.Send(raw[indices[j]:indices[j + 1], :], dest=i, tag=2)
-            else:
-                for i in range(chrom_ranges[self.rank], chrom_ranges[self.rank + 1]):
-                    chrom = chroms[i]
-                    N = self.comm.recv(source=0, tag=1)
-                    raw_counts[chrom] = numpy.zeros((N, 3), dtype=numpy.int64)
-                    self.comm.Recv(raw_counts[chrom], source=0, tag=2)
 
             # cycle through resolutions
             for r, res in enumerate(resolutions):
-                dists = {}
-                norms = {}
-                valids = {}
-                corrs = {}
 
                 # For each chromosome, normalize and find distance-corrected matrix
-                if self.rank == 0:
-                    if not self.silent:
-                        print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i - Normalizing counts") % (
-                            ' ' * 120, cov, res),
-                for chrom in raw_counts:
-                    norm, dist, valid_rows = self._normalize(chrom, raw_counts[chrom], mids[chrom], res)
-                    dists[chrom] = dist
-                    norms[chrom] = norm
-                    valids[chrom] = valid_rows
-                if self.rank == 0:
-                    for i in range(1, self.num_procs):
-                        self._transfer_dict(dists, 0, i)
-                        self._transfer_dict(norms, 0, i)
-                        self._transfer_dict(valids, 0, i)
-                else:
-                    self._transfer_dict(dists, 0, self.rank)
-                    self._transfer_dict(norms, 0, self.rank)
-                    self._transfer_dict(valids, 0, self.rank)
-                    dists = None
-
-                # cycle through chromosomes finding correlation matrices
-                for i, chrom in enumerate(chroms):
-                    task = True
+                for h, chrom in enumerate(chroms):
                     if self.rank == 0:
                         if cov == total_reads:
                             key = '%s.0C.%iR' % (chrom, res)
                         else:
                             key = '%s.%iC.%iR' % (chrom, cov, res)
-                        if 'corr.%s' % key in self.storage:
-                            task = False
-                        if self.comm is not None:
-                            task = self.comm.bcast(task, root=0)
-                        if task:
-                            if not self.silent:
-                                print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i - Correlating chrom %s") % (
-                                    ' ' * 120, cov, res, chrom),
-                            corrs[chrom] = self._find_correlations(norms[chrom], valids[chrom])
-                    else:
-                        task = self.comm.bcast(task, root=0)
-                        if task:
-                            self._find_correlations()
-
-                # write resulting matrices to hdf5 file
-                if self.rank == 0:
-                    if not self.silent:
-                        print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i - Writing results") % (
-                            ' ' * 120, cov, res),
-                    for chrom in chroms:
-                        if cov == total_reads:
-                            key = '%s.0C.%iR' % (chrom, res)
-                        else:
-                            key = '%s.%iC.%iR' % (chrom, cov, res)
-                        if valids[chrom] is None:
+                        if 'valid.%s' % key in self.storage:
+                            if self.comm is not None:
+                                skip = self.comm.bcast(True, root=0)
+                            continue
+                        if not self.silent:
+                            print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i Chrom %s - Normalizing counts") % (
+                                ' ' * 120, cov, res, chrom),
+                        norm, dist, valid_rows = self._normalize(chrom, raw[indices[h]:indices[h + 1]], mids[chrom], res)
+                        if not self.silent:
+                            print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i - Correlating chrom %s") % (
+                                ' ' * 120, cov, res, chrom),
+                        corrs = self._find_correlations(norm, valid_rows)
+                        
+                        # write resulting matrices to hdf5 file
+                        if not self.silent:
+                            print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i Chrom %s - Writing results") % (
+                                ' ' * 120, cov, res, chrom),
+                        if corrs is None:
                             self.storage.attrs['%s.invalid' % (key)] = True
-                        elif chrom in corrs:
-                            self.storage.create_dataset(name="valid.%s" % (key),
-                                data=valids[chrom])
-                            self.storage.create_dataset(name="dist.%s" % (key), data=dists[chrom])
-                            self.storage.create_dataset(name="corr.%s" % (key), data=corrs[chrom])
+                        else:
+                            self.storage.create_dataset(name="valid.%s" % (key), data=valid_rows)
+                            self.storage.create_dataset(name="dist.%s" % (key), data=dist)
+                            self.storage.create_dataset(name="corr.%s" % (key), data=corrs)
+                    else:
+                        skip = comm.bcast(None, root=0)
+                        if skip:
+                            continue
+                        self._find_correlations()
         if self.rank == 0 and not self.silent:
             print >> sys.stderr, ("\r%s\r") % (' ' * 120),
         return None
 
-    def find_quality_scores(self, force=False):
+    def find_quality_scores(self, chroms=[]):
         """
         Find QuASAR quality scores across whole dataset.
 
-        :param force: Recalculate scores even if they have already been stored in the QuASAR object.
-        :type force: bool.
+        :param chroms: A list of chromosome names to calculate quality scores for.
+        :type chroms: list
 
-        :returns: A structured numpy array with the fields resolution', 'coverage', and 'score'.
+        :returns: A structured numpy array with the fields 'chromosome', 'resolution', 'coverage', and 'score'.
         """
         if self.rank > 0:
             return None
         if 'chromosomes' not in self.storage:
             return None
-        chroms = self.storage['chromosomes'][...]
+        if len(chroms) == 0:
+            chroms = self.storage['chromosomes'][...]
+        else:
+            chroms = numpy.intersect1d(self.storage['chromosomes'][...], numpy.array(chroms))
         coverages = self.storage['coverages'][...]
         tcoverages = numpy.copy(coverages)
         if tcoverages[-1] == 0:
             tcoverages[-1] = self.storage.attrs['total_reads']
         resolutions = self.storage['resolutions'][...]
-        if ('quality_results' in self.storage and not force and
-            self.storage['quality_results'].shape == (chroms.shape[0] + 1, resolutions.shape[0], coverages.shape[0])):
-            scores = self.storage['quality_results'][...]
-            results = numpy.zeros(scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
-                ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
-            results['score'] = scores[-1, :, :].ravel(order='C')
-            results['resolution'] = numpy.repeat(resolutions, coverages.shape[0])
-            results['coverage'] = numpy.tile(tcoverages, resolutions.shape[0])
-            return results
-        elif 'quality_results' in self.storage:
-            del self.storage['quality_results']
-        scores = numpy.zeros((chroms.shape[0] + 1, resolutions.shape[0], coverages.shape[0]), dtype=numpy.float64)
+        scores = numpy.zeros((resolutions.shape[0], coverages.shape[0], chroms.shape[0] + 1), dtype=numpy.float64)
         scores.fill(numpy.nan)
         for j, res in enumerate(resolutions):
             for k, cov in enumerate(coverages):
@@ -423,7 +355,7 @@ class Quasar(object):
                     key = '%s.%iC.%iR' % (chrom, cov, res)
                     if 'valid.%s' % key in self.storage:
                         valid_rows = self.storage['valid.%s' % key][...]
-                        dists = self.storage['dist.%s' % key][...]
+                        dists = (1 + self.storage['dist.%s' % key][...]) ** 0.5
                         corrs = self.storage['corr.%s' % key][...]
                         valid = numpy.zeros(corrs.shape, dtype=numpy.bool)
                         N, M = corrs.shape
@@ -438,25 +370,26 @@ class Quasar(object):
                             trans = numpy.sum(corrs[where] * dists[where])
                             corrs = numpy.sum(corrs[where])
                             dists = numpy.sum(dists[where])
-                            scores[i, j, k] = trans / dists - corrs / N
+                            scores[j, k, i] = trans / dists - corrs / N
                             temp += [trans, dists, corrs, N]
-                scores[-1, j, k] = temp[0] / temp[1] - temp[2] / temp[3]
-        self.storage.create_dataset(name='quality_results', data=scores)
-        results = numpy.zeros(scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
-            ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
-        results['score'] = scores[-1, :, :].ravel(order='C')
-        results['resolution'] = numpy.repeat(resolutions, coverages.shape[0])
-        results['coverage'] = numpy.tile(coverages, resolutions.shape[0])
+                scores[j, k, -1] = temp[0] / temp[1] - temp[2] / temp[3]
+        all_chroms = numpy.r_[chroms, numpy.array(['All'])]
+        results = numpy.zeros(scores.shape[0] * scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
+            ('chromosome', all_chroms.dtype), ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
+        results['score'] = scores.ravel(order='C')
+        results['resolution'] = numpy.repeat(resolutions, scores.shape[1] * scores.shape[2])
+        results['coverage'] = numpy.tile(numpy.repeat(coverages, scores.shape[2]), scores.shape[0])
+        results['chromosome'] = numpy.tile(all_chroms, scores.shape[0] * scores.shape[1])
         return results
 
-    def find_replicate_scores(self, replicate, force=False):
+    def find_replicate_scores(self, replicate, chroms=[]):
         """
         Find QuASAR replicate scores across whole dataset.
 
         :param replicate: A class:`Quasar` object to calculate replicate scores with. If this function has been previously called with a different sample, the current transformed matrices will be deleted prior to calculating new matrices.
         :type replicate: class:`Quasar` class object.
-        :param force: Recalculate scores even if they have already been stored in the QuASAR object.
-        :type force: bool.
+        :param chroms: A list of chromosome names to calculate replicate scores for.
+        :type chroms: list
 
         :returns: A structured numpy array with the fields 'resolution', 'coverage', and 'score'.
         """
@@ -464,7 +397,11 @@ class Quasar(object):
             return None
         if 'chromosomes' not in self.storage or 'chromosomes' not in replicate.storage:
             return None
-        chroms = numpy.intersect1d(self.storage['chromosomes'][...], replicate.storage['chromosomes'][...])
+        if len(chroms) == 0:
+            chroms = numpy.intersect1d(self.storage['chromosomes'][...], replicate.storage['chromosomes'][...])
+        else:
+            chroms = numpy.intersect1d(self.storage['chromosomes'][...], numpy.array(chroms))
+            chroms = numpy.intersect1d(chroms, replicate.storage['chromosomes'][...])
         resolutions = numpy.intersect1d(self.storage['resolutions'][...], replicate.storage['resolutions'][...])
         coverages = numpy.intersect1d(self.storage['coverages'][...], replicate.storage['coverages'][...])
         if coverages[0] == 0:
@@ -473,46 +410,12 @@ class Quasar(object):
         tcoverages = numpy.copy(coverages)
         if tcoverages[-1] == 0:
             tcoverages[-1] = (self.storage.attrs['total_reads'] + replicate.storage.attrs['total_reads']) / 2
-        if 'replicate_results' in self.storage and 'replicate_results' in replicate.storage and not force:
-            if (numpy.array_equal(self.storage['replicate_results'][...],
-                replicate.storage['replicate_results'][...]) and
-                self.storage['replicate_results'].shape ==
-                (chroms.shape[0] + 1, resolutions.shape[0], coverages.shape[0])):
-                scores = self.storage['replicate_results'][...]
-                results = numpy.zeros(scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
-                    ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
-                results['score'] = scores[-1, :, :].ravel(order='C')
-                results['resolution'] = numpy.repeat(resolutions, coverages.shape[0])
-                results['coverage'] = numpy.tile(tcoverages, resolutions.shape[0])
-                return results
-            else:
-                if 'replicate_results' in self.storage:
-                    del self.storage['replicate_results']
-                if 'replicate_results' in replicate.storage:
-                    del replicate.storage['replicate_results']
-        else:
-            if 'replicate_results' in self.storage:
-                del self.storage['replicate_results']
-            if 'replicate_chromosomes' in self.storage:
-                del self.storage['replicate_chromosomes']
-            if 'replicate_resolutions' in self.storage:
-                del self.storage['replicate_resolutions']
-            if 'replicate_coverages' in self.storage:
-                del self.storage['replicate_coverages']
-            if 'replicate_results' in replicate.storage:
-                del replicate.storage['replicate_results']
-            if 'replicate_chromosomes' in replicate.storage:
-                del replicate.storage['replicate_chromosomes']
-            if 'replicate_resolutions' in replicate.storage:
-                del replicate.storage['replicate_resolutions']
-            if 'replicate_coverages' in replicate.storage:
-                del replicate.storage['replicate_coverages']
         starts1 = numpy.zeros(chroms.shape[0], dtype=numpy.int64)
         starts2 = numpy.zeros(chroms.shape[0], dtype=numpy.int64)
         for i, chrom in enumerate(chroms):
             starts1[i] = numpy.where(self.storage['chromosomes'][...] == chrom)[0][0]
             starts2[i] = numpy.where(replicate.storage['chromosomes'][...] == chrom)[0][0]
-        scores = numpy.zeros((chroms.shape[0] + 1, resolutions.shape[0], coverages.shape[0]), dtype=numpy.float64)
+        scores = numpy.zeros((resolutions.shape[0], coverages.shape[0], chroms.shape[0] + 1), dtype=numpy.float64)
         scores.fill(numpy.nan)
         for j, res in enumerate(resolutions):
             for k, cov in enumerate(coverages):
@@ -521,7 +424,7 @@ class Quasar(object):
                     key = '%s.%iC.%iR' % (chrom, cov, res)
                     if 'valid.%s' % key in self.storage and 'valid.%s' % key in replicate.storage:
                         valid_rows1 = self.storage['valid.%s' % key][...]
-                        dists1 = self.storage['dist.%s' % key][...]
+                        dists1 = (1 + self.storage['dist.%s' % key][...]) ** 0.5
                         corrs1 = self.storage['corr.%s' % key][...]
                         valid1 = numpy.zeros(corrs1.shape, dtype=numpy.bool)
                         N, M = corrs1.shape
@@ -530,7 +433,7 @@ class Quasar(object):
                             valid1[:P, l] = valid_rows1[(l + 1):] * valid_rows1[:P]
                         valid1[numpy.where((numpy.abs(dists1) == numpy.inf) | (numpy.abs(corrs1) == numpy.inf))] = 0
                         valid_rows2 = replicate.storage['valid.%s' % key][...]
-                        dists2 = replicate.storage['dist.%s' % key][...]
+                        dists2 = (1 + replicate.storage['dist.%s' % key][...]) ** 0.5
                         corrs2 = replicate.storage['corr.%s' % key][...]
                         valid2 = numpy.zeros(corrs2.shape, dtype=numpy.bool)
                         N, M = corrs2.shape
@@ -585,7 +488,7 @@ class Quasar(object):
                         Ystd = (Y2mu - Ymu ** 2.0) ** 0.5
                         if Xstd == 0 or Ystd == 0:
                             continue
-                        scores[i, j, k] = (XYmu - Xmu * Ymu) / (Xstd * Ystd)
+                        scores[j, k, i] = (XYmu - Xmu * Ymu) / (Xstd * Ystd)
                 Xmu = temp[0] / temp[5]
                 Ymu = temp[1] / temp[5]
                 X2mu = temp[2] / temp[5]
@@ -593,24 +496,17 @@ class Quasar(object):
                 XYmu = temp[4] / temp[5]
                 Xstd = (X2mu - Xmu ** 2.0) ** 0.5
                 Ystd = (Y2mu - Ymu ** 2.0) ** 0.5
-                scores[-1, j, k] = (XYmu - Xmu * Ymu) / (Xstd * Ystd)
-        self.storage.create_dataset(name='replicate_results', data=scores)
-        self.storage.create_dataset(name='replicate_chromosomes', data=chroms)
-        self.storage.create_dataset(name='replicate_resolutions', data=resolutions)
-        self.storage.create_dataset(name='replicate_coverages', data=tcoverages)
-        if 'replicate_results' not in replicate.storage:
-            replicate.storage.create_dataset(name='replicate_results', data=scores)
-            replicate.storage.create_dataset(name='replicate_chromosomes', data=chroms)
-            replicate.storage.create_dataset(name='replicate_resolutions', data=resolutions)
-            replicate.storage.create_dataset(name='replicate_coverages', data=tcoverages)
-        results = numpy.zeros(scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
-            ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
-        results['score'] = scores[-1, :, :].ravel(order='C')
-        results['resolution'] = numpy.repeat(resolutions, coverages.shape[0])
-        results['coverage'] = numpy.tile(tcoverages, resolutions.shape[0])
+                scores[j, k, -1] = (XYmu - Xmu * Ymu) / (Xstd * Ystd)
+        all_chroms = numpy.r_[chroms, numpy.array(['All'])]
+        results = numpy.zeros(scores.shape[0] * scores.shape[1] * scores.shape[2], dtype=numpy.dtype([
+            ('chromosome', all_chroms.dtype), ('resolution', numpy.int64), ('coverage', numpy.int64), ('score', numpy.float64)]))
+        results['score'] = scores.ravel(order='C')
+        results['resolution'] = numpy.repeat(resolutions, scores.shape[1] * scores.shape[2])
+        results['coverage'] = numpy.tile(numpy.repeat(coverages, scores.shape[2]), scores.shape[0])
+        results['chromosome'] = numpy.tile(all_chroms, scores.shape[0] * scores.shape[1])
         return results
 
-    def print_report(self, filename):
+    def print_report(self, filename, qscores=None, rscores=None):
         """
         Write QuASAR scores to output file.
 
@@ -621,12 +517,6 @@ class Quasar(object):
         """
         if self.rank > 0:
             return None
-        qscores = None
-        rscores = None
-        if 'quality_results' in self.storage:
-            qscores = self.storage['quality_results'][...]
-        if 'replicate_results' in self.storage:
-            rscores = self.storage['replicate_results'][...]
         if qscores is None and rscores is None:
             if not self.silent:
                 print >> sys.stderr, ("\r%s\rNo scores found. Calculate quality and/or replicate scores first.\n") % (
@@ -722,124 +612,116 @@ class Quasar(object):
 
     def _normalize(self, chrom, raw, mids, binsize):
         width = 100
-        # convert into square matrix
-        start = (mids[0] / binsize) * binsize
-        stop = ((mids[-1]) / binsize + 1) * binsize
-        N = ((stop - start) / binsize).astype(numpy.int64)
-        mapping = (mids - start) / binsize
-        data = numpy.bincount(mapping[raw[:, 0]] * N + mapping[raw[:, 1]], minlength=(N * N),
-                              weights=raw[:, 2]).reshape(N, N)
-        indices = numpy.triu_indices(N, 0)
-        data[indices[1], indices[0]] = data[indices]
-        data[numpy.arange(N), numpy.arange(N)] *= 2
-        data = data.astype(numpy.float64)
+
+        # downbin if necessary
+        curr_binsize = mids[1] - mids[0]
+        if curr_binsize != binsize:
+            mapping = mids / binsize
+            mapping -= mapping[0]
+            N = mapping[-1] + 1
+            indices = mapping[raw[:, 0]] * N + mapping[raw[:, 1]]
+            uindices = numpy.unique(indices)
+            data = numpy.zeros((uindices.shape[0], 3), dtype=numpy.int64)
+            data[:, 0] = uindices / N
+            data[:, 1] = uindices % N
+            data[:, 2] = numpy.bincount(numpy.searchsorted(uindices, indices), weights=raw[:, 2])
+        else:
+            data = raw
+            N = mids.shape[0]
 
         # filter rows with too few observations
-        row_counts = numpy.bincount(mapping, minlength=N)
         prev_valid_rows = N + 1
+        valid_rows = numpy.ones(N, dtype=numpy.int32)
         # we need several non-zero observations for finding correlations
-        sums = numpy.zeros(N, dtype=numpy.int32)
-        for i in range(min(width, N - 1)):
-            temp1 = numpy.arange(N - i - 1)
-            temp2 = numpy.arange(i + 1, N)
-            sums[:(N - i - 1)] += data[temp1, temp2] > 0
-            sums[(i + 1):N] += data[temp1, temp2] > 0
-        valid_rows = sums >= 1
-        while prev_valid_rows > numpy.sum(valid_rows):
-            data[numpy.logical_not(valid_rows), :] = 0
-            data[:, numpy.logical_not(valid_rows)] = 0
+        while numpy.sum(valid_rows) < prev_valid_rows:
             prev_valid_rows = numpy.sum(valid_rows)
             sums = numpy.zeros(N, dtype=numpy.int32)
-            for i in range(min(width, N - 1)):
-                temp1 = numpy.arange(N - i - 1)
-                temp2 = numpy.arange(i + 1, N)
-                sums[:(N - i - 1)] += data[temp1, temp2] > 0
-                sums[(i + 1):N] += data[temp1, temp2] > 0
-            valid_rows = sums >= 1
+            _quasar.filter_bins(
+                data,
+                sums,
+                valid_rows,
+                width)
+            valid_rows[:] = sums >= 1
         valid = numpy.where(valid_rows)[0]
         if valid.shape[0] == 0:
             return None, None, None
 
-        # find distance dependent signal
-        bg = numpy.ones(N, dtype=numpy.float64)
-        for i in range(N):
-            temp1 = numpy.arange(N - i)
-            temp2 = numpy.arange(i, N)
-            obs = numpy.sum(data[temp1, temp2])
-            pos = float(numpy.sum(valid_rows[temp1] & valid_rows[temp2]))
-            if obs > 0:
-                bg[i] = obs / pos
-
-        # find compact data array for weighting correlation matrix
+        # find distance dependent signal and compact data array for weighting correlation matrix
+        bg = numpy.ones(width, dtype=numpy.float64)
+        temp = numpy.zeros((width, 2), dtype=numpy.int64)
         dist = numpy.zeros((N, min(width, N - 1)), dtype=numpy.float64)
-        for i in range(dist.shape[1]):
-            M = N - i - 1
-            temp1 = numpy.arange(M)
-            temp2 = numpy.arange(i + 1, N)
-            dist[:M, i] = (data[temp1, temp2] + 1) ** 0.5
+        norm = numpy.zeros((N, width * 2), dtype=numpy.float64)
+        _quasar.find_bg_dist_norm(
+            data,
+            valid_rows,
+            temp,
+            bg,
+            dist,
+            norm)
 
-        # find fill data array for finding correlations
-        norm = numpy.zeros((N, N), dtype=numpy.float64)
-        for i in valid:
-            norm[i, valid] = data[i, valid]
+        # remove bg from norm
         for i in range(N):
-            temp1 = numpy.arange(N - i)
-            temp2 = numpy.arange(i, N)
-            norm[temp1, temp2] /= bg[i]
-            norm[temp2, temp1] = norm[temp1, temp2]
-        return norm, dist, valid_rows.astype(numpy.int32)
+            norm[i, :width] /= bg[::-1]
+            norm[i, width:] /= bg
+        return norm, dist, valid_rows
 
     def _find_correlations(self, norm=None, vrows=None):
         width = 100
         if self.rank == 0:
-            if norm is not None:
-                N = norm.shape[0]
-            else:
-                N = None
+            if norm is None:
+                if self.comm is not None:
+                    err = self.comm.bcast(True, root=0)
+                return None
+            N = norm.shape[0]
+            if self.comm is not None:
+                N = self.comm.bcast(N, root=0)
+                self.comm.Bcast(vrows, root=0)
+            node_ranges = numpy.round(numpy.linspace(0, N, self.num_procs + 1)).astype(numpy.int32)
+            for i in range(1, self.num_procs):
+                self.comm.send([node_ranges[i], node_ranges[i + 1], min(node_ranges[i + 1] + width, N)], dest=i)
+                self.comm.Send(norm[node_ranges[i]:min(node_ranges[i + 1] + width, N), :], dest=i)
+            start = 0
+            stop = node_ranges[1]
+            stop2 = min(node_ranges[1] + width, N)
         else:
-            N = None
-        if self.comm is not None:
-            N = self.comm.bcast(N, root=0)
-        if N is None:
-            return None
-        if self.rank != 0:
-            norm = numpy.zeros((N, N), dtype=numpy.float64)
+            err = self.comm.bcast(None, root=0)
+            if err:
+                return None
+            N = self.comm.bcast(None, root=0)
             vrows = numpy.zeros(N, dtype=numpy.int32)
-        if self.comm is not None:
-            self.comm.Bcast(norm, root=0)
             self.comm.Bcast(vrows, root=0)
-        valid = numpy.where(vrows)[0]
-        node_ranges = numpy.round(numpy.linspace(0, N, self.num_procs + 1)).astype(numpy.int32)
-        M = node_ranges[self.rank + 1] - node_ranges[self.rank]
-        corr = numpy.zeros((M, min(N - 1, width)), dtype=numpy.float64)
+            start, stop, stop2, N = self.comm.recv(source=0)
+            norm = numpy.zeros((stop2 - start, width * 2), dtype=numpy.float64)
+            self.comm.Recv(norm, source=0)
+        corr = numpy.zeros((stop - start, width), dtype=numpy.float64)
         corr.fill(numpy.inf)
         _quasar.find_correlations(
             norm,
-            vrows.astype(numpy.int32),
+            vrows,
             corr,
-            node_ranges[self.rank],
-            node_ranges[self.rank + 1])
+            start)
         if self.rank == 0:
-            corrs = numpy.zeros((N, min(N - 1, width)), dtype=numpy.float64)
-            corrs[:node_ranges[1], :] = corr
-            for j in range(1, self.num_procs):
-                self.comm.Recv(corrs[node_ranges[j]:node_ranges[j + 1], :], source=j, tag=9)
-            corrs[numpy.where(numpy.isnan(corrs))] = numpy.inf
+            corrs = numpy.zeros((N, width), dtype=numpy.float64)
+            corrs[:corr.shape[0], :] = corr
+            del corr
+            for i in range(1, self.num_procs):
+                self.comm.Recv(corrs[node_ranges[i]:node_ranges[i + 1], :], source=i)
             return corrs
         else:
-            self.comm.Send(corr, dest=0, tag=9)
-        return None
+            self.comm.Send(corr, dest=0)
+            del corr
+            return None
 
     def _print_txt_report(self, filename, qscores, rscores):
         output = open(filename, 'w')
         if qscores is not None:
-            chromosomes = self.storage['chromosomes'][...]
-            resolutions = self.storage['resolutions'][...]
-            coverages = self.storage['coverages'][...]
+            chromosomes = numpy.r_[numpy.array(['All']), numpy.unique(qscores['chromosome'][numpy.where(qscores['chromosome'] != 'All')])]
+            resolutions = numpy.unique(qscores['resolution'])
+            coverages = numpy.unique(qscores['coverage'])
             if numpy.where(coverages == 0)[0].shape[0] > 0:
-                coverages[numpy.where(coverages == 0)[0][0]] = self.storage.attrs['total_reads']
+                zero_cov = self.storage.attrs['total_reads']
             print >> output, 'Quality Score Results\n'
-            temp = ['Resolution', 'Coverage', 'All'] + list(chromosomes)
+            temp = ['Resolution', 'Coverage'] + list(chromosomes)
             print >> output, '\t'.join(temp)
             for i, res in enumerate(resolutions):
                 if res < 1000:
@@ -849,9 +731,13 @@ class Quasar(object):
                 else:
                     label = "%i Mb" % (res / 1000000)
                 for j, cov in enumerate(coverages):
-                    temp = [label, self._num2str(cov), "%0.6f" % qscores[-1, i, j]]
-                    for k in range(chromosomes.shape[0]):
-                        temp.append("%0.6f" % qscores[k, i, j])
+                    if cov == 0:
+                        temp = [label, self._num2str(zero_cov)]
+                    else:
+                        temp = [label, self._num2str(cov)]
+                    for k, chrom in enumerate(chromosomes):
+                        where = numpy.where((qscores['chromosome'] == chrom) & (qscores['resolution'] == res) & (qscores['coverage'] == cov))[0][0]
+                        temp.append("%0.6f" % qscores['score'][where])
                     print >> output, '\t'.join(temp)
             print >> output, '\n'
 
@@ -864,7 +750,9 @@ class Quasar(object):
                 Xs = numpy.log10(coverages)
                 print >> output, "Estimated quality-coverage curves (Maximum Quality / (1 + e^(-Scale * (x - Inflection)))"
                 for i, res in enumerate(resolutions):
-                    Ys = qscores[-1, i, :]
+                    where = numpy.where((qscores['chromosome'] == 'All') & (qscores['resolution'] == res))[0]
+                    Ys = qscores['score'][where]
+                    Ys = Ys[numpy.argsort(qscores['coverage'][where])]
                     if res < 1000:
                         label = "%i bp" % res
                     elif res < 1000000:
@@ -883,7 +771,9 @@ class Quasar(object):
             # if there are multiple coverages, estimate maximum usable resolution
             if resolutions.shape[0] > 1:
                 Xs = numpy.log10(resolutions)
-                Ys = qscores[-1, :, -1]
+                where = numpy.where((qscores['chromosome'] == 'All') & (qscores['coverage'] == coverages[-1]))[0]
+                Ys = qscores['score'][where]
+                Ys = Ys[numpy.argsort(qscores['resoluion'][where])]
                 pos = 0
                 while pos < Xs.shape[0] - 1 and self.strict_qcutoff > Ys[pos + 1]:
                     pos += 1
@@ -911,11 +801,11 @@ class Quasar(object):
                 print >> output, '\n'
 
         if rscores is not None:
-            chromosomes = self.storage['replicate_chromosomes'][...]
-            resolutions = self.storage['replicate_resolutions'][...]
-            coverages = self.storage['replicate_coverages'][...]
+            chromosomes = numpy.r_[numpy.array(['All']), numpy.unique(rscores['chromosome'][numpy.where(rscores['chromosome'] != 'All')])]
+            resolutions = numpy.unique(rscores['resolution'])
+            coverages = numpy.unique(rscores['coverage'])
             print >> output, 'Replicate Score Results\n'
-            temp = ['Resolution', 'Coverage', 'All'] + list(chromosomes)
+            temp = ['Resolution', 'Coverage'] + list(chromosomes)
             print >> output, '\t'.join(temp)
             for i, res in enumerate(resolutions):
                 if res < 1000:
@@ -925,16 +815,19 @@ class Quasar(object):
                 else:
                     label = "%i Mb" % (res / 1000000)
                 for j, cov in enumerate(coverages):
-                    temp = [label, self._num2str(cov), "%0.6f" % rscores[-1, i, j]]
-                    for k in range(chromosomes.shape[0]):
-                        temp.append("%0.6f" % rscores[k, i, j])
+                    temp = [label, self._num2str(cov)]
+                    for k, chrom in enumerate(chromosomes):
+                        where = numpy.where((rscores['chromosome'] == chrom) & (rscores['resolution'] == res) & (rscores['coverage'] == cov))[0][0]
+                        temp.append("%0.6f" % rscores['score'][where])
                     print >> output, '\t'.join(temp)
             print >> output, '\n'
 
             # if there are multiple coverages, estimate maximum usable resolution
             if resolutions.shape[0] > 1:
                 Xs = numpy.log10(resolutions)
-                Ys = rscores[-1, :, -1]
+                where = numpy.where((rscores['chromosome'] == 'All') & (rscores['coverage'] == coverages[-1]))[0]
+                Ys = rscores['score'][where]
+                Ys = Ys[numpy.argsort(rscores['resoluion'][where])]
                 pos = 0
                 while pos < Xs.shape[0] - 1 and self.strict_rcutoff > Ys[pos + 1]:
                     pos += 1
@@ -967,11 +860,11 @@ class Quasar(object):
         c = canvas.canvas()
         H = 0
         if qscores is not None:
-            resolutions = self.storage['resolutions'][...]
-            coverages = self.storage['coverages'][...]
-            chromosomes = self.storage['chromosomes'][...]
+            chromosomes = numpy.r_[numpy.array(['All']), numpy.unique(qscores['chromosome'][numpy.where(qscores['chromosome'] != 'All')])]
+            resolutions = numpy.unique(qscores['resolution'])
+            coverages = numpy.unique(qscores['coverage'])
             if numpy.where(coverages == 0)[0].shape[0] > 0:
-                coverages[numpy.where(coverages == 0)[0][0]] = self.storage.attrs['total_reads']
+                zero_cov = self.storage.attrs['total_reads']
             c.text(H, 0, "Quality Score Results", [text.halign.left, text.valign.bottom, text.size(0)])
             H -= 0.6
             hoffset = 1.7
@@ -996,7 +889,8 @@ class Quasar(object):
                     label = "%i Mb" % (res / 1000000)
                 c.text(hoffset - 0.1, H + 0.05, label, [text.halign.right, text.valign.bottom, text.size(-2)])
                 for j, cov in enumerate(coverages):
-                    c.text(hoffset + (j + 0.5) * 2.0, H + 0.05, '%0.6f' % qscores[-1, i, j],
+                    where = numpy.where((qscores['chromosome'] == 'All') & (qscores['resolution'] == res) & (qscores['coverage'] == cov))[0][0]
+                    c.text(hoffset + (j + 0.5) * 2.0, H + 0.05, '%0.6f' % qscores['score'][where],
                         [text.halign.center, text.valign.bottom, text.size(-2)])
                 H -= 0.3
             H -= 0.6
@@ -1015,7 +909,9 @@ class Quasar(object):
                 H -= 0.3
                 passed = False
                 for i, res in enumerate(resolutions):
-                    Ys = qscores[-1, i, :]
+                    where = numpy.where((qscores['chromosome'] == 'All') & (qscores['resolution'] == res))[0]
+                    Ys = qscores['score'][where]
+                    Ys = Ys[numpy.argsort(qscores['coverage'][where])]
                     c1 = self._plot_graph(Xs, Ys, width, 'q')
                     if res < 1000:
                         label = "%i bp" % res
@@ -1063,7 +959,9 @@ class Quasar(object):
             # if there are multiple coverages, estimate maximum usable resolution
             if resolutions.shape[0] > 1:
                 Xs = resolutions
-                Ys = qscores[-1, :, -1]
+                where = numpy.where((qscores['chromosome'] == 'All') & (qscores['coverage'] == coverages[-1]))[0]
+                Ys = qscores['score'][where]
+                Ys = Ys[numpy.argsort(qscores['resoluion'][where])]
                 width = 17.0 / 3.0 - 0.3
                 c1 = self._plot_graph(Xs, Ys, width, 'q', 'res')
                 pos = 0
@@ -1101,9 +999,9 @@ class Quasar(object):
 
         if rscores is not None:
             H -= 0.4
-            chromosomes = self.storage['replicate_chromosomes'][...]
-            resolutions = self.storage['replicate_resolutions'][...]
-            coverages = self.storage['replicate_coverages'][...]
+            chromosomes = numpy.r_[numpy.array(['All']), numpy.unique(rscores['chromosome'][numpy.where(rscores['chromosome'] != 'All')])]
+            resolutions = numpy.unique(rscores['resolution'])
+            coverages = numpy.unique(rscores['coverage'])
             c.text(0, H, "Replicate Score Results", [text.halign.left, text.valign.bottom, text.size(0)])
             H -= 0.6
             hoffset = 1.7
@@ -1128,7 +1026,8 @@ class Quasar(object):
                     label = "%i Mb" % (res / 1000000)
                 c.text(hoffset - 0.1, H + 0.05, label, [text.halign.right, text.valign.bottom, text.size(-2)])
                 for j, cov in enumerate(coverages):
-                    c.text(hoffset + (j + 0.5) * 2.0, H + 0.05, '%0.6f' % rscores[-1, i, j],
+                    where = numpy.where((rscores['chromosome'] == 'All') & (rscores['resolution'] == res) & (rscores['coverage'] == cov))[0][0]
+                    c.text(hoffset + (j + 0.5) * 2.0, H + 0.05, '%0.6f' % rscores['score'][where],
                         [text.halign.center, text.valign.bottom, text.size(-2)])
                 H -= 0.3
             H -= 0.4
@@ -1145,7 +1044,9 @@ class Quasar(object):
                         label = "%i Kb" % (res / 1000)
                     else:
                         label = "%i Mb" % (res / 1000000)
-                    Ys = rscores[-1, i, :]
+                    where = numpy.where((rscores['chromosome'] == 'All') & (rscores['resolution'] == res))[0]
+                    Ys = rscores['score'][where]
+                    Ys = Ys[numpy.argsort(rscores['coverage'][where])]
                     c1 = self._plot_graph(Xs, Ys, width, 'r')
                     c1.text(hoffset, -0.15, "Resolution: %s" % label,
                         [text.halign.left, text.valign.top, text.size(-2)])
@@ -1156,7 +1057,9 @@ class Quasar(object):
             if resolutions.shape[0] > 1:
                 Xs = resolutions
                 lXs = numpy.log10(resolutions)
-                Ys = rscores[-1, :, -1]
+                where = numpy.where((rscores['chromosome'] == 'All') & (rscores['coverage'] == coverages[-1]))[0]
+                Ys = rscores['score'][where]
+                Ys = Ys[numpy.argsort(rscores['resoluion'][where])]
                 width = 17.0 / 3.0 - 0.3
                 c1 = self._plot_graph(Xs, Ys, width, 'r', 'res')
                 pos = 0

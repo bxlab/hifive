@@ -112,8 +112,9 @@ def run(args):
             return None
         q1.find_transformation(hic1, chroms=args.chroms, resolutions=args.resolutions,
                          coverages=args.coverages, seed=args.seed)
-        q1.find_quality_scores(args.force)
-        q1.save()
+    qscores = q1.find_quality_scores(chroms=args.chroms)
+    rscores = None
+    q1.save()
     if args.quasar2 is not None:
         if args.hic2 is not None:
             try:
@@ -124,12 +125,9 @@ def run(args):
                 return None
             q2.find_transformation(hic2, chroms=args.chroms, resolutions=args.resolutions,
                              coverages=args.coverages, seed=args.seed)
-        q2.find_quality_scores(args.force)
         q2.save()
-        q1.find_replicate_scores(q2, args.force)
-        q1.save()
-        q2.save()
+        rscores = q1.find_replicate_scores(q2, chroms=args.chroms)
         q2.close()
     if args.report is not None:
-        q1.print_report(args.report)
+        q1.print_report(args.report, qscores=qscores, rscores=rscores)
     q1.close()
