@@ -2271,6 +2271,11 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_2find_bg_dist_norm(CYTHON_
   PY_LONG_LONG __pyx_t_29;
   Py_ssize_t __pyx_t_30;
   PY_LONG_LONG __pyx_t_31;
+  Py_ssize_t __pyx_t_32;
+  PY_LONG_LONG __pyx_t_33;
+  Py_ssize_t __pyx_t_34;
+  PY_LONG_LONG __pyx_t_35;
+  PY_LONG_LONG __pyx_t_36;
   __Pyx_RefNannySetupContext("find_bg_dist_norm", 0);
   __pyx_pybuffer_raw.pybuffer.buf = NULL;
   __pyx_pybuffer_raw.refcount = 0;
@@ -2632,7 +2637,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_2find_bg_dist_norm(CYTHON_
  *             corrs[bin1, width + span] = count
  *             corrs[bin2, width - span - 1] = count             # <<<<<<<<<<<<<<
  *         for i in range(width):
- *             bg[i] = temp[i, 0] / <double>temp[i, 1]
+ *             if temp[i, 1] > 0 and temp[i, 0] > 0:
  */
           __pyx_t_25 = __pyx_v_bin2;
           __pyx_t_26 = ((__pyx_v_width - __pyx_v_span) - 1);
@@ -2644,8 +2649,8 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_2find_bg_dist_norm(CYTHON_
  *             corrs[bin1, width + span] = count
  *             corrs[bin2, width - span - 1] = count
  *         for i in range(width):             # <<<<<<<<<<<<<<
- *             bg[i] = temp[i, 0] / <double>temp[i, 1]
- *     return None
+ *             if temp[i, 1] > 0 and temp[i, 0] > 0:
+ *                 bg[i] = temp[i, 0] / <double>temp[i, 1]
  */
         __pyx_t_1 = __pyx_v_width;
         for (__pyx_t_2 = 0; __pyx_t_2 < __pyx_t_1; __pyx_t_2+=1) {
@@ -2654,16 +2659,61 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_2find_bg_dist_norm(CYTHON_
           /* "hifive/libraries/_quasar.pyx":89
  *             corrs[bin2, width - span - 1] = count
  *         for i in range(width):
- *             bg[i] = temp[i, 0] / <double>temp[i, 1]             # <<<<<<<<<<<<<<
+ *             if temp[i, 1] > 0 and temp[i, 0] > 0:             # <<<<<<<<<<<<<<
+ *                 bg[i] = temp[i, 0] / <double>temp[i, 1]
+ *             else:
+ */
+          __pyx_t_27 = __pyx_v_i;
+          __pyx_t_28 = 1;
+          __pyx_t_15 = (((*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int64_t *, __pyx_pybuffernd_temp.rcbuffer->pybuffer.buf, __pyx_t_27, __pyx_pybuffernd_temp.diminfo[0].strides, __pyx_t_28, __pyx_pybuffernd_temp.diminfo[1].strides)) > 0) != 0);
+          if (__pyx_t_15) {
+          } else {
+            __pyx_t_4 = __pyx_t_15;
+            goto __pyx_L22_bool_binop_done;
+          }
+          __pyx_t_29 = __pyx_v_i;
+          __pyx_t_30 = 0;
+          __pyx_t_15 = (((*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int64_t *, __pyx_pybuffernd_temp.rcbuffer->pybuffer.buf, __pyx_t_29, __pyx_pybuffernd_temp.diminfo[0].strides, __pyx_t_30, __pyx_pybuffernd_temp.diminfo[1].strides)) > 0) != 0);
+          __pyx_t_4 = __pyx_t_15;
+          __pyx_L22_bool_binop_done:;
+          if (__pyx_t_4) {
+
+            /* "hifive/libraries/_quasar.pyx":90
+ *         for i in range(width):
+ *             if temp[i, 1] > 0 and temp[i, 0] > 0:
+ *                 bg[i] = temp[i, 0] / <double>temp[i, 1]             # <<<<<<<<<<<<<<
+ *             else:
+ *                 bg[i] = 1.0
+ */
+            __pyx_t_31 = __pyx_v_i;
+            __pyx_t_32 = 0;
+            __pyx_t_33 = __pyx_v_i;
+            __pyx_t_34 = 1;
+            __pyx_t_35 = __pyx_v_i;
+            *__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_bg.rcbuffer->pybuffer.buf, __pyx_t_35, __pyx_pybuffernd_bg.diminfo[0].strides) = ((*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int64_t *, __pyx_pybuffernd_temp.rcbuffer->pybuffer.buf, __pyx_t_31, __pyx_pybuffernd_temp.diminfo[0].strides, __pyx_t_32, __pyx_pybuffernd_temp.diminfo[1].strides)) / ((double)(*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int64_t *, __pyx_pybuffernd_temp.rcbuffer->pybuffer.buf, __pyx_t_33, __pyx_pybuffernd_temp.diminfo[0].strides, __pyx_t_34, __pyx_pybuffernd_temp.diminfo[1].strides))));
+
+            /* "hifive/libraries/_quasar.pyx":89
+ *             corrs[bin2, width - span - 1] = count
+ *         for i in range(width):
+ *             if temp[i, 1] > 0 and temp[i, 0] > 0:             # <<<<<<<<<<<<<<
+ *                 bg[i] = temp[i, 0] / <double>temp[i, 1]
+ *             else:
+ */
+            goto __pyx_L21;
+          }
+
+          /* "hifive/libraries/_quasar.pyx":92
+ *                 bg[i] = temp[i, 0] / <double>temp[i, 1]
+ *             else:
+ *                 bg[i] = 1.0             # <<<<<<<<<<<<<<
  *     return None
  * 
  */
-          __pyx_t_27 = __pyx_v_i;
-          __pyx_t_28 = 0;
-          __pyx_t_29 = __pyx_v_i;
-          __pyx_t_30 = 1;
-          __pyx_t_31 = __pyx_v_i;
-          *__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_bg.rcbuffer->pybuffer.buf, __pyx_t_31, __pyx_pybuffernd_bg.diminfo[0].strides) = ((*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int64_t *, __pyx_pybuffernd_temp.rcbuffer->pybuffer.buf, __pyx_t_27, __pyx_pybuffernd_temp.diminfo[0].strides, __pyx_t_28, __pyx_pybuffernd_temp.diminfo[1].strides)) / ((double)(*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int64_t *, __pyx_pybuffernd_temp.rcbuffer->pybuffer.buf, __pyx_t_29, __pyx_pybuffernd_temp.diminfo[0].strides, __pyx_t_30, __pyx_pybuffernd_temp.diminfo[1].strides))));
+          /*else*/ {
+            __pyx_t_36 = __pyx_v_i;
+            *__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_bg.rcbuffer->pybuffer.buf, __pyx_t_36, __pyx_pybuffernd_bg.diminfo[0].strides) = 1.0;
+          }
+          __pyx_L21:;
         }
       }
 
@@ -2686,9 +2736,9 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_2find_bg_dist_norm(CYTHON_
       }
   }
 
-  /* "hifive/libraries/_quasar.pyx":90
- *         for i in range(width):
- *             bg[i] = temp[i, 0] / <double>temp[i, 1]
+  /* "hifive/libraries/_quasar.pyx":93
+ *             else:
+ *                 bg[i] = 1.0
  *     return None             # <<<<<<<<<<<<<<
  * 
  * 
@@ -2735,7 +2785,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_2find_bg_dist_norm(CYTHON_
   return __pyx_r;
 }
 
-/* "hifive/libraries/_quasar.pyx":96
+/* "hifive/libraries/_quasar.pyx":99
  * @cython.wraparound(False)
  * @cython.cdivision(True)
  * def find_correlations(             # <<<<<<<<<<<<<<
@@ -2781,23 +2831,23 @@ static PyObject *__pyx_pw_6hifive_9libraries_7_quasar_5find_correlations(PyObjec
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_vrows)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, 1); __PYX_ERR(0, 96, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, 1); __PYX_ERR(0, 99, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_corrs)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, 2); __PYX_ERR(0, 96, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, 2); __PYX_ERR(0, 99, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_start)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, 3); __PYX_ERR(0, 96, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, 3); __PYX_ERR(0, 99, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "find_correlations") < 0)) __PYX_ERR(0, 96, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "find_correlations") < 0)) __PYX_ERR(0, 99, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 4) {
       goto __pyx_L5_argtuple_error;
@@ -2810,19 +2860,19 @@ static PyObject *__pyx_pw_6hifive_9libraries_7_quasar_5find_correlations(PyObjec
     __pyx_v_norms = ((PyArrayObject *)values[0]);
     __pyx_v_vrows = ((PyArrayObject *)values[1]);
     __pyx_v_corrs = ((PyArrayObject *)values[2]);
-    __pyx_v_start = __Pyx_PyInt_As_PY_LONG_LONG(values[3]); if (unlikely((__pyx_v_start == (PY_LONG_LONG)-1) && PyErr_Occurred())) __PYX_ERR(0, 100, __pyx_L3_error)
+    __pyx_v_start = __Pyx_PyInt_As_PY_LONG_LONG(values[3]); if (unlikely((__pyx_v_start == (PY_LONG_LONG)-1) && PyErr_Occurred())) __PYX_ERR(0, 103, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 96, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("find_correlations", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 99, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("hifive.libraries._quasar.find_correlations", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_norms), __pyx_ptype_5numpy_ndarray, 1, "norms", 0))) __PYX_ERR(0, 97, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_vrows), __pyx_ptype_5numpy_ndarray, 1, "vrows", 0))) __PYX_ERR(0, 98, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_corrs), __pyx_ptype_5numpy_ndarray, 1, "corrs", 0))) __PYX_ERR(0, 99, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_norms), __pyx_ptype_5numpy_ndarray, 1, "norms", 0))) __PYX_ERR(0, 100, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_vrows), __pyx_ptype_5numpy_ndarray, 1, "vrows", 0))) __PYX_ERR(0, 101, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_corrs), __pyx_ptype_5numpy_ndarray, 1, "corrs", 0))) __PYX_ERR(0, 102, __pyx_L1_error)
   __pyx_r = __pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(__pyx_self, __pyx_v_norms, __pyx_v_vrows, __pyx_v_corrs, __pyx_v_start);
 
   /* function exit code */
@@ -2901,21 +2951,21 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
   __pyx_pybuffernd_corrs.rcbuffer = &__pyx_pybuffer_corrs;
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_norms.rcbuffer->pybuffer, (PyObject*)__pyx_v_norms, &__Pyx_TypeInfo_nn___pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 96, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_norms.rcbuffer->pybuffer, (PyObject*)__pyx_v_norms, &__Pyx_TypeInfo_nn___pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 99, __pyx_L1_error)
   }
   __pyx_pybuffernd_norms.diminfo[0].strides = __pyx_pybuffernd_norms.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_norms.diminfo[0].shape = __pyx_pybuffernd_norms.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_norms.diminfo[1].strides = __pyx_pybuffernd_norms.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_norms.diminfo[1].shape = __pyx_pybuffernd_norms.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_vrows.rcbuffer->pybuffer, (PyObject*)__pyx_v_vrows, &__Pyx_TypeInfo_nn___pyx_t_6hifive_9libraries_7_quasar_DTYPE_int_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 96, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_vrows.rcbuffer->pybuffer, (PyObject*)__pyx_v_vrows, &__Pyx_TypeInfo_nn___pyx_t_6hifive_9libraries_7_quasar_DTYPE_int_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 99, __pyx_L1_error)
   }
   __pyx_pybuffernd_vrows.diminfo[0].strides = __pyx_pybuffernd_vrows.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_vrows.diminfo[0].shape = __pyx_pybuffernd_vrows.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_corrs.rcbuffer->pybuffer, (PyObject*)__pyx_v_corrs, &__Pyx_TypeInfo_nn___pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t, PyBUF_FORMAT| PyBUF_STRIDES| PyBUF_WRITABLE, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 96, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_corrs.rcbuffer->pybuffer, (PyObject*)__pyx_v_corrs, &__Pyx_TypeInfo_nn___pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t, PyBUF_FORMAT| PyBUF_STRIDES| PyBUF_WRITABLE, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 99, __pyx_L1_error)
   }
   __pyx_pybuffernd_corrs.diminfo[0].strides = __pyx_pybuffernd_corrs.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_corrs.diminfo[0].shape = __pyx_pybuffernd_corrs.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_corrs.diminfo[1].strides = __pyx_pybuffernd_corrs.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_corrs.diminfo[1].shape = __pyx_pybuffernd_corrs.rcbuffer->pybuffer.shape[1];
 
-  /* "hifive/libraries/_quasar.pyx":103
+  /* "hifive/libraries/_quasar.pyx":106
  *     cdef long long int i, j, k, pos, n, X, Y
  *     cdef double X1, X2, Y1, Y2, XY, temp, temp1
  *     cdef long long int N = vrows.shape[0]             # <<<<<<<<<<<<<<
@@ -2924,7 +2974,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
   __pyx_v_N = (__pyx_v_vrows->dimensions[0]);
 
-  /* "hifive/libraries/_quasar.pyx":104
+  /* "hifive/libraries/_quasar.pyx":107
  *     cdef double X1, X2, Y1, Y2, XY, temp, temp1
  *     cdef long long int N = vrows.shape[0]
  *     cdef long long int P = corrs.shape[0]             # <<<<<<<<<<<<<<
@@ -2933,7 +2983,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
   __pyx_v_P = (__pyx_v_corrs->dimensions[0]);
 
-  /* "hifive/libraries/_quasar.pyx":105
+  /* "hifive/libraries/_quasar.pyx":108
  *     cdef long long int N = vrows.shape[0]
  *     cdef long long int P = corrs.shape[0]
  *     cdef long long int M = corrs.shape[1]             # <<<<<<<<<<<<<<
@@ -2942,7 +2992,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
   __pyx_v_M = (__pyx_v_corrs->dimensions[1]);
 
-  /* "hifive/libraries/_quasar.pyx":106
+  /* "hifive/libraries/_quasar.pyx":109
  *     cdef long long int P = corrs.shape[0]
  *     cdef long long int M = corrs.shape[1]
  *     with nogil:             # <<<<<<<<<<<<<<
@@ -2957,7 +3007,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
       #endif
       /*try:*/ {
 
-        /* "hifive/libraries/_quasar.pyx":107
+        /* "hifive/libraries/_quasar.pyx":110
  *     cdef long long int M = corrs.shape[1]
  *     with nogil:
  *         for i in range(P):             # <<<<<<<<<<<<<<
@@ -2968,7 +3018,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
         for (__pyx_t_2 = 0; __pyx_t_2 < __pyx_t_1; __pyx_t_2+=1) {
           __pyx_v_i = __pyx_t_2;
 
-          /* "hifive/libraries/_quasar.pyx":108
+          /* "hifive/libraries/_quasar.pyx":111
  *     with nogil:
  *         for i in range(P):
  *             X = start + i             # <<<<<<<<<<<<<<
@@ -2977,7 +3027,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
           __pyx_v_X = (__pyx_v_start + __pyx_v_i);
 
-          /* "hifive/libraries/_quasar.pyx":109
+          /* "hifive/libraries/_quasar.pyx":112
  *         for i in range(P):
  *             X = start + i
  *             if vrows[X] == 0:             # <<<<<<<<<<<<<<
@@ -2988,7 +3038,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
           __pyx_t_4 = (((*__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int_t *, __pyx_pybuffernd_vrows.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_vrows.diminfo[0].strides)) == 0) != 0);
           if (__pyx_t_4) {
 
-            /* "hifive/libraries/_quasar.pyx":110
+            /* "hifive/libraries/_quasar.pyx":113
  *             X = start + i
  *             if vrows[X] == 0:
  *                 continue             # <<<<<<<<<<<<<<
@@ -2997,7 +3047,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             goto __pyx_L6_continue;
 
-            /* "hifive/libraries/_quasar.pyx":109
+            /* "hifive/libraries/_quasar.pyx":112
  *         for i in range(P):
  *             X = start + i
  *             if vrows[X] == 0:             # <<<<<<<<<<<<<<
@@ -3006,7 +3056,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
           }
 
-          /* "hifive/libraries/_quasar.pyx":111
+          /* "hifive/libraries/_quasar.pyx":114
  *             if vrows[X] == 0:
  *                 continue
  *             for Y in range(X + 1, min(N, X + M + 1)):             # <<<<<<<<<<<<<<
@@ -3024,7 +3074,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
           for (__pyx_t_7 = (__pyx_v_X + 1); __pyx_t_7 < __pyx_t_5; __pyx_t_7+=1) {
             __pyx_v_Y = __pyx_t_7;
 
-            /* "hifive/libraries/_quasar.pyx":112
+            /* "hifive/libraries/_quasar.pyx":115
  *                 continue
  *             for Y in range(X + 1, min(N, X + M + 1)):
  *                 if vrows[Y] == 0:             # <<<<<<<<<<<<<<
@@ -3035,7 +3085,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
             __pyx_t_4 = (((*__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int_t *, __pyx_pybuffernd_vrows.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_vrows.diminfo[0].strides)) == 0) != 0);
             if (__pyx_t_4) {
 
-              /* "hifive/libraries/_quasar.pyx":113
+              /* "hifive/libraries/_quasar.pyx":116
  *             for Y in range(X + 1, min(N, X + M + 1)):
  *                 if vrows[Y] == 0:
  *                     continue             # <<<<<<<<<<<<<<
@@ -3044,7 +3094,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               goto __pyx_L9_continue;
 
-              /* "hifive/libraries/_quasar.pyx":112
+              /* "hifive/libraries/_quasar.pyx":115
  *                 continue
  *             for Y in range(X + 1, min(N, X + M + 1)):
  *                 if vrows[Y] == 0:             # <<<<<<<<<<<<<<
@@ -3053,7 +3103,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             }
 
-            /* "hifive/libraries/_quasar.pyx":114
+            /* "hifive/libraries/_quasar.pyx":117
  *                 if vrows[Y] == 0:
  *                     continue
  *                 j = Y - start             # <<<<<<<<<<<<<<
@@ -3062,7 +3112,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_j = (__pyx_v_Y - __pyx_v_start);
 
-            /* "hifive/libraries/_quasar.pyx":115
+            /* "hifive/libraries/_quasar.pyx":118
  *                     continue
  *                 j = Y - start
  *                 X1 = 0.0             # <<<<<<<<<<<<<<
@@ -3071,7 +3121,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_X1 = 0.0;
 
-            /* "hifive/libraries/_quasar.pyx":116
+            /* "hifive/libraries/_quasar.pyx":119
  *                 j = Y - start
  *                 X1 = 0.0
  *                 Y1 = 0.0             # <<<<<<<<<<<<<<
@@ -3080,7 +3130,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_Y1 = 0.0;
 
-            /* "hifive/libraries/_quasar.pyx":117
+            /* "hifive/libraries/_quasar.pyx":120
  *                 X1 = 0.0
  *                 Y1 = 0.0
  *                 X2 = 0.0             # <<<<<<<<<<<<<<
@@ -3089,7 +3139,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_X2 = 0.0;
 
-            /* "hifive/libraries/_quasar.pyx":118
+            /* "hifive/libraries/_quasar.pyx":121
  *                 Y1 = 0.0
  *                 X2 = 0.0
  *                 Y2 = 0.0             # <<<<<<<<<<<<<<
@@ -3098,7 +3148,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_Y2 = 0.0;
 
-            /* "hifive/libraries/_quasar.pyx":119
+            /* "hifive/libraries/_quasar.pyx":122
  *                 X2 = 0.0
  *                 Y2 = 0.0
  *                 XY = 0.0             # <<<<<<<<<<<<<<
@@ -3107,7 +3157,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_XY = 0.0;
 
-            /* "hifive/libraries/_quasar.pyx":120
+            /* "hifive/libraries/_quasar.pyx":123
  *                 Y2 = 0.0
  *                 XY = 0.0
  *                 n = 0             # <<<<<<<<<<<<<<
@@ -3116,7 +3166,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_n = 0;
 
-            /* "hifive/libraries/_quasar.pyx":121
+            /* "hifive/libraries/_quasar.pyx":124
  *                 XY = 0.0
  *                 n = 0
  *                 for k in range(max(0, Y - M), X):             # <<<<<<<<<<<<<<
@@ -3134,7 +3184,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
             for (__pyx_t_9 = __pyx_t_11; __pyx_t_9 < __pyx_t_8; __pyx_t_9+=1) {
               __pyx_v_k = __pyx_t_9;
 
-              /* "hifive/libraries/_quasar.pyx":122
+              /* "hifive/libraries/_quasar.pyx":125
  *                 n = 0
  *                 for k in range(max(0, Y - M), X):
  *                     if vrows[k] == 0:             # <<<<<<<<<<<<<<
@@ -3145,7 +3195,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_4 = (((*__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int_t *, __pyx_pybuffernd_vrows.rcbuffer->pybuffer.buf, __pyx_t_12, __pyx_pybuffernd_vrows.diminfo[0].strides)) == 0) != 0);
               if (__pyx_t_4) {
 
-                /* "hifive/libraries/_quasar.pyx":123
+                /* "hifive/libraries/_quasar.pyx":126
  *                 for k in range(max(0, Y - M), X):
  *                     if vrows[k] == 0:
  *                         continue             # <<<<<<<<<<<<<<
@@ -3154,7 +3204,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
                 goto __pyx_L12_continue;
 
-                /* "hifive/libraries/_quasar.pyx":122
+                /* "hifive/libraries/_quasar.pyx":125
  *                 n = 0
  *                 for k in range(max(0, Y - M), X):
  *                     if vrows[k] == 0:             # <<<<<<<<<<<<<<
@@ -3163,7 +3213,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               }
 
-              /* "hifive/libraries/_quasar.pyx":124
+              /* "hifive/libraries/_quasar.pyx":127
  *                     if vrows[k] == 0:
  *                         continue
  *                     pos = M - (X - k)             # <<<<<<<<<<<<<<
@@ -3172,7 +3222,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_pos = (__pyx_v_M - (__pyx_v_X - __pyx_v_k));
 
-              /* "hifive/libraries/_quasar.pyx":125
+              /* "hifive/libraries/_quasar.pyx":128
  *                         continue
  *                     pos = M - (X - k)
  *                     temp = norms[i, pos]             # <<<<<<<<<<<<<<
@@ -3183,7 +3233,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_14 = __pyx_v_pos;
               __pyx_v_temp = (*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_norms.rcbuffer->pybuffer.buf, __pyx_t_13, __pyx_pybuffernd_norms.diminfo[0].strides, __pyx_t_14, __pyx_pybuffernd_norms.diminfo[1].strides));
 
-              /* "hifive/libraries/_quasar.pyx":126
+              /* "hifive/libraries/_quasar.pyx":129
  *                     pos = M - (X - k)
  *                     temp = norms[i, pos]
  *                     X1 += temp             # <<<<<<<<<<<<<<
@@ -3192,7 +3242,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_X1 = (__pyx_v_X1 + __pyx_v_temp);
 
-              /* "hifive/libraries/_quasar.pyx":127
+              /* "hifive/libraries/_quasar.pyx":130
  *                     temp = norms[i, pos]
  *                     X1 += temp
  *                     X2 += temp * temp             # <<<<<<<<<<<<<<
@@ -3201,7 +3251,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_X2 = (__pyx_v_X2 + (__pyx_v_temp * __pyx_v_temp));
 
-              /* "hifive/libraries/_quasar.pyx":128
+              /* "hifive/libraries/_quasar.pyx":131
  *                     X1 += temp
  *                     X2 += temp * temp
  *                     pos = M - (Y - k)             # <<<<<<<<<<<<<<
@@ -3210,7 +3260,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_pos = (__pyx_v_M - (__pyx_v_Y - __pyx_v_k));
 
-              /* "hifive/libraries/_quasar.pyx":129
+              /* "hifive/libraries/_quasar.pyx":132
  *                     X2 += temp * temp
  *                     pos = M - (Y - k)
  *                     temp1 = norms[j, pos]             # <<<<<<<<<<<<<<
@@ -3221,7 +3271,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_16 = __pyx_v_pos;
               __pyx_v_temp1 = (*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_norms.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_norms.diminfo[0].strides, __pyx_t_16, __pyx_pybuffernd_norms.diminfo[1].strides));
 
-              /* "hifive/libraries/_quasar.pyx":130
+              /* "hifive/libraries/_quasar.pyx":133
  *                     pos = M - (Y - k)
  *                     temp1 = norms[j, pos]
  *                     Y1 += temp1             # <<<<<<<<<<<<<<
@@ -3230,7 +3280,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_Y1 = (__pyx_v_Y1 + __pyx_v_temp1);
 
-              /* "hifive/libraries/_quasar.pyx":131
+              /* "hifive/libraries/_quasar.pyx":134
  *                     temp1 = norms[j, pos]
  *                     Y1 += temp1
  *                     Y2 += temp1 * temp1             # <<<<<<<<<<<<<<
@@ -3239,7 +3289,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_Y2 = (__pyx_v_Y2 + (__pyx_v_temp1 * __pyx_v_temp1));
 
-              /* "hifive/libraries/_quasar.pyx":132
+              /* "hifive/libraries/_quasar.pyx":135
  *                     Y1 += temp1
  *                     Y2 += temp1 * temp1
  *                     XY += temp * temp1             # <<<<<<<<<<<<<<
@@ -3248,7 +3298,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_XY = (__pyx_v_XY + (__pyx_v_temp * __pyx_v_temp1));
 
-              /* "hifive/libraries/_quasar.pyx":133
+              /* "hifive/libraries/_quasar.pyx":136
  *                     Y2 += temp1 * temp1
  *                     XY += temp * temp1
  *                     n += 1             # <<<<<<<<<<<<<<
@@ -3259,7 +3309,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_L12_continue:;
             }
 
-            /* "hifive/libraries/_quasar.pyx":134
+            /* "hifive/libraries/_quasar.pyx":137
  *                     XY += temp * temp1
  *                     n += 1
  *                 for k in range(X + 1, Y):             # <<<<<<<<<<<<<<
@@ -3270,7 +3320,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
             for (__pyx_t_11 = (__pyx_v_X + 1); __pyx_t_11 < __pyx_t_8; __pyx_t_11+=1) {
               __pyx_v_k = __pyx_t_11;
 
-              /* "hifive/libraries/_quasar.pyx":135
+              /* "hifive/libraries/_quasar.pyx":138
  *                     n += 1
  *                 for k in range(X + 1, Y):
  *                     if vrows[k] == 0:             # <<<<<<<<<<<<<<
@@ -3281,7 +3331,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_4 = (((*__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int_t *, __pyx_pybuffernd_vrows.rcbuffer->pybuffer.buf, __pyx_t_9, __pyx_pybuffernd_vrows.diminfo[0].strides)) == 0) != 0);
               if (__pyx_t_4) {
 
-                /* "hifive/libraries/_quasar.pyx":136
+                /* "hifive/libraries/_quasar.pyx":139
  *                 for k in range(X + 1, Y):
  *                     if vrows[k] == 0:
  *                         continue             # <<<<<<<<<<<<<<
@@ -3290,7 +3340,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
                 goto __pyx_L15_continue;
 
-                /* "hifive/libraries/_quasar.pyx":135
+                /* "hifive/libraries/_quasar.pyx":138
  *                     n += 1
  *                 for k in range(X + 1, Y):
  *                     if vrows[k] == 0:             # <<<<<<<<<<<<<<
@@ -3299,7 +3349,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               }
 
-              /* "hifive/libraries/_quasar.pyx":137
+              /* "hifive/libraries/_quasar.pyx":140
  *                     if vrows[k] == 0:
  *                         continue
  *                     pos = M + k - X - 1             # <<<<<<<<<<<<<<
@@ -3308,7 +3358,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_pos = (((__pyx_v_M + __pyx_v_k) - __pyx_v_X) - 1);
 
-              /* "hifive/libraries/_quasar.pyx":138
+              /* "hifive/libraries/_quasar.pyx":141
  *                         continue
  *                     pos = M + k - X - 1
  *                     temp = norms[i, pos]             # <<<<<<<<<<<<<<
@@ -3319,7 +3369,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_18 = __pyx_v_pos;
               __pyx_v_temp = (*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_norms.rcbuffer->pybuffer.buf, __pyx_t_17, __pyx_pybuffernd_norms.diminfo[0].strides, __pyx_t_18, __pyx_pybuffernd_norms.diminfo[1].strides));
 
-              /* "hifive/libraries/_quasar.pyx":139
+              /* "hifive/libraries/_quasar.pyx":142
  *                     pos = M + k - X - 1
  *                     temp = norms[i, pos]
  *                     X1 += temp             # <<<<<<<<<<<<<<
@@ -3328,7 +3378,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_X1 = (__pyx_v_X1 + __pyx_v_temp);
 
-              /* "hifive/libraries/_quasar.pyx":140
+              /* "hifive/libraries/_quasar.pyx":143
  *                     temp = norms[i, pos]
  *                     X1 += temp
  *                     X2 += temp * temp             # <<<<<<<<<<<<<<
@@ -3337,7 +3387,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_X2 = (__pyx_v_X2 + (__pyx_v_temp * __pyx_v_temp));
 
-              /* "hifive/libraries/_quasar.pyx":141
+              /* "hifive/libraries/_quasar.pyx":144
  *                     X1 += temp
  *                     X2 += temp * temp
  *                     pos = M - (Y - k)             # <<<<<<<<<<<<<<
@@ -3346,7 +3396,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_pos = (__pyx_v_M - (__pyx_v_Y - __pyx_v_k));
 
-              /* "hifive/libraries/_quasar.pyx":142
+              /* "hifive/libraries/_quasar.pyx":145
  *                     X2 += temp * temp
  *                     pos = M - (Y - k)
  *                     temp1 = norms[j, pos]             # <<<<<<<<<<<<<<
@@ -3357,7 +3407,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_20 = __pyx_v_pos;
               __pyx_v_temp1 = (*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_norms.rcbuffer->pybuffer.buf, __pyx_t_19, __pyx_pybuffernd_norms.diminfo[0].strides, __pyx_t_20, __pyx_pybuffernd_norms.diminfo[1].strides));
 
-              /* "hifive/libraries/_quasar.pyx":143
+              /* "hifive/libraries/_quasar.pyx":146
  *                     pos = M - (Y - k)
  *                     temp1 = norms[j, pos]
  *                     Y1 += temp1             # <<<<<<<<<<<<<<
@@ -3366,7 +3416,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_Y1 = (__pyx_v_Y1 + __pyx_v_temp1);
 
-              /* "hifive/libraries/_quasar.pyx":144
+              /* "hifive/libraries/_quasar.pyx":147
  *                     temp1 = norms[j, pos]
  *                     Y1 += temp1
  *                     Y2 += temp1 * temp1             # <<<<<<<<<<<<<<
@@ -3375,7 +3425,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_Y2 = (__pyx_v_Y2 + (__pyx_v_temp1 * __pyx_v_temp1));
 
-              /* "hifive/libraries/_quasar.pyx":145
+              /* "hifive/libraries/_quasar.pyx":148
  *                     Y1 += temp1
  *                     Y2 += temp1 * temp1
  *                     XY += temp * temp1             # <<<<<<<<<<<<<<
@@ -3384,7 +3434,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_XY = (__pyx_v_XY + (__pyx_v_temp * __pyx_v_temp1));
 
-              /* "hifive/libraries/_quasar.pyx":146
+              /* "hifive/libraries/_quasar.pyx":149
  *                     Y2 += temp1 * temp1
  *                     XY += temp * temp1
  *                     n += 1             # <<<<<<<<<<<<<<
@@ -3395,7 +3445,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_L15_continue:;
             }
 
-            /* "hifive/libraries/_quasar.pyx":147
+            /* "hifive/libraries/_quasar.pyx":150
  *                     XY += temp * temp1
  *                     n += 1
  *                 for k in range(Y + 1, min(N, X + M + 1)):             # <<<<<<<<<<<<<<
@@ -3413,7 +3463,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
             for (__pyx_t_21 = (__pyx_v_Y + 1); __pyx_t_21 < __pyx_t_8; __pyx_t_21+=1) {
               __pyx_v_k = __pyx_t_21;
 
-              /* "hifive/libraries/_quasar.pyx":148
+              /* "hifive/libraries/_quasar.pyx":151
  *                     n += 1
  *                 for k in range(Y + 1, min(N, X + M + 1)):
  *                     if vrows[k] == 0:             # <<<<<<<<<<<<<<
@@ -3424,7 +3474,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_4 = (((*__Pyx_BufPtrStrided1d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_int_t *, __pyx_pybuffernd_vrows.rcbuffer->pybuffer.buf, __pyx_t_11, __pyx_pybuffernd_vrows.diminfo[0].strides)) == 0) != 0);
               if (__pyx_t_4) {
 
-                /* "hifive/libraries/_quasar.pyx":149
+                /* "hifive/libraries/_quasar.pyx":152
  *                 for k in range(Y + 1, min(N, X + M + 1)):
  *                     if vrows[k] == 0:
  *                         continue             # <<<<<<<<<<<<<<
@@ -3433,7 +3483,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
                 goto __pyx_L18_continue;
 
-                /* "hifive/libraries/_quasar.pyx":148
+                /* "hifive/libraries/_quasar.pyx":151
  *                     n += 1
  *                 for k in range(Y + 1, min(N, X + M + 1)):
  *                     if vrows[k] == 0:             # <<<<<<<<<<<<<<
@@ -3442,7 +3492,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               }
 
-              /* "hifive/libraries/_quasar.pyx":150
+              /* "hifive/libraries/_quasar.pyx":153
  *                     if vrows[k] == 0:
  *                         continue
  *                     pos = M + k - X - 1             # <<<<<<<<<<<<<<
@@ -3451,7 +3501,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_pos = (((__pyx_v_M + __pyx_v_k) - __pyx_v_X) - 1);
 
-              /* "hifive/libraries/_quasar.pyx":151
+              /* "hifive/libraries/_quasar.pyx":154
  *                         continue
  *                     pos = M + k - X - 1
  *                     temp = norms[i, pos]             # <<<<<<<<<<<<<<
@@ -3462,7 +3512,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_23 = __pyx_v_pos;
               __pyx_v_temp = (*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_norms.rcbuffer->pybuffer.buf, __pyx_t_22, __pyx_pybuffernd_norms.diminfo[0].strides, __pyx_t_23, __pyx_pybuffernd_norms.diminfo[1].strides));
 
-              /* "hifive/libraries/_quasar.pyx":152
+              /* "hifive/libraries/_quasar.pyx":155
  *                     pos = M + k - X - 1
  *                     temp = norms[i, pos]
  *                     X1 += temp             # <<<<<<<<<<<<<<
@@ -3471,7 +3521,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_X1 = (__pyx_v_X1 + __pyx_v_temp);
 
-              /* "hifive/libraries/_quasar.pyx":153
+              /* "hifive/libraries/_quasar.pyx":156
  *                     temp = norms[i, pos]
  *                     X1 += temp
  *                     X2 += temp * temp             # <<<<<<<<<<<<<<
@@ -3480,7 +3530,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_X2 = (__pyx_v_X2 + (__pyx_v_temp * __pyx_v_temp));
 
-              /* "hifive/libraries/_quasar.pyx":154
+              /* "hifive/libraries/_quasar.pyx":157
  *                     X1 += temp
  *                     X2 += temp * temp
  *                     pos = M + k - Y - 1             # <<<<<<<<<<<<<<
@@ -3489,7 +3539,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_pos = (((__pyx_v_M + __pyx_v_k) - __pyx_v_Y) - 1);
 
-              /* "hifive/libraries/_quasar.pyx":155
+              /* "hifive/libraries/_quasar.pyx":158
  *                     X2 += temp * temp
  *                     pos = M + k - Y - 1
  *                     temp1 = norms[j, pos]             # <<<<<<<<<<<<<<
@@ -3500,7 +3550,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_t_25 = __pyx_v_pos;
               __pyx_v_temp1 = (*__Pyx_BufPtrStrided2d(__pyx_t_6hifive_9libraries_7_quasar_DTYPE_64_t *, __pyx_pybuffernd_norms.rcbuffer->pybuffer.buf, __pyx_t_24, __pyx_pybuffernd_norms.diminfo[0].strides, __pyx_t_25, __pyx_pybuffernd_norms.diminfo[1].strides));
 
-              /* "hifive/libraries/_quasar.pyx":156
+              /* "hifive/libraries/_quasar.pyx":159
  *                     pos = M + k - Y - 1
  *                     temp1 = norms[j, pos]
  *                     Y1 += temp1             # <<<<<<<<<<<<<<
@@ -3509,7 +3559,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_Y1 = (__pyx_v_Y1 + __pyx_v_temp1);
 
-              /* "hifive/libraries/_quasar.pyx":157
+              /* "hifive/libraries/_quasar.pyx":160
  *                     temp1 = norms[j, pos]
  *                     Y1 += temp1
  *                     Y2 += temp1 * temp1             # <<<<<<<<<<<<<<
@@ -3518,7 +3568,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_Y2 = (__pyx_v_Y2 + (__pyx_v_temp1 * __pyx_v_temp1));
 
-              /* "hifive/libraries/_quasar.pyx":158
+              /* "hifive/libraries/_quasar.pyx":161
  *                     Y1 += temp1
  *                     Y2 += temp1 * temp1
  *                     XY += temp * temp1             # <<<<<<<<<<<<<<
@@ -3527,7 +3577,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               __pyx_v_XY = (__pyx_v_XY + (__pyx_v_temp * __pyx_v_temp1));
 
-              /* "hifive/libraries/_quasar.pyx":159
+              /* "hifive/libraries/_quasar.pyx":162
  *                     Y2 += temp1 * temp1
  *                     XY += temp * temp1
  *                     n += 1             # <<<<<<<<<<<<<<
@@ -3538,7 +3588,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
               __pyx_L18_continue:;
             }
 
-            /* "hifive/libraries/_quasar.pyx":160
+            /* "hifive/libraries/_quasar.pyx":163
  *                     XY += temp * temp1
  *                     n += 1
  *                 if n < 3:             # <<<<<<<<<<<<<<
@@ -3548,7 +3598,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
             __pyx_t_4 = ((__pyx_v_n < 3) != 0);
             if (__pyx_t_4) {
 
-              /* "hifive/libraries/_quasar.pyx":161
+              /* "hifive/libraries/_quasar.pyx":164
  *                     n += 1
  *                 if n < 3:
  *                     continue             # <<<<<<<<<<<<<<
@@ -3557,7 +3607,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               goto __pyx_L9_continue;
 
-              /* "hifive/libraries/_quasar.pyx":160
+              /* "hifive/libraries/_quasar.pyx":163
  *                     XY += temp * temp1
  *                     n += 1
  *                 if n < 3:             # <<<<<<<<<<<<<<
@@ -3566,7 +3616,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             }
 
-            /* "hifive/libraries/_quasar.pyx":162
+            /* "hifive/libraries/_quasar.pyx":165
  *                 if n < 3:
  *                     continue
  *                 X1 /= n             # <<<<<<<<<<<<<<
@@ -3575,7 +3625,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_X1 = (__pyx_v_X1 / __pyx_v_n);
 
-            /* "hifive/libraries/_quasar.pyx":163
+            /* "hifive/libraries/_quasar.pyx":166
  *                     continue
  *                 X1 /= n
  *                 X2 = X2 / n - X1  * X1             # <<<<<<<<<<<<<<
@@ -3584,7 +3634,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_X2 = ((__pyx_v_X2 / __pyx_v_n) - (__pyx_v_X1 * __pyx_v_X1));
 
-            /* "hifive/libraries/_quasar.pyx":164
+            /* "hifive/libraries/_quasar.pyx":167
  *                 X1 /= n
  *                 X2 = X2 / n - X1  * X1
  *                 Y1 /= n             # <<<<<<<<<<<<<<
@@ -3593,7 +3643,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_Y1 = (__pyx_v_Y1 / __pyx_v_n);
 
-            /* "hifive/libraries/_quasar.pyx":165
+            /* "hifive/libraries/_quasar.pyx":168
  *                 X2 = X2 / n - X1  * X1
  *                 Y1 /= n
  *                 Y2 = Y2 / n - Y1 * Y1             # <<<<<<<<<<<<<<
@@ -3602,7 +3652,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_Y2 = ((__pyx_v_Y2 / __pyx_v_n) - (__pyx_v_Y1 * __pyx_v_Y1));
 
-            /* "hifive/libraries/_quasar.pyx":166
+            /* "hifive/libraries/_quasar.pyx":169
  *                 Y1 /= n
  *                 Y2 = Y2 / n - Y1 * Y1
  *                 if X2 <= 0.0 or Y2 <= 0.0:             # <<<<<<<<<<<<<<
@@ -3620,7 +3670,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
             __pyx_L23_bool_binop_done:;
             if (__pyx_t_4) {
 
-              /* "hifive/libraries/_quasar.pyx":167
+              /* "hifive/libraries/_quasar.pyx":170
  *                 Y2 = Y2 / n - Y1 * Y1
  *                 if X2 <= 0.0 or Y2 <= 0.0:
  *                     continue             # <<<<<<<<<<<<<<
@@ -3629,7 +3679,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
               goto __pyx_L9_continue;
 
-              /* "hifive/libraries/_quasar.pyx":166
+              /* "hifive/libraries/_quasar.pyx":169
  *                 Y1 /= n
  *                 Y2 = Y2 / n - Y1 * Y1
  *                 if X2 <= 0.0 or Y2 <= 0.0:             # <<<<<<<<<<<<<<
@@ -3638,7 +3688,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             }
 
-            /* "hifive/libraries/_quasar.pyx":168
+            /* "hifive/libraries/_quasar.pyx":171
  *                 if X2 <= 0.0 or Y2 <= 0.0:
  *                     continue
  *                 XY /= n             # <<<<<<<<<<<<<<
@@ -3647,7 +3697,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
  */
             __pyx_v_XY = (__pyx_v_XY / __pyx_v_n);
 
-            /* "hifive/libraries/_quasar.pyx":169
+            /* "hifive/libraries/_quasar.pyx":172
  *                     continue
  *                 XY /= n
  *                 corrs[i, Y - X - 1] = (XY - X1 * Y1) / pow(X2 * Y2, 0.5)             # <<<<<<<<<<<<<<
@@ -3663,7 +3713,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
         }
       }
 
-      /* "hifive/libraries/_quasar.pyx":106
+      /* "hifive/libraries/_quasar.pyx":109
  *     cdef long long int P = corrs.shape[0]
  *     cdef long long int M = corrs.shape[1]
  *     with nogil:             # <<<<<<<<<<<<<<
@@ -3682,7 +3732,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
       }
   }
 
-  /* "hifive/libraries/_quasar.pyx":170
+  /* "hifive/libraries/_quasar.pyx":173
  *                 XY /= n
  *                 corrs[i, Y - X - 1] = (XY - X1 * Y1) / pow(X2 * Y2, 0.5)
  *     return None             # <<<<<<<<<<<<<<
@@ -3694,7 +3744,7 @@ static PyObject *__pyx_pf_6hifive_9libraries_7_quasar_4find_correlations(CYTHON_
   __pyx_r = Py_None;
   goto __pyx_L0;
 
-  /* "hifive/libraries/_quasar.pyx":96
+  /* "hifive/libraries/_quasar.pyx":99
  * @cython.wraparound(False)
  * @cython.cdivision(True)
  * def find_correlations(             # <<<<<<<<<<<<<<
@@ -6536,17 +6586,17 @@ static int __Pyx_InitCachedConstants(void) {
   __Pyx_GIVEREF(__pyx_tuple__12);
   __pyx_codeobj__13 = (PyObject*)__Pyx_PyCode_New(6, 0, 15, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__12, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_hifive_libraries__quasar_pyx, __pyx_n_s_find_bg_dist_norm, 56, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__13)) __PYX_ERR(0, 56, __pyx_L1_error)
 
-  /* "hifive/libraries/_quasar.pyx":96
+  /* "hifive/libraries/_quasar.pyx":99
  * @cython.wraparound(False)
  * @cython.cdivision(True)
  * def find_correlations(             # <<<<<<<<<<<<<<
  *         np.ndarray[DTYPE_64_t, ndim=2] norms,
  *         np.ndarray[DTYPE_int_t, ndim=1] vrows,
  */
-  __pyx_tuple__14 = PyTuple_Pack(21, __pyx_n_s_norms, __pyx_n_s_vrows, __pyx_n_s_corrs, __pyx_n_s_start, __pyx_n_s_i, __pyx_n_s_j, __pyx_n_s_k, __pyx_n_s_pos, __pyx_n_s_n, __pyx_n_s_X, __pyx_n_s_Y, __pyx_n_s_X1, __pyx_n_s_X2, __pyx_n_s_Y1, __pyx_n_s_Y2, __pyx_n_s_XY, __pyx_n_s_temp, __pyx_n_s_temp1, __pyx_n_s_N, __pyx_n_s_P, __pyx_n_s_M); if (unlikely(!__pyx_tuple__14)) __PYX_ERR(0, 96, __pyx_L1_error)
+  __pyx_tuple__14 = PyTuple_Pack(21, __pyx_n_s_norms, __pyx_n_s_vrows, __pyx_n_s_corrs, __pyx_n_s_start, __pyx_n_s_i, __pyx_n_s_j, __pyx_n_s_k, __pyx_n_s_pos, __pyx_n_s_n, __pyx_n_s_X, __pyx_n_s_Y, __pyx_n_s_X1, __pyx_n_s_X2, __pyx_n_s_Y1, __pyx_n_s_Y2, __pyx_n_s_XY, __pyx_n_s_temp, __pyx_n_s_temp1, __pyx_n_s_N, __pyx_n_s_P, __pyx_n_s_M); if (unlikely(!__pyx_tuple__14)) __PYX_ERR(0, 99, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__14);
   __Pyx_GIVEREF(__pyx_tuple__14);
-  __pyx_codeobj__15 = (PyObject*)__Pyx_PyCode_New(4, 0, 21, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__14, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_hifive_libraries__quasar_pyx, __pyx_n_s_find_correlations, 96, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__15)) __PYX_ERR(0, 96, __pyx_L1_error)
+  __pyx_codeobj__15 = (PyObject*)__Pyx_PyCode_New(4, 0, 21, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__14, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_hifive_libraries__quasar_pyx, __pyx_n_s_find_correlations, 99, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__15)) __PYX_ERR(0, 99, __pyx_L1_error)
   __Pyx_RefNannyFinishContext();
   return 0;
   __pyx_L1_error:;
@@ -6772,16 +6822,16 @@ static int __pyx_pymod_exec__quasar(PyObject *__pyx_pyinit_module)
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_find_bg_dist_norm, __pyx_t_2) < 0) __PYX_ERR(0, 56, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "hifive/libraries/_quasar.pyx":96
+  /* "hifive/libraries/_quasar.pyx":99
  * @cython.wraparound(False)
  * @cython.cdivision(True)
  * def find_correlations(             # <<<<<<<<<<<<<<
  *         np.ndarray[DTYPE_64_t, ndim=2] norms,
  *         np.ndarray[DTYPE_int_t, ndim=1] vrows,
  */
-  __pyx_t_2 = PyCFunction_NewEx(&__pyx_mdef_6hifive_9libraries_7_quasar_5find_correlations, NULL, __pyx_n_s_hifive_libraries__quasar); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 96, __pyx_L1_error)
+  __pyx_t_2 = PyCFunction_NewEx(&__pyx_mdef_6hifive_9libraries_7_quasar_5find_correlations, NULL, __pyx_n_s_hifive_libraries__quasar); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 99, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_find_correlations, __pyx_t_2) < 0) __PYX_ERR(0, 96, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_find_correlations, __pyx_t_2) < 0) __PYX_ERR(0, 99, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
   /* "hifive/libraries/_quasar.pyx":1

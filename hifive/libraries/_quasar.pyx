@@ -86,7 +86,10 @@ def find_bg_dist_norm(
             corrs[bin1, width + span] = count
             corrs[bin2, width - span - 1] = count
         for i in range(width):
-            bg[i] = temp[i, 0] / <double>temp[i, 1]
+            if temp[i, 1] > 0 and temp[i, 0] > 0:
+                bg[i] = temp[i, 0] / <double>temp[i, 1]
+            else:
+                bg[i] = 1.0
     return None
 
 
