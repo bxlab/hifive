@@ -129,5 +129,5 @@ def run(args):
         rscores = q1.find_replicate_scores(q2, chroms=args.chroms)
         q2.close()
     if args.report is not None:
-        q1.print_report(args.report, qscores=qscores, rscores=rscores)
+        q1.print_report(args.report, qscores=qscores, rscores=rscores, scores_only=args.scores_only)
     q1.close()

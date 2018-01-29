@@ -806,6 +806,8 @@ def add_quasar_subparser(subparsers):
         default="10000,40000,200000,1000000", action='store', help="A comma-separated list of resolutions to find QuASAR transformations for. [default: %(default)s]")
     parser.add_argument("-d", "--coverages", dest="coverages", required=False, type=str,
         default="0,1000000,2000000,4000000,8000000,16000000,32000000", action='store', help="A comma-separated list of coverages to find QuASAR transformations for. [default: %(default)s]")
+    parser.add_argument("--scores_only", dest="scores_only", action='store_true',
+        help="Report only scores in report, no additional analyses. [default: %(default)s]")
     parser.add_argument("--seed", dest="seed", default=None, type=int,
         help="The seed value for the random number generating function. [default: %(default)s]")
     add_silent_argument(parser)
