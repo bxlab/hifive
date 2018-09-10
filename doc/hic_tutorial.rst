@@ -85,7 +85,7 @@ In this case, the only difference is that pairs of file names corresponding to t
 
 If your Fend file is 'binned', then you can also load data directly from a set of tab-delimited matrix files. These files can contain labels indicating bin positions (see :ref:`matrix_files`). If no labels are present, each column and row is expected to match the paritioning in the Fend file and start with the first bin of the chromosome(s). This is done using the command::
 
-  data.load_data_from_matrices(fragment_filename,
+  data.load_binned_data_from_matrices(fragment_filename,
     ['chr1.matrix', 'chr2.matrix', 'chr1_by_chr2.matrix'])
 
 If only matrix files are to be loaded, a Fend file created using chromosome lengths is the best option as it does not contain fend data and gaurentees that bins start with the zero coordinate which is how most publicly available matrix files are organized.

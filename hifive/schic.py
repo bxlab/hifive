@@ -219,20 +219,71 @@ class scHiC(object):
         datafile.close()
         return None
 
-    def filter_interactions(self, maxsteps=3, resolution=1000000):
+    def filter_interactions(self, minsize=21, maxsize=10000, excluded_chroms=['Y'], haploid=True, maxsep=40, maxsteps=3, resolution=1000000, invalid_fends=None):
+        # remove user-specified invalid fends
+        if invalid_fends is not None:
+            for i in invalid_fends:
+                self.filter[i] = 0
+
+        # remove small fragments 
         fends = self.fends['fends'][...]
         sizes = fends['stop'] - fends['start']
         prev_filt = numpy.sum(self.filter)
-        self.filter[numpy.where((sizes < 30) | (sizes > 10000))[0]] = 0
-        if not self.silent:
-            print >> sys.stderr, ("Filtering fends: %i of %i kept\n") % (numpy.sum(self.filter), prev_filt),
+        self.filter[numpy.where((sizes < minsize) | (sizes > maxsize))[0]] = 0
+
+        # remove excluded chromosomes
+        chr_indices = self.fends['chr_indices'][...]
+        for chrom in excluded_chroms:
+            chrint = self.chr2int[chrom]
+            self.filter[chr_indices[chrint]:chr_indices[chrint + 1]] = 0
+
+        # load data
         cis_data = self.data['cis_data'][...].astype(numpy.int64)
         trans_data = self.data['trans_data'][...].astype(numpy.int64)
-        prev_cfilt = numpy.sum(self.cis_filter)
-        prev_tfilt = numpy.sum(self.trans_filter)
+
+        # filter fends without interactions
+        contacts = numpy.zeros(chr_indices[-1], dtype=numpy.int32)
+        contacts += numpy.bincount(cis_data[:, 0], minlength=chr_indices[-1])
+        contacts += numpy.bincount(cis_data[:, 1], minlength=chr_indices[-1])
+        contacts += numpy.bincount(trans_data[:, 0], minlength=chr_indices[-1])
+        contacts += numpy.bincount(trans_data[:, 1], minlength=chr_indices[-1])
+        self.filter[numpy.where(contacts == 0)[0]] = 0
+
+        # if haploid, make sure that fragments don't have multiple contacts
+        if haploid:
+            where = numpy.where(contacts > 2)[0]
+            self.filter[where] = 0
+            where = numpy.where(contacts == 2)[0]
+            for i in where:
+                where1 = numpy.where((cis_data[:, 0] == i) | (cis_data[:, 1] == i))[0]
+                if where1.shape[0] == 2:
+                    f1 = cis_data[where1[0], numpy.where(cis_data[where1[0], :2] != i)[0]]
+                    f2 = cis_data[where1[1], numpy.where(cis_data[where1[1], :2] != i)[0]]
+                    if abs(f2 - f1) > maxsep:
+                        self.filter[i] = 0
+                    else:
+                        if abs(f1 - i) < abs(f2 - i):
+                            self.cis_filter[where1[0]] = 0
+                        else:
+                            self.cis_filter[where1[1]] = 0
+                elif where1.shape[0] == 0:
+                    where1 = numpy.where((trans_data[:, 0] == i) | (trans_data[:, 1] == i))[0]
+                    f1 = trans_data[where1[0], numpy.where(trans_data[where1[0], :2] != i)[0]]
+                    f2 = trans_data[where1[1], numpy.where(trans_data[where1[1], :2] != i)[0]]
+                    if abs(f2 - f1) > maxsep or fends['chr'][f1] != fends['chr'][f2]:
+                        self.filter[i] = 0
+                    else:
+                        self.trans_filter[where1[numpy.random.randint(0, 2)]] = 0
+                else:
+                    self.filter[i] = 0
+
+        if not self.silent:
+            print >> sys.stderr, ("Filtering fends: %i of %i kept\n") % (
+                numpy.sum(self.filter), self.filter.shape[0]),
+
+        # filter by connectivity graph
         self.cis_filter[numpy.where((self.filter[cis_data[:, 0]] == 0) | (self.filter[cis_data[:, 1]] == 0))] = 0
         self.trans_filter[numpy.where((self.filter[trans_data[:, 0]] == 0) | (self.filter[trans_data[:, 1]] == 0))] = 0
-        chr_indices = self.fends['chr_indices'][...]
         mapping = fends['mid'] / resolution
         N = 0
         for i in range(chr_indices.shape[0] - 1):
@@ -251,37 +302,36 @@ class scHiC(object):
         counts += numpy.bincount(numpy.searchsorted(connections, tindices), weights=(self.trans_filter * trans_data[:, 2]), minlength=connections.shape[0])
         indices = numpy.triu_indices(N, 1)
         steps = numpy.zeros((N, N), dtype=numpy.int32)
-        steps[connections0, connections1] = counts
-        steps[indices[1], indices[0]] = steps[indices]
-        for i in range(2, maxsteps):
-            sets = []
-            for j in range(N):
-                sets.append(numpy.where(steps[j, :] > 0)[0])
+        steps[connections1, connections0] = 1
+        steps[connections0, connections1] = 1
+        steps[numpy.arange(steps.shape[0]), numpy.arange(steps.shape[0])] = 0
+        for i in range(1, maxsteps - 1):
             for j in range(indices[0].shape[0]):
                 X = indices[0][j]
                 Y = indices[1][j]
                 if steps[X, Y] != 0:
                     continue
-                inter = numpy.intersect1d(sets[X], sets[Y])
-                if inter.shape[0] == 0:
-                    continue
-                steps[X, Y] = numpy.amin(steps[X, inter] + steps[Y, inter])
-                steps[Y, X] = steps[X, Y]
-        singles = numpy.where(counts == 1)[0]
-        sets = []
-        for i in range(N):
-            sets.append(numpy.where(steps[i, :] > 0)[0])
-        for i in singles:
-            X = connections0[i]
-            Y = connections1[i]
-            inter = numpy.intersect1d(sets[X], sets[Y])
-            if inter.shape[0] > 0 and numpy.amin(steps[X, inter] + steps[Y, inter]) <= maxsteps:
+                temp = steps[X, :] + steps[Y, :]
+                valid = numpy.where((steps[X, :] > 0) & (steps[Y, :] > 0))[0]
+                if valid.shape[0] > 0:
+                    steps[X, Y] = numpy.amin(temp[valid])
+                    steps[Y, X] = steps[X, Y]
+        valid = numpy.ones(connections1.shape[0], dtype=numpy.bool)
+        for i in range(valid.shape[0]):
+            if counts[i] > 1 or connections0[i] == connections1[i]:
                 continue
-            self.cis_filter[numpy.where(cindices == connections[i])] = 0 
-            self.trans_filter[numpy.where(tindices == connections[i])] = 0
+            temp = steps[X, :] + steps[Y, :]
+            tvalid = numpy.where((steps[X, :] > 0) & (steps[Y, :] > 0))[0]
+            if tvalid.shape[0] == 0 or numpy.amin(temp[tvalid]) > maxsteps:
+                fends1 = numpy.where(mapping == connections0[i])[0]
+                fends2 = numpy.where(mapping == connections1[i])[0]
+                where = numpy.where((cis_data[:, 0] == connections0[i]) & (cis_data[:, 1] == connections1[i]))[0]
+                self.cis_filter[where] = 0
+                where = numpy.where((trans_data[:, 0] == connections0[i]) & (trans_data[:, 1] == connections1[i]))[0]
+                self.trans_filter[where] = 0
         if not self.silent:
             print >> sys.stderr, ("Filtering interactions: %i of %i cis kept, %i of %i trans kept\n") % (
-                numpy.sum(self.cis_filter), prev_cfilt, numpy.sum(self.trans_filter), prev_tfilt),
+                numpy.sum(self.cis_filter), self.cis_filter.shape[0], numpy.sum(self.trans_filter), self.trans_filter.shape[0]),
         return None
 
     def run_simulation(self, resolution=1000000, tmpdir='./', seed=2001):

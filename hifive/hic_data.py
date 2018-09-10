@@ -576,7 +576,7 @@ class HiCData(object):
         self.history += "Success\n"
         return None
 
-    def load_data_from_mat(self, fendfilename, filename):
+    def load_data_from_mat(self, fendfilename, filename, basefend=0):
         """
         Read interaction counts from a :mod:`HiCPipe`-compatible 'mat' text file and place in h5dict.
 
@@ -584,6 +584,8 @@ class HiCData(object):
         :type fendfilename: str.
         :param filename: File name of a 'mat' file containing fend pair and interaction count data.
         :type filename: str.
+        :param basefend: Specifies what the first fend number is (usually zero or one)
+        :type basefend: int.
         :returns: None
 
         :Attributes: * **fendfilename** (*str.*) - A string containing the relative path of the fend file.
@@ -640,10 +642,10 @@ class HiCData(object):
         for line in input:
             temp = line.strip('\n').split('\t')
             try:
-                fend1 = int(temp[0]) - 1
+                fend1 = int(temp[0]) - basefend
             except ValueError:
                 continue
-            fend2 = int(temp[1]) - 1
+            fend2 = int(temp[1]) - basefend
             count = int(temp[2])
             total_reads += count
             chr1 = numpy.searchsorted(chr_indices, fend1, side='right') - 1
@@ -750,7 +752,7 @@ class HiCData(object):
 
     def load_binned_data_from_matrices(self, fendfilename, filename, format=None):
         """
-        Read interaction counts from a tab-separated set of matrix files, one per chromosome, and place in h5dict.
+        Read interaction counts from a set of matrix files, one per chromosome, and place in h5dict.
 
         Each file is assumed to contain a complete matrix of integers divided into equal-width bins. If row and column names are present, the bin ranges will be taken from the labels in the format "XXX|XXX|chrX:XXX-XXX", where only the block of text following the last "|" is looked at. If no labels are present, bins are assumed to begin at coordinate zero.
 

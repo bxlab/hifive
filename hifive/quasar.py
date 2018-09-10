@@ -316,7 +316,7 @@ class Quasar(object):
                             self.storage.create_dataset(name="dist.%s" % (key), data=dist)
                             self.storage.create_dataset(name="corr.%s" % (key), data=corrs)
                     else:
-                        skip = comm.bcast(None, root=0)
+                        skip = self.comm.bcast(None, root=0)
                         if skip:
                             continue
                         self._find_correlations()
