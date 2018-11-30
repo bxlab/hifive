@@ -1568,15 +1568,17 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
                 output.create_dataset('%s.expected' % chrom[0], data=heatmaps[chrom][0][:, 1])
                 enrichment = numpy.copy(heatmaps[chrom][0][:, 0])
                 where = numpy.where(heatmaps[chrom][0][:, 1] > 0)[0]
-                enrichment[where] /= heatmaps[chrom][0][where, 1]
+                if where.shape[0] > 0:
+                    enrichment[where] /= heatmaps[chrom][0][where, 1]
                 output.create_dataset('%s.enrichment' % chrom[0], data=enrichment)
                 output.create_dataset('%s.positions' % chrom[0], data=heatmaps[chrom][1][:, :2])
             else:
                 output.create_dataset('%s_by_%s.counts' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 0].astype(numpy.int32))
                 output.create_dataset('%s_by_%s.expected' % (chrom[0], chrom[1]), data=heatmaps[chrom][:, :, 1])
                 enrichment = numpy.copy(heatmaps[chrom][:, :, 0])
-                where = numpy.where(heatmaps[chrom][:, :, 1] > 0)[0]
-                enrichment[where[0], where[1]] /= heatmaps[chrom][where[0], where[1], 1]
+                where = numpy.where(heatmaps[chrom][:, :, 1] > 0)
+                if where[0].shape[0] > 0:
+                    enrichment[where[0], where[1]] /= heatmaps[chrom][where[0], where[1], 1]
                 output.create_dataset('%s_by_%s.enrichment' % (chrom[0], chrom[1]), data=enrichment)
         output.create_dataset('chromosomes', data=numpy.array(chroms))
         if 'history' in kwargs:
