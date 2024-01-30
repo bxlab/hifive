@@ -20,7 +20,7 @@ This package makes extensive use of the h5py and numpy packages. In addition, if
 mpi4py is installed, several methods are compatible with parallelization,
 including HiC normalization and heatmap generation.
 
-Documentation can be found `here <http://hifive.docs.taylorlab.org/en/latest/>`_.
+Documentation can be found `here <https://bxlab-hifive.readthedocs.io/en/latest/>`_.
 
 The HiFive binary requires Python 2.7. However, the library can be used by Python 2.6 and 2.7.
 
