@@ -367,7 +367,16 @@ class TAD( object ):
                     g.stroke(path.line(X1, 1.25, X1, 3.75), [style.linewidth.THIN, style.linestyle.dotted])
             pages.append(document.page(g))
         doc = document.document(pages)
-        doc.writePDFfile(out_fname)    
+        doc.writePDFfile(out_fname)
+
+    def write_DIs(self, fname):
+        output = open(fname, 'w')
+        chroms = self.DIs.keys()
+        chroms.sort()
+        for chrom in chroms:
+            for line in self.DIs[chrom]:
+                print >> output, "%s\t%i\t%i\t%f" % (chrom, line[0]-self.step/2, line[0]+self.step/2, line[1])
+        output.close()
 
     def write_TADs(self, fname):
         output = open(fname, 'w')

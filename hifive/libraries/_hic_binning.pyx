@@ -23,7 +23,8 @@ cdef extern from "math.h":
     double log10(double x) nogil
     double sqrt(double x) nogil
     double pow(double x, double x) nogil
-    double abs(double x) nogil
+    double fabs(double x) nogil
+    int abs(int x) nogil
     double round(double x) nogil
     double floor(double x) nogil
     double ceil(double x) nogil
