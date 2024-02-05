@@ -34,11 +34,11 @@ def run(args):
                 modelbins[i] = int(modelbins[i])
             except:
                 if rank == 0:
-                    print sys.stderr, ("Not all arguments in -n/--modelbins could be converted to integers.")
+                    print("Not all arguments in -n/--modelbins could be converted to integers.", file=sys.stderr)
                 return 1
         if len(model) != len(modelbins):
             if rank == 0:
-                print sys.stderr, ("-v/--model, -n/--modelbins, and -u/--parameter-types must be equal lengths.")
+                print("-v/--model, -n/--modelbins, and -u/--parameter-types must be equal lengths.", file=sys.stderr)
             return 1
     hic = HiC(args.project, 'r', silent=args.silent)
     precorrect = False

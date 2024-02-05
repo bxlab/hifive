@@ -1,30 +1,33 @@
 import sys
 
-import fend
-import fragment
-import fivec_data
-import hic_data
-import fivec
-import hic
-import fivec_binning
-import hic_binning
-import plotting
-import hic_domains
-import quasar
-import schic
+from . import fend
+from . import fragment
+from . import fivec_data
+from . import hic_data
+from . import fivec
+from . import hic
+from . import fivec_binning
+from . import hic_binning
+from . import plotting
+from . import hic_domains
+from . import quasar
+from . import schic
+from . import scripts
+from . import commands
+from . import version
 
-from hic import HiC
-from fivec import FiveC
-from fend import Fend
-from fragment import Fragment
-from hic_data import HiCData
-from fivec_data import FiveCData
-from hic_domains import TAD
-from hic_domains import Compartment
-from quasar import Quasar
-from schic import scHiC
+from .hic import HiC
+from .fivec import FiveC
+from .fend import Fend
+from .fragment import Fragment
+from .hic_data import HiCData
+from .fivec_data import FiveCData
+from .hic_domains import TAD
+from .hic_domains import Compartment
+from .quasar import Quasar
+from .schic import scHiC
 
-from .version import version as __version__
+from .version import __version__
 
 #------------------------------------------------
 

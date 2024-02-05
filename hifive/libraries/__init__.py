@@ -1,15 +1,15 @@
 import sys
 
-import _fivec_binning
-import _fivec_optimize
-import _hic_binning
-import _hic_distance
-import _hic_interactions
-import _hic_optimize
-import _hic_domains
-import _hmm
-import _quasar
-import hmm
+from . import _fivec_binning
+from . import _fivec_optimize
+from . import _hic_binning
+from . import _hic_distance
+from . import _hic_interactions
+from . import _hic_optimize
+from . import _hic_domains
+from . import _hmm
+from . import _quasar
+from . import hmm
 
 #------------------------------------------------
 

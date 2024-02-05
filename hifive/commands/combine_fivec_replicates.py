@@ -31,13 +31,13 @@ def run(args):
     all_cis_pairs = numpy.zeros(0, dtype=numpy.int64)
     for i in range(len(data)):
         if not silent:
-            print >> sys.stderr, ('\r%s\rLoading %s cis data...') % (' ' * 80, in_fnames[i].split('/')[-1]),
+            print('\r%s\rLoading %s cis data...' % (' ' * 80, in_fnames[i].split('/')[-1]), end='', file=sys.stderr)
         temp = data[i]['cis_data'][...].astype(numpy.int64)
         temp_data.append([temp[:, 0] * num_frags + temp[:, 1], temp[:, 2]])
         del temp
         all_cis_pairs = numpy.hstack((all_cis_pairs, temp_data[i][0]))
     if not silent:
-        print >> sys.stderr, ('\r%s\rCompiling cis data...') % (' ' * 80),
+        print('\r%s\rCompiling cis data...' % (' ' * 80), end='', file=sys.stderr)
     all_cis_pairs = numpy.unique(all_cis_pairs)
     cis_data = numpy.zeros((all_cis_pairs.shape[0], 3), dtype=numpy.int32)
     cis_data[:, 0] = all_cis_pairs / num_frags
@@ -50,12 +50,12 @@ def run(args):
     all_trans_pairs = numpy.zeros(0, dtype=numpy.int64)
     for i in range(len(data)):
         if not silent:
-            print >> sys.stderr, ('\r%s\rLoading %s trans data...') % (' ' * 80, in_fnames[i].split('/')[-1]),
+            print('\r%s\rLoading %s trans data...' % (' ' * 80, in_fnames[i].split('/')[-1]), end='', file=sys.stderr)
         temp = data[i]['trans_data'][...].astype(numpy.int64)
         temp_data.append([temp[:, 0] * num_frags + temp[:, 1], temp[:, 2]])
         all_trans_pairs = numpy.hstack((all_trans_pairs, temp_data[i][0]))
     if not silent:
-        print >> sys.stderr, ('\r%s\rCompiling trans data...') % (' ' * 80),
+        print('\r%s\rCompiling trans data...' % (' ' * 80), end='', file=sys.stderr)
     all_trans_pairs = numpy.unique(all_trans_pairs)
     trans_data = numpy.zeros((all_trans_pairs.shape[0], 3), dtype=numpy.int32)
     trans_data[:, 0] = all_trans_pairs / num_frags
@@ -65,7 +65,7 @@ def run(args):
     del all_trans_pairs
     del temp_data
     if not silent:
-        print >> sys.stderr, ('\r%s\rWriting data to file...') % (' ' * 80),
+        print('\r%s\rWriting data to file...' % (' ' * 80), end='', file=sys.stderr)
     cis_indices = numpy.r_[0, numpy.bincount(cis_data[:, 0], minlength=num_frags)].astype(numpy.int32)
     trans_indices = numpy.r_[0, numpy.bincount(trans_data[:, 0], minlength=num_frags)].astype(numpy.int32)
     for i in range(1, cis_indices.shape[0]):
@@ -83,5 +83,5 @@ def run(args):
     for i in range(len(data)):
         data[i].close()
     if not silent:
-        print >> sys.stderr, ('\r%s\rCombine 5C replicates... Done\n') % (' ' * 80),
+        print('\r%s\rCombine 5C replicates... Done' % (' ' * 80), file=sys.stderr)
     return None

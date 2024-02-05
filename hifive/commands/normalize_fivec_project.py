@@ -16,7 +16,7 @@ def run(args):
         try:
             regions[i] = int(regions[i])
         except:
-            print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
+            print("Not all arguments in -r/--regions could be converted to integers.", file=sys.stderr)
             return 1
     if args.algorithm.count('binning') > 0:
         model = args.model.split(',')
@@ -26,10 +26,10 @@ def run(args):
             try:
                 modelbins[i] = int(modelbins[i])
             except:
-                print sys.stderr, ("Not all arguments in -n/--modelbins could be converted to integers.")
+                print("Not all arguments in -n/--modelbins could be converted to integers.", file=sys.stderr)
                 return 1
         if len(model) != len(modelbins) or len(model) != len(parameters):
-            print sys.stderr, ("-v/--model, -n/--modelbins, and -u/--parameter-types are not equal lengths.")
+            print("-v/--model, -n/--modelbins, and -u/--parameter-types are not equal lengths.", file=sys.stderr)
             return 1
     fivec = FiveC(args.project, 'r', silent=args.silent)
     if args.algorithm.split('-')[0] == 'binning':

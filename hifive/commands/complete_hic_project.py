@@ -29,12 +29,12 @@ def run(args):
             chroms = []
     if args.matrix is not None and args.binned is None:
         if rank == 0:
-            print sys.stderr, ("Loading data from matrices is only supported for binned data.\n")
+            print("Loading data from matrices is only supported for binned data.", file=sys.stderr)
         return 1
     if args.algorithm.count('binning') > 0:
         if args.binned is not None:
             if rank == 0:
-                print sys.stderr, ("This normalization algorithm is not currently supported for binned data.\n")
+                print("This normalization algorithm is not currently supported for binned data.", file=sys.stderr)
             return 1
         model = args.model.split(',')
         modelbins = args.modelbins.split(',')
@@ -44,19 +44,19 @@ def run(args):
                 modelbins[i] = int(modelbins[i])
             except:
                 if rank == 0:
-                    print sys.stderr, ("Not all arguments in -n/--modelbins could be converted to integers.\n")
+                    print("Not all arguments in -n/--modelbins could be converted to integers.", file=sys.stderr)
                 return 1
         if len(model) != len(modelbins) or len(model) != len(parameters):
             if rank == 0:
-                print sys.stderr, ("-v/--model, -n/--modelbins, and -u/--parameter-types must be equal lengths.\n")
+                print("-v/--model, -n/--modelbins, and -u/--parameter-types must be equal lengths.", file=sys.stderr)
             return 1
     if args.binned == 0 and args.bed is None:
         if rank == 0:
-            print  >> sys.stderr, ("Non-uniforming binning (binned=0) must have a bed file to read bin partitions from.\n"),
+            print("Non-uniforming binning (binned=0) must have a bed file to read bin partitions from.", file=sys.stderr)
         return None
     elif args.binned is not None and args.binned < 1 and args.length is not None:
         if rank == 0:
-            print  >> sys.stderr, ("Binning from a chromosome length file needs a positive integer value for binning.\n"),
+            print("Binning from a chromosome length file needs a positive integer value for binning.", file=sys.stderr)
         return None
     if args.prefix is None:
         fend_fname, data_fname, project_fname = args.output
@@ -78,11 +78,11 @@ def run(args):
         fends.save()
         del fends
         data = HiCData(data_fname, 'w', silent=args.silent)
-        if not args.bam is None: 
+        if not args.bam is None:
             data.load_data_from_bam(fend_fname, args.bam, args.insert, args.skipdups)
-        elif not args.raw is None: 
+        elif not args.raw is None:
             data.load_data_from_raw(fend_fname, args.raw, args.insert, args.skipdups)
-        elif not args.mat is None: 
+        elif not args.mat is None:
             data.load_data_from_mat(fend_fname, args.mat, args.insert)
         elif not args.matrix is None:
             data.load_binned_data_from_matrices(fend_fname, args.matrix, format=None)

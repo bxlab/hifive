@@ -40,7 +40,8 @@ def run(args):
     pos = 0
     for i in range(num_fends):
         if not silent:
-            print >> sys.stderr, ("\rCis phase 1, %08i of %08i") % (i, num_fends),
+            if i // 100 == 0:
+                print("\r%s\rCis phase 1, %08i of %08i" % (' '*80, i, num_fends), end='', file=sys.stderr)
         f1 = indices1[i + 1] - indices1[i]
         f2 = indices2[i + 1] - indices2[i]
         if f1 > 0 and f2 > 0:
@@ -60,17 +61,18 @@ def run(args):
     del fend2
     for i in range(num_fends):
         if not silent:
-            print >> sys.stderr, ("\rCis phase 2, %08i of %08i") % (i, num_fends),
+            if i // 100 == 0:
+                print("\r%s\rCis phase 2, %08i of %08i" % (' '*80, i, num_fends), end='', file=sys.stderr)
         cis_data[cindices[i]:cindices[i + 1], 0] = i
         f1 = indices1[i + 1] - indices1[i]
         f2 = indices2[i + 1] - indices2[i]
         if f1 > 0:
             pos = numpy.searchsorted(cis_data[cindices[i]:cindices[i + 1], 1], data1[indices1[i]:indices1[i + 1], 1])
-            if pos.shape[0] > 0: 
+            if pos.shape[0] > 0:
                 cis_data[pos + cindices[i], 2] += data1[indices1[i]:indices1[i + 1], 2]
         if f2 > 0:
             pos = numpy.searchsorted(cis_data[cindices[i]:cindices[i + 1], 1], data2[indices2[i]:indices2[i + 1], 1])
-            if pos.shape[0] > 0: 
+            if pos.shape[0] > 0:
                 cis_data[pos + cindices[i], 2] += data2[indices2[i]:indices2[i + 1], 2]
     del data1
     del data2
@@ -86,7 +88,7 @@ def run(args):
             if cis_data[cindices[i], 0] == cis_data[cindices[i + 1] - 1, 0]:
                 valid += 1
     if not silent:
-        print >> sys.stderr, ("\r%s\r%i out of %i cis fends validated\n") % (" " * 80, valid, count),
+        print("\r%s\r%i out of %i cis fends validated" % (" " * 80, valid, count), file=sys.stderr)
     del cis_data
     del cindices
     data1 = infile1['trans_data'][...]
@@ -98,7 +100,8 @@ def run(args):
     pos = 0
     for i in range(num_fends):
         if not silent:
-            print >> sys.stderr, ("\rTrans phase 1, %08i of %08i") % (i, num_fends),
+            if i // 100 == 0:
+                print("\r%s\rTrans phase 1, %08i of %08i" % (' '*80, i, num_fends), end='', file=sys.stderr)
         f1 = indices1[i + 1] - indices1[i]
         f2 = indices2[i + 1] - indices2[i]
         if f1 > 0 and f2 > 0:
@@ -118,17 +121,18 @@ def run(args):
     del fend2
     for i in range(num_fends):
         if not silent:
-            print >> sys.stderr, ("\rTrans phase 2, %08i of %08i") % (i, num_fends),
+            if i//100 == 0:
+                print("\r%s\rTrans phase 2, %08i of %08i" % (' '*80, i, num_fends), end='', file=sys.stderr)
         trans_data[tindices[i]:tindices[i + 1], 0] = i
         f1 = indices1[i + 1] - indices1[i]
         f2 = indices2[i + 1] - indices2[i]
         if f1 > 0:
             pos = numpy.searchsorted(trans_data[tindices[i]:tindices[i + 1], 1], data1[indices1[i]:indices1[i + 1], 1])
-            if pos.shape[0] > 0: 
+            if pos.shape[0] > 0:
                 trans_data[pos + tindices[i], 2] += data1[indices1[i]:indices1[i + 1], 2]
         if f2 > 0:
             pos = numpy.searchsorted(trans_data[tindices[i]:tindices[i + 1], 1], data2[indices2[i]:indices2[i + 1], 1])
-            if pos.shape[0] > 0: 
+            if pos.shape[0] > 0:
                 trans_data[pos + tindices[i], 2] += data2[indices2[i]:indices2[i + 1], 2]
     del data1
     del data2
@@ -145,10 +149,10 @@ def run(args):
             if trans_data[tindices[i], 0] == trans_data[tindices[i + 1] - 1, 0]:
                 valid += 1
     if not silent:
-        print >> sys.stderr, ("\r%s\r%i out of %i trans fends validate\n") % (" " * 80, valid, count),
+        print("\r%s\r%i out of %i trans fends validate" % (" " * 80, valid, count), file=sys.stderr)
     del trans_data
     del tindices
     output.close()
     if not silent:
-        print >> sys.stderr, ("\r%s\rCombining HiC replicates... Done\n") % (" " * 80),
+        print("\r%s\rCombining HiC replicates... Done" % (" " * 80), file=sys.stderr)
     return None

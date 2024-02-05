@@ -53,7 +53,7 @@ Recommended Packages
   * `Pysam <http://code.google.com/p/pysam/>`_
   * `Pyx <http://pyx.sourceforge.net/>`_
   * `PIL <http://www.pythonware.com/products/pil/>`_
-  * `mpi4py <http://mpi4py.scipy.org>`_
+  * `mpi4py <http://mpi4py.scipy.org>`_ (this requires MPI be previously installed)
   * `mlpy <http://mlpy.sourceforge.net>`_
 
 To install HiFive, simply enter the directory that the repository was cloned or downloaded to and use the following command::

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools", "Cython", "numpy"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Hifive"
+description = "Python library for normalizing, analyzing, and visualizing HiC and 5C data"
+version = "2.0.0"
+readme = "README.rst"
+license = {file = "LICENSE.txt"}
+keywords = ['hi-c', 'hic', 'five-c', '5c']
+authors = [
+    {name = "Michael Sauria", email = "mike.sauria@gmail.com"},
+]
+requires-python = ">= 3.0"
+dependencies = [
+    "numpy",
+    "scipy",
+    "h5py>=3",
+    "mock",
+]
+classifiers = ["Programming Language :: Python :: 3"]
+
+[project.scripts]
+hifive = "hifive.scripts.hifive:main"
+hifive2butlr = "hifive.scripts.hifive2butlr:main"
+hifive2cooler = "hifive.scripts.hifive2cooler:main"
+hifive2mcool = "hifive.scripts.hifive2mcool:main"
+fetch_mrh_data = "hifive.scripts.fetch_mrh_data:main"
+
+[project.urls]
+Repository = "https://github.com/bxlab/hifive"
+Documentation = "https://bxlab-hifive.readthedocs.io"
+Issues = "https://github.com/bxlab/hifive/issues"
+
+[project.optional-dependencies]
+plotting = [
+    "pyx",
+    "PIL",
+]
+mpi = ["mpi4py"]
+bam_loading = ["pysam"]
+modeling = ["mlpy"]

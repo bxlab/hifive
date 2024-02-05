@@ -18,23 +18,23 @@ def run(args):
             try:
                 regions[i] = int(regions[i])
             except:
-                print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
+                print("Not all arguments in -r/--regions could be converted to integers.", file=sys.stderr)
                 return 1
     if args.algorithm.count('binning') > 0:
         model = args.model.split(',')
         for par in model:
             if par not in ['gc', 'len', 'distance']:
-                print sys.stderr, ("Not all arguments in -v/--model are valid.")
+                print("Not all arguments in -v/--model are valid.", file=sys.stderr)
                 return 1
         modelbins = args.modelbins.split(',')
         for i in range(len(modelbins)):
             try:
                 modelbins[i] = int(modelbins[i])
             except:
-                print sys.stderr, ("Not all arguments in -n/--modelbins could be converted to integers.")
+                print("Not all arguments in -n/--modelbins could be converted to integers.", file=sys.stderr)
                 return 1
         if len(model) != len(modelbins):
-            print sys.stderr, ("-v/--model and -n/--modelbins not equal lengths.")
+            print("-v/--model and -n/--modelbins not equal lengths.", file=sys.stderr)
             return 1
     if args.prefix is None:
         frag_fname, data_fname, project_fname = args.output

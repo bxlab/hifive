@@ -3,7 +3,9 @@
 import sys
 
 import numpy
-import _hmm
+
+from . import _hmm
+
 
 class HMM:
     """A simple HMM implementation with dependency only on numpy able to handle discrete and gaussian-mixture HMMs."""
@@ -99,9 +101,9 @@ class HMM:
                 change = _hmm.update_parameter_estimates(observations[h], self.pi, self.transitions,
                                                          self.distributions, new_pi, new_transitions,
                                                          new_distributions, self.etas, self.gammas, finalize)
-            print >> sys.stderr, ("\rIteration: %03i   Change: %.5f") % (iteration, change),
+            print("\r%s\rIteration: %03i   Change: %.5f" % (' '*80, iteration, change), end='', file=sys.stderr)
             iteration += 1
-        print >> sys.stderr, ("\n"),
+        print("\r%\r" % (' '*80), end='', file=sys.stderr)
         return
 
     def find_path(self, observations):
@@ -155,17 +157,19 @@ def test():
         num_states=2,
         )
     hmm2.train(observations, threshold=1e-6, max_iterations=400)
-    print 'True Pi: %s    Learned Pi: %s' % (str(list(hmm1.pi)), str(list(hmm2.pi)))
+    print('True Pi: %s    Learned Pi: %s' % (str(list(hmm1.pi)), str(list(hmm2.pi))), file=sys.stderr)
     for i in range(hmm1.num_states):
-        print 'State %i -' % i
-        print 'True transitions: %s    Learned transitions: %s' % (str(list(hmm1.transitions[i, :])),
-                                                                   str(list(hmm2.transitions[i, :])))
-        print 'True distribution weights: %s    Learned distribution weights %s' % (
+        print('State %i -' % i, file=sys.stderr)
+        print('True transitions: %s    Learned transitions: %s' % (str(list(hmm1.transitions[i, :])),
+                                                                   str(list(hmm2.transitions[i, :]))),
+              file=sys.stderr)
+        print('True distribution weights: %s    Learned distribution weights %s' % (
             str(list(hmm1.distributions[i, :, 0])),
-            str(list(hmm2.distributions[i, :, 0])))
-        print 'True distribution means: %s    Learned distribution means %s' % (
+            str(list(hmm2.distributions[i, :, 0]))), file=sys.stderr)
+        print('True distribution means: %s    Learned distribution means %s' % (
             str(list(hmm1.distributions[i, :, 1])),
-            str(list(hmm2.distributions[i, :, 1])))
-        print 'True distribution variances: %s    Learned distribution variances %s' % (
+            str(list(hmm2.distributions[i, :, 1]))), file=sys.stderr)
+        print('True distribution variances: %s    Learned distribution variances %s' % (
             str(list(hmm1.distributions[i, :, 2])),
-            str(list(hmm2.distributions[i, :, 2])))
+            str(list(hmm2.distributions[i, :, 2]))), file=sys.stderr)
+    return

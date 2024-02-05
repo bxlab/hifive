@@ -16,7 +16,7 @@ from ..plotting import plot_full_array, plot_upper_array, plot_diagonal_from_upp
 
 def run(args):
     if not args.image is None and args.pdf and "pyx" not in sys.modules.keys():
-        print sys.stderr, ("-p/--pdf requires the package 'pyx'"),
+        print("-p/--pdf requires the package 'pyx'", file=sys.stderr)
         return 1
     fivec = FiveC(args.project, 'r', silent=args.silent)
     if args.binsize == 0:
@@ -81,8 +81,7 @@ def run(args):
                                                                 ('value', numpy.float32)]))
             order = numpy.lexsort((all_data['start2'], all_data['start1']))
             for i in order:
-                print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (chrom, all_data['start1'][i],
-                    all_data['stop1'][i], chrom, all_data['start2'][i], all_data['stop2'][i], all_data['value'][i])
+                print("chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (chrom, all_data['start1'][i], all_data['stop1'][i], chrom, all_data['start2'][i], all_data['stop2'][i], all_data['value'][i]), file=output)
         else:
             data = temp[0]
             mapping = temp[1][:, :2]
@@ -90,8 +89,7 @@ def run(args):
             for i in range(mapping.shape[0] - 1):
                 for j in range(i + 1, mapping.shape[0]):
                     if data[pos, 0] > 0.0 and data[pos, 1] > 0.0:
-                        print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (chrom, mapping[i, 0], mapping[i, 1],
-                            chrom, mapping[j, 0], mapping[j, 1], numpy.log2(data[pos, 0] / data[pos, 1]))
+                        print("chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (chrom, mapping[i, 0], mapping[i, 1], chrom, mapping[j, 0], mapping[j, 1], numpy.log2(data[pos, 0] / data[pos, 1])), file=output)
                     pos += 1
     else:
         data, mapping1, mapping2 = temp
@@ -99,9 +97,7 @@ def run(args):
             for j in range(mapping2.shape[0]):
                 if data[i, j, 0] <= 0.0:
                     continue
-                print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (chrom, mapping1[i, 0], mapping1[i, 1], chrom2,
-                                                                       mapping2[j, 0], mapping2[j, 1],
-                                                                       numpy.log2(data[i, j, 0] / data[i, j, 1]))
+                print("chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (chrom, mapping1[i, 0], mapping1[i, 1], chrom2, mapping2[j, 0], mapping2[j, 1], numpy.log2(data[i, j, 0] / data[i, j, 1])), file=output)
     output.close()
     if not args.image is None:
         if args.datatype == 'enrichment':

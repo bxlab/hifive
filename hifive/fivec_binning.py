@@ -19,7 +19,7 @@ import subprocess
 import numpy
 import h5py
 
-import libraries._fivec_binning as _fivec_binning
+from .libraries import _fivec_binning
 
 
 def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=None, startfrag=None, stopfrag=None,
@@ -60,21 +60,25 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
     # check that all values are acceptable
     if datatype not in ['raw', 'fragment', 'distance', 'enrichment', 'expected']:
         if not silent:
-            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+            print("Datatype given is not recognized. No data returned",
+                  file=sys.stderr)
         return None
     elif datatype in ['fragment', 'enrichment'] and fivec.normalization == 'none':
         if not silent:
-            print >> sys.stderr, ("Normalization has not been performed yet on this project. Select either 'raw' or 'distance' for datatype. No data returned\n"),
+            print("Normalization has not been performed yet on this project. " +
+                  "Select either 'raw' or 'distance' for datatype. No data " +
+                  "returned", file=sys.stderr)
         return None
     elif datatype in ['distance', 'enrichment'] and fivec.gamma is None:
         fivec.find_distance_parameters()
     if arraytype not in ['full', 'compact', 'upper']:
         if not silent:
-            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+            print("Unrecognized array type. No data returned.", file=sys.stderr)
         return None
     if arraytype == 'compact' and (binsize > 0 or not binbounds is None):
         if not silent:
-            print >> sys.stderr, ("'Compact' array can only be used with unbinned data. No data returned.\n"),
+            print("'Compact' array can only be used with unbinned data. No " +
+                  "data returned.", file=sys.stderr)
         return None
     # Determine start, stop, startfrag, and stopfrag
     chrom = fivec.frags['regions']['chromosome'][region]
@@ -89,39 +93,40 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
             startfrag = fivec.frags['regions']['start_frag'][region]
             start = fivec.frags['fragments']['mid'][startfrag]
             if binsize > 0:
-                start = (start / binsize) * binsize
+                start = (start // binsize) * binsize
         elif start is None:
             start = fivec.frags['fragments']['mid'][startfrag]
             if binsize > 0:
-                start = (start / binsize) * binsize
+                start = (start // binsize) * binsize
         else:
             startfrag = _find_frag_from_coord(fivec, chrint, start)
         if (stop is None or stop == 0) and stopfrag is None:
             stopfrag = fivec.frags['regions']['stop_frag'][region]
             stop = fivec.frags['fragments']['mid'][stopfrag - 1] + 1
             if binsize > 0:
-                stop = ((stop - 1 - start) / binsize + 1) * binsize + start
+                stop = ((stop - 1 - start) // binsize + 1) * binsize + start
         elif stop is None or stop == 0:
             stop = fivec.frags['fragments']['mid'][stopfrag - 1] + 1
             if binsize > 0:
-                stop = ((stop - 1 - start) / binsize + 1) * binsize + start
+                stop = ((stop - 1 - start) // binsize + 1) * binsize + start
         else:
             if binsize > 0:
-                stop = ((stop - 1 - start) / binsize + 1) * binsize + start
+                stop = ((stop - 1 - start) // binsize + 1) * binsize + start
             stopfrag = _find_frag_from_coord(fivec, chrint, stop)
     if stopfrag - startfrag == 0:
         if not silent:
-            print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+            print("Insufficient data, no data returned.", file=sys.stderr)
         return None
     if not silent:
-        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i...") % (datatype, arraytype, chrom, start, stop),
+        print("Finding {} {} array for {}:{}-{}...".format(
+            datatype, arraytype, chrom, start, stop), end='', file=sys.stderr)
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
         start_index = fivec.data['cis_indices'][startfrag]
         stop_index = fivec.data['cis_indices'][stopfrag]
         if stop_index - start_index == 0:
             if not silent:
-                print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+                print("Insufficient data, no data returned.", file=sys.stderr)
             return None
         data_indices = fivec.data['cis_indices'][startfrag:(stopfrag + 1)]
         data_indices -= data_indices[0]
@@ -137,7 +142,7 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
     valid = numpy.where(fivec.filter[startfrag:stopfrag] > 0)[0]
     if valid.shape[0] == 0:
         if not silent:
-            print >> sys.stderr, ("Insufficient data\n"),
+            print("Insufficient data", file=sys.stderr)
         return None
     if binsize == 0 and binbounds is None:
         if arraytype == 'compact':
@@ -168,11 +173,11 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
         mapping[valid[where]] = start_indices[where]
         num_bins = binbounds.shape[0]
     else:
-        mapping[valid] = (mids[valid] - start) / binsize
-        num_bins = (stop - start) / binsize
+        mapping[valid] = (mids[valid] - start) // binsize
+        num_bins = (stop - start) // binsize
     if arraytype != 'compact' and num_bins < 2:
         if not silent:
-            print >> sys.stderr, ("Insufficient data\n"),
+            print("Insufficient data", file=sys.stderr)
         return None
     # If correction is required, determine what type and get appropriate data
     corrections = None
@@ -198,7 +203,7 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
     if binsize == 0 and arraytype == 'compact':
         data_array = numpy.zeros((num_for_bins, num_rev_bins, 2), dtype=numpy.float32)
     else:
-        data_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
+        data_array = numpy.zeros((num_bins * (num_bins - 1) // 2, 2), dtype=numpy.float32)
     # Fill in data values
     if arraytype == 'compact':
         if datatype != 'expected':
@@ -251,7 +256,7 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
             bin_mapping2[:, 0] = fivec.frags['fragments']['start'][bin_mapping2[:, 2]]
             bin_mapping2[:, 1] = fivec.frags['fragments']['stop'][bin_mapping2[:, 2]]
             if not silent:
-                print >> sys.stderr, ("Done\n"),
+                print("Done", file=sys.stderr)
             return [data_array, bin_mapping1, bin_mapping2]
         else:
             bin_mapping = numpy.zeros((num_bins, 4), dtype=numpy.int32)
@@ -272,11 +277,11 @@ def find_cis_signal(fivec, region, binsize=0, binbounds=None, start=None, stop=N
                 bin_mapping[:, 2] = numpy.searchsorted(mids, bin_mapping[:, 0]) + startfrag
                 bin_mapping[:, 3] = numpy.searchsorted(mids, bin_mapping[:, 1]) + startfrag
             if not silent:
-                print >> sys.stderr, ("Done\n"),
+                print("Done", file=sys.stderr)
             return [data_array, bin_mapping]
     else:
         if not silent:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         return data_array
 
 
@@ -317,26 +322,26 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
     # check that arraytype value is acceptable
     if arraytype not in ['full', 'upper']:
         if not silent:
-            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+            print("Unrecognized array type. No data returned.", file=sys.stderr)
         return None
     # Determine input array type
-    if len(data_array.shape) == 2 and data_mapping.shape[0] * (data_mapping.shape[0] - 1) / 2 == data_array.shape[0]:
+    if len(data_array.shape) == 2 and data_mapping.shape[0] * (data_mapping.shape[0] - 1) // 2 == data_array.shape[0]:
         input_type = 'upper'
     elif len(data_array.shape) == 3 and data_array.shape[0] == data_mapping.shape[0]:
         input_type = 'full'
     else:
         if not silent:
-            print >> sys.stderr, ("Unrecognized input array type. No data returned.\n"),
+            print("Unrecognized input array type. No data returned.", file=sys.stderr)
         return None
     # Determine start and stop, if necessary
     if binbounds is None:
         if start is None:
-            start = (data_mapping[0, 0] / binsize) * binsize
+            start = (data_mapping[0, 0] // binsize) * binsize
         if stop is None:
-            stop = ((data_mapping[-1, 1] - 1) / binsize + 1) * binsize
+            stop = ((data_mapping[-1, 1] - 1) // binsize + 1) * binsize
         else:
-            stop = ((stop - 1 - start) / binsize + 1) * binsize + start
-        num_bins = (stop - start) / binsize
+            stop = ((stop - 1 - start) // binsize + 1) * binsize + start
+        num_bins = (stop - start) // binsize
         binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32)
         binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
         binbounds[:, 1] = binbounds[:, 0] + binsize
@@ -344,9 +349,9 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
         num_bins = binbounds.shape[0]
         start = binbounds[0, 0]
         stop = binbounds[0, 1]
-    mids = (data_mapping[:, 0] + data_mapping[:, 1]) / 2
+    mids = (data_mapping[:, 0] + data_mapping[:, 1]) // 2
     if not silent:
-        print >> sys.stderr, ("Finding binned %s array...") % (arraytype),
+        print("Finding binned {} array...".format(arraytype), end='', file=sys.stderr)
     # Find bin mapping for each fend
     mapping = numpy.zeros(mids.shape[0], dtype=numpy.int32) - 1
     frag_ranges = numpy.zeros((binbounds.shape[0], 2), dtype=numpy.int32)
@@ -357,7 +362,7 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
         frag_ranges[i, 0] = data_mapping[firstbin, 2]
         frag_ranges[i, 1] = data_mapping[lastbin, 3]
     # Create requested array
-    binned_array = numpy.zeros((num_bins * (num_bins - 1) / 2, 2), dtype=numpy.float32)
+    binned_array = numpy.zeros((num_bins * (num_bins - 1) // 2, 2), dtype=numpy.float32)
     # Fill in binned data values
     if input_type == 'upper':
         indices = numpy.triu_indices(data_array.shape[0], 1)
@@ -379,11 +384,11 @@ def bin_cis_array(data_array, data_mapping, binsize=10000, binbounds=None, start
         mapping[:, 1] = binbounds[:, 1]
         mapping[:, 2:4] = frag_ranges
         if not silent:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         return [binned_array, mapping]
     else:
         if not silent:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         return binned_array
 
 
@@ -413,41 +418,41 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
     else:
         silent = False
     # Determine unbinned array type
-    if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) / 2 ==
+    if len(unbinned.shape) == 2 and (unbinnedpositions.shape[0] * (unbinnedpositions.shape[0] - 1) // 2 ==
                                      unbinned.shape[0]):
         ub_signal = unbinned
     elif len(unbinned.shape) == 3 and unbinned.shape[0] == unbinnedpositions.shape[0]:
-        ub_signal = numpy.zeros((unbinned.shape[0] * (unbinned.shape[0] - 1) / 2, 2), dtype=numpy.float32)
+        ub_signal = numpy.zeros((unbinned.shape[0] * (unbinned.shape[0] - 1) // 2, 2), dtype=numpy.float32)
         indices = numpy.triu_indices(unbinned.shape[0], 1)
         ub_signal[:, 0] = unbinned[indices[0], indices[1], 0]
         ub_signal[:, 1] = unbinned[indices[0], indices[1], 1]
     else:
         if not silent:
-            print >> sys.stderr, ("Unrecognized unbinned array type. No data returned.\n"),
+            print("Unrecognized unbinned array type. No data returned.", file=sys.stderr)
         return None
     # Determine binned array type
-    if len(binned.shape) == 2 and binbounds.shape[0] * (binbounds.shape[0] - 1) / 2 == binned.shape[0]:
+    if len(binned.shape) == 2 and binbounds.shape[0] * (binbounds.shape[0] - 1) // 2 == binned.shape[0]:
         binned_type = 'upper'
         b_signal = binned
     elif len(binned.shape) == 3 and binned.shape[0] == binbounds.shape[0]:
         binned_type = 'full'
-        b_signal = numpy.zeros((binned.shape[0] * (binned.shape[0] - 1) / 2, 2), dtype=numpy.float32)
+        b_signal = numpy.zeros((binned.shape[0] * (binned.shape[0] - 1) // 2, 2), dtype=numpy.float32)
         indices = numpy.triu_indices(binned.shape[0], 1)
         b_signal[:, 0] = binned[indices[0], indices[1], 0]
         b_signal[:, 1] = binned[indices[0], indices[1], 1]
     else:
         if not silent:
-            print >> sys.stderr, ("Unrecognized binned array type. No data returned.\n"),
+            print("Unrecognized binned array type. No data returned.", file=sys.stderr)
         return None
     if not silent:
-        print >> sys.stderr, ("Dynamically binning data..."),
+        print("Dynamically binning data...", end='', file=sys.stderr)
     # Determine bin edges relative to unbinned positions
-    unbinnedmids = (unbinnedpositions[:, 0] + unbinnedpositions[:, 1]) / 2
+    unbinnedmids = (unbinnedpositions[:, 0] + unbinnedpositions[:, 1]) // 2
     binedges = numpy.zeros(binbounds.shape, dtype=numpy.int32)
     binedges[:, 0] = numpy.searchsorted(unbinnedmids, binbounds[:, 0])
     binedges[:, 1] = numpy.searchsorted(unbinnedmids, binbounds[:, 1])
     # Determine bin midpoints
-    mids = (binbounds[:, 0] + binbounds[:, 1]) / 2
+    mids = (binbounds[:, 0] + binbounds[:, 1]) // 2
     # Dynamically bin using appropriate array type combination
     _fivec_binning.dynamically_bin_upper_from_upper(ub_signal, unbinnedmids, b_signal, binedges,
                                               mids, minobservations, searchdistance, int(removefailed))
@@ -457,7 +462,7 @@ def dynamically_bin_cis_array(unbinned, unbinnedpositions, binned, binbounds, mi
         binned[indices[1], indices[0], 0] = b_signal[:, 0]
         binned[indices[1], indices[0], 1] = b_signal[:, 1]
     if not silent:
-        print >> sys.stderr, ("Done\n"),
+        print("Done", file=sys.stderr)
     return None
 
 
@@ -512,21 +517,24 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
     # check that all values are acceptable
     if datatype not in ['raw', 'fragment', 'distance', 'enrichment', 'expected']:
         if not silent:
-            print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+            print("Datatype given is not recognized. No data returned", file=sys.stderr)
         return None
     elif datatype in ['fragment', 'enrichment'] and fivec.normalization == 'none':
         if not silent:
-            print >> sys.stderr, ("Normalization has not been performed yet on this project. Select either 'raw' or 'distance' for datatype. No data returned\n"),
+            print("Normalization has not been performed yet on this project. " +
+                  "Select either 'raw' or 'distance' for datatype. No data " +
+                  "returned", file=sys.stderr)
         return None
     elif datatype in ['distance', 'enrichment'] and fivec.trans_mean is None:
         fivec.find_trans_mean()
     if arraytype not in ['full', 'compact']:
         if not silent:
-            print >> sys.stderr, ("Unrecognized array type. No data returned.\n"),
+            print("Unrecognized array type. No data returned.", file=sys.stderr)
         return None
     if arraytype == 'compact' and (binsize > 0 or not binbounds1 is None or not binbounds2 is None):
         if not silent:
-            print >> sys.stderr, ("'Compact' array can only be used with unbinned data. No data returned.\n"),
+            print("'Compact' array can only be used with unbinned data. No " +
+                  "data returned.", file=sys.stderr)
         return None
     # Determine start, stop, startfrag, and stopfrag
     chrom1 = fivec.frags['regions']['chromosome'][region1]
@@ -541,25 +549,25 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             startfrag1 = fivec.frags['regions']['start_frag'][region1]
             start1 = fivec.frags['fragments']['mid'][startfrag1]
             if binsize > 0:
-                start1 = (start1 / binsize) * binsize
+                start1 = (start1 // binsize) * binsize
         elif start1 is None:
             start1 = fivec.frags['fragments']['mid'][startfrag1]
             if binsize > 0:
-                start1 = (start1 / binsize) * binsize
+                start1 = (start1 // binsize) * binsize
         else:
             startfrag1 = _find_frag_from_coord(fivec, chrint1, start1)
         if (stop1 is None or stop1 == 0) and stopfrag1 is None:
             stopfrag1 = fivec.frags['regions']['stop_frag'][region1]
             stop1 = fivec.frags['fragments']['mid'][stopfrag1 - 1] + 1
             if binsize > 0:
-                stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
+                stop1 = ((stop1 - 1 - start1) // binsize + 1) * binsize + start1
         elif stop1 is None or stop1 == 0:
             stop1 = fivec.frags['fragments']['mid'][stopfrag1 - 1] + 1
             if binsize > 0:
-                stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
+                stop1 = ((stop1 - 1 - start1) // binsize + 1) * binsize + start1
         else:
             if binsize > 0:
-                stop1 = ((stop1 - 1 - start1) / binsize + 1) * binsize + start1
+                stop1 = ((stop1 - 1 - start1) // binsize + 1) * binsize + start1
             stopfrag1 = _find_frag_from_coord(fivec, chrint1, stop1)
     chrom2 = fivec.frags['regions']['chromosome'][region2]
     chrint2 = fivec.chr2int[chrom2]
@@ -573,34 +581,34 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             startfrag2 = fivec.frags['regions']['start_frag'][region2]
             start2 = fivec.frags['fragments']['mid'][startfrag2]
             if binsize > 0:
-                start2 = (start2 / binsize) * binsize
+                start2 = (start2 // binsize) * binsize
         elif start2 is None:
             start2 = fivec.frags['fragments']['mid'][startfrag2]
             if binsize > 0:
-                start2 = (start2 / binsize) * binsize
+                start2 = (start2 // binsize) * binsize
         else:
             startfrag2 = _find_frag_from_coord(fivec, chrint2, start2)
         if (stop2 is None or stop2 == 0) and stopfrag2 is None:
             stopfrag2 = fivec.frags['regions']['stop_frag'][region2]
             stop2 = fivec.frags['fragments']['mid'][stopfrag2 - 1] + 1
             if binsize > 0:
-                stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
+                stop2 = ((stop2 - 1 - start2) // binsize + 1) * binsize + start2
         elif stop2 is None or stop2 == 0:
             stop2 = fivec.frags['fragments']['mid'][stopfrag2 - 1] + 1
             if binsize > 0:
-                stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
+                stop2 = ((stop2 - 1 - start2) // binsize + 1) * binsize + start2
         else:
             if binsize > 0:
-                stop2 = ((stop2 - 1 - start2) / binsize + 1) * binsize + start2
+                stop2 = ((stop2 - 1 - start2) // binsize + 1) * binsize + start2
             stopfrag2 = _find_frag_from_coord(fivec, chrint2, stop2)
     if stopfrag1 - startfrag1 == 0 or stopfrag2 - startfrag2 == 0:
         if not silent:
-            print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+            print("Insufficient data, no data returned.", file=sys.stderr)
         return None
     if not silent:
-        print >> sys.stderr, ("Finding %s %s array for %s:%i-%i by %s:%i-%i...") % (datatype, arraytype, chrom1,
-                                                                                    start1, stop1, chrom2, start2,
-                                                                                    stop2),
+        print("Finding {} {} array for ".format(datatype, arraytype) +
+              "{}:{}-{} by ".format(chrom1, start1, stop1) +
+              "{}:{}-{}...".format(chrom2, start2, stop2), end='', file=sys.stderr)
     # Determine mapping of valid fends to bins
     mids1 = fivec.frags['fragments']['mid'][startfrag1:stopfrag1]
     mids2 = fivec.frags['fragments']['mid'][startfrag2:stopfrag2]
@@ -647,8 +655,8 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             mapping1[valid1[where]] = start_indices[where]
             num_bins1 = binbounds1.shape[0]
         else:
-            mapping1[valid1] = (mids1[valid1] - start1) / binsize
-            num_bins1 = (stop1 - start1) / binsize
+            mapping1[valid1] = (mids1[valid1] - start1) // binsize
+            num_bins1 = (stop1 - start1) // binsize
         if not binbounds2 is None:
             start_indices = numpy.searchsorted(binbounds2[:, 0], mids2[valid2], side='right') - 1
             stop_indices = numpy.searchsorted(binbounds2[:, 1], mids2[valid2], side='right')
@@ -656,11 +664,11 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             mapping2[valid2[where]] = start_indices[where]
             num_bins2 = binbounds2.shape[0]
         else:
-            mapping2[valid2] = (mids2[valid2] - start2) / binsize
-            num_bins2 = (stop2 - start2) / binsize
+            mapping2[valid2] = (mids2[valid2] - start2) // binsize
+            num_bins2 = (stop2 - start2) // binsize
     if num_bins1 < 1 or num_bins2 < 1:
         if not silent:
-            print >> sys.stderr, ("Insufficient data\n"),
+            print("Insufficient data", file=sys.stderr)
         return None
     # Copy needed data from h5dict for faster access
     if datatype != 'expected':
@@ -672,7 +680,7 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             stop_index = fivec.data['trans_indices'][stopfrag2]
         if stop_index - start_index == 0:
             if not silent:
-                print >> sys.stderr, ("Insufficient data, no data returned.\n"),
+                print("Insufficient data, no data returned.", file=sys.stderr)
             return None
         if startfrag1 < startfrag2:
             data_indices = fivec.data['trans_indices'][startfrag1:(stopfrag1 + 1)]
@@ -757,7 +765,7 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
             bin_mapping2[:, 0] = fivec.frags['fragments']['start'][bin_mapping2[:, 2]]
             bin_mapping2[:, 1] = fivec.frags['fragments']['stop'][bin_mapping2[:, 2]]
             if not silent:
-                print >> sys.stderr, ("Done\n"),
+                print("Done", file=sys.stderr)
             return [data_array, bin_mapping1, bin_mapping2]
         else:
             bin_mapping1 = numpy.zeros((num_bins1, 4), dtype=numpy.int32)
@@ -795,11 +803,11 @@ def find_trans_signal(fivec, region1, region2, binsize=0, binbounds1=None, start
                 bin_mapping2[:, 2] = numpy.searchsorted(mids2, bin_mapping2[:, 0]) + startfrag2
                 bin_mapping2[:, 3] = numpy.searchsorted(mids2, bin_mapping2[:, 1]) + startfrag2
             if not silent:
-                print >> sys.stderr, ("Done\n"),
+                print("Done", file=sys.stderr)
             return [data_array, bin_mapping1, bin_mapping2]
     else:
         if not silent:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         return data_array
 
 
@@ -833,10 +841,10 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     else:
         silent = False
     if not silent:
-        print >> sys.stderr, ("Dynamically binning data..."),
+        print("Dynamically binning data...", end='', file=sys.stderr)
     # Determine bin edges relative to unbinned positions
-    unbinnedmids1 = (unbinnedpositions1[:, 0] + unbinnedpositions1[:, 1]) / 2
-    unbinnedmids2 = (unbinnedpositions2[:, 0] + unbinnedpositions2[:, 1]) / 2
+    unbinnedmids1 = (unbinnedpositions1[:, 0] + unbinnedpositions1[:, 1]) // 2
+    unbinnedmids2 = (unbinnedpositions2[:, 0] + unbinnedpositions2[:, 1]) // 2
     binedges1 = numpy.zeros(binbounds1.shape, dtype=numpy.int32)
     binedges1[:, 0] = numpy.searchsorted(unbinnedmids1, binbounds1[:, 0])
     binedges1[:, 1] = numpy.searchsorted(unbinnedmids1, binbounds1[:, 1])
@@ -844,13 +852,13 @@ def dynamically_bin_trans_array(unbinned, unbinnedpositions1, unbinnedpositions2
     binedges2[:, 0] = numpy.searchsorted(unbinnedmids2, binbounds2[:, 0])
     binedges2[:, 1] = numpy.searchsorted(unbinnedmids2, binbounds2[:, 1])
     # Determine bin midpoints
-    mids1 = (binbounds1[:, 0] + binbounds1[:, 1]) / 2
-    mids2 = (binbounds2[:, 0] + binbounds2[:, 1]) / 2
+    mids1 = (binbounds1[:, 0] + binbounds1[:, 1]) // 2
+    mids2 = (binbounds2[:, 0] + binbounds2[:, 1]) // 2
     # Dynamically bin using appropriate array type combination
     _fivec_binning.dynamically_bin_trans(unbinned, unbinnedmids1, unbinnedmids2, binned, binedges1,
                                          binedges2, mids1, mids2, minobservations, searchdistance, int(removefailed))
     if not silent:
-        print >> sys.stderr, ("Done\n"),
+        print("Done", file=sys.stderr)
     return None
 
 
@@ -894,7 +902,7 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
         silent = False
     if format not in ['hdf5', 'txt', 'npz']:
         if not silent:
-            print >> sys.stderr, ("Unrecognized output format. No data written.\n"),
+            print("Unrecognized output format. No data written.", file=sys.stderr)
         return None
     if binsize > 0:
         arraytype='full'
@@ -906,10 +914,10 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
     # Check if filename already exists, and remove if it does
     if os.path.exists(filename):
         if not silent:
-            print >> sys.stderr, ("%s already exists, overwriting.") % filename
-        subprocess.call('rm %s' % filename, shell=True)
+            print("{} already exists, overwriting.".format(filename), file=sys.stderr)
+        subprocess.call('rm {}'.format(filename), shell=True)
     if not silent:
-        print >> sys.stderr, ("Creating binned heatmap...\n"),
+        print("Creating binned heatmap...", file=sys.stderr)
     heatmaps = {}
     # If regions not specified, fill list
     if len(regions) == 0:
@@ -992,63 +1000,82 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
         else:
             output.attrs['resolution'] = 'fragment'
         output.create_dataset('regions', data=all_regions[regions][...])
-        for region, results in heatmaps.iteritems():
+        for region in heatmaps:
+            results = heatmaps[region]
             if len(region) == 1:
-                output.create_dataset('%i.counts' % region[0], data=results[0][:, :, 0].astype(numpy.int32))
-                output.create_dataset('%i.expected' % region[0], data=results[0][:, :, 1])
+                output.create_dataset('{}.counts'.format(region[0]),
+                                      data=results[0][:, :, 0].astype(numpy.int32))
+                output.create_dataset('{}.expected'.format(region[0]),
+                                      data=results[0][:, :, 1])
                 if binsize > 0 or arraytype == 'full':
-                    output.create_dataset('%i.positions' % region[0], data=results[1][:, :2])
+                    output.create_dataset('{}.positions'.format(region[0]),
+                                          data=results[1][:, :2])
                 else:
-                    output.create_dataset('%i.forward_positions' % region[0], data=results[1][:, :2])
-                    output.create_dataset('%i.reverse_positions' % region[0], data=results[2][:, :2])
+                    output.create_dataset('{}.forward_positions'.format(region[0]),
+                                          data=results[1][:, :2])
+                    output.create_dataset('{}.reverse_positions'.format(region[0]),
+                                          data=results[2][:, :2])
             else:
                 if arraytype == 'compact':
-                    output.create_dataset('%s_by_%s.counts' % (region[0], region[1]),
-                        data=binned[:, :, 0].astype(numpy.int32))
-                    output.create_dataset('%s_by_%s.expected' % (region[0], region[1]), data=binned[:, :, 1])
+                    output.create_dataset('{}_by_{}.counts'.format(region[0], region[1]),
+                                          data=binned[:, :, 0].astype(numpy.int32))
+                    output.create_dataset('{}_by_{}.expected'.format(region[0], region[1]),
+                                          data=binned[:, :, 1])
         if 'history' in kwargs:
             output.attrs['history'] = kwargs['history']
         output.attrs['filetype'] = 'fivec_heatmap'
         output.close()
     elif format == 'npz':
         arrays = {}
-        for region, data in heatmaps.iteritems():
+        for region in heatmaps:
+            data = heatmaps[region]
             if len(region) == 1:
-                arrays['%s.counts' % region[0]] = data[0][:, :, 0].astype(numpy.int32)
-                arrays['%s.expected' % region[0]] = data[0][:, :, 1]
+                arrays['{}.counts'.format(region[0])] = data[0][:, :, 0].astype(numpy.int32)
+                arrays['{}.expected'.format(region[0])] = data[0][:, :, 1]
                 enrichment = numpy.copy(data[0][:, :, 0])
                 where = numpy.where(data[0][:, :, 1] > 0)
                 enrichment[where] /= data[0][where[0], where[1], 1]
-                arrays['%s.enrichment' % region[0]] = enrichment
+                arrays['{}.enrichment'.format(region[0])] = enrichment
                 if binsize > 0 or arraytype == 'full':
-                    arrays['%i.positions' % region[0]] = data[1][:, :2]
+                    arrays['{}.positions'.format(region[0])] = data[1][:, :2]
                 else:
-                    arrays['%i.forward' % region[0]] = data[1][:, :2]
-                    arrays['%i.reverse' % region[0]] = data[2][:, :2]
+                    arrays['{}.forward'.format(region[0])] = data[1][:, :2]
+                    arrays['{}.reverse'.format(region[0])] = data[2][:, :2]
             else:
-                arrays['%i_by_%i.counts' % region] = data[0][:, :, 0].astype(numpy.int32)
-                arrays['%i_by_%i.expected' % region] = data[0][:, :, 1]
+                arrays['{}_by_{}.counts'.format(region[0], region[1])] = (
+                    data[0][:, :, 0].astype(numpy.int32))
+                arrays['{}_by_{}.expected'.format(region[0], regions[1])] = (
+                    data[0][:, :, 1])
                 enrichment = numpy.copy(data[0][:, :, 0])
                 where = numpy.where(data[0][:, :, 1] > 0)
                 enrichment[where] /= data[0][where[0], where[1], 1]
-                arrays['%i_by_%i.enrichment' % region] = enrichment
+                arrays['{}_by_{}.enrichment'.format(region[0], region[1])] = (
+                    enrichment)
         arrays['regions'] = all_regions[regions][...]
         numpy.savez(filename, **arrays)
     else:
         labels = {}
-        for region, data in heatmaps.iteritems():
+        for region in heatmaps:
+            data = heatmaps[region]
             if len(region) == 1:
                 if arraytype == 'compact':
                     labels[region[0]] = [[], []]
                     for i in range(data[1].shape[0]):
-                        labels[region[0]][0].append("chr%s:%i-%i" % (all_regions[region[0]]['chromosome'].lstrip('chr'), data[1][i, 0], data[1][i, 1]))
+                        labels[region[0]][0].append("chr{}:{}-{}".format(
+                            all_regions[region[0]]['chromosome'].lstrip('chr'),
+                            data[1][i, 0], data[1][i, 1]))
                     for i in range(data[2].shape[0]):
-                        labels[region[0]][1].append("chr%s:%i-%i" % (all_regions[region[0]]['chromosome'].lstrip('chr'), data[2][i, 0], data[2][i, 1]))
+                        labels[region[0]][1].append("chr{}:{}-{}".format(
+                            all_regions[region[0]]['chromosome'].lstrip('chr'),
+                            data[2][i, 0], data[2][i, 1]))
                 else:
                     labels[region[0]] = []
                     for i in range(data[1].shape[0]):
-                        labels[region[0]].append("chr%s:%i-%i" % (all_regions[region[0]]['chromosome'].lstrip('chr'), data[1][i, 0], data[1][i, 1]))
-        for region, data in heatmaps.iteritems():
+                        labels[region[0]].append("chr{}:{}-{}".format(
+                            all_regions[region[0]]['chromosome'].lstrip('chr'),
+                            data[1][i, 0], data[1][i, 1]))
+        for region in heatmaps:
+            data = heatmaps[region]
             for datatype in ['counts', 'expected', 'enrichment']:
                 if len(region) == 1:
                     if datatype == 'counts':
@@ -1056,12 +1083,15 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
                     elif datatype == 'expected':
                         data1 = data[0][:, :, 1]
                     else:
-                        data1 = numpy.zeros((data[0].shape[0], data[0].shape[1]), dtype=numpy.float32)
+                        data1 = numpy.zeros((data[0].shape[0], data[0].shape[1]),
+                                            dtype=numpy.float32)
                         where = numpy.where(data[0][:, :, 1] > 0)
-                        data1[where] = data[0][where[0], where[1], 0] / data[0][where[0], where[1], 1]
-                    prefix = "%s_chr%s_%i-%i" % (filename, all_regions[region[0]]['chromosome'].lstrip('chr'),
-                                                 data[1][0, 0], data[1][-1, 1])
-                    output = open("%s.%s" % (prefix, datatype), 'w')
+                        data1[where] = (data[0][where[0], where[1], 0] /
+                                        data[0][where[0], where[1], 1])
+                    prefix = "{}_chr{}_{}-{}".format(
+                        filename, all_regions[region[0]]['chromosome'].lstrip('chr'),
+                        data[1][0, 0], data[1][-1, 1])
+                    output = open("{}.{}".format(prefix, datatype), 'w')
                     if arraytype == 'compact':
                         temp = ['\t']
                         for label in labels[region[0]][1]:
@@ -1092,11 +1122,12 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
                         where = numpy.where(data[:, :, 1] > 0)
                         data1[where] = data[where[0], where[1], 0] / data[where[0], where[1], 1]
                     if arraytype == 'compact':
-                        prefix = "%s_chr%s_%i-%i_Forward_by_chr%s_%i-%i_Reverse" % (filename,
-                            all_regions[region[0]]['chromosome'].lstrip('chr'), heatmaps[(region[0],)][1][0, 0],
-                            heatmaps[(region[0],)][1][-1, 1], all_regions[region[1]]['chromosome'].lstrip('chr'),
+                        prefix = "{}_chr{}_{}-{}_Forward_by_chr{}_{}-{}_Reverse".format(
+                            filename, all_regions[region[0]]['chromosome'].lstrip('chr'),
+                            heatmaps[(region[0],)][1][0, 0], heatmaps[(region[0],)][1][-1, 1],
+                            all_regions[region[1]]['chromosome'].lstrip('chr'),
                             heatmaps[(region[1],)][2][0, 0], heatmaps[(region[1],)][2][-1, 1])
-                        output = open("%s.%s" % (prefix, datatype), 'w')
+                        output = open("{}.{}".format(prefix, datatype), 'w')
                         temp = ['\t']
                         for label in labels[region[1]][1]:
                             temp.append(label)
@@ -1107,11 +1138,12 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
                                 temp.append(str(data1[i, j]))
                             print >> output, '\t'.join(temp)
                     else:
-                        prefix = "%s_chr%s_%i-%i_by_chr%s_%i-%i" % (filename,
-                            all_regions[region[0]]['chromosome'].lstrip('chr'), heatmaps[(region[0],)][1][0, 0],
-                            heatmaps[(region[0],)][1][-1, 1], all_regions[region[1]]['chromosome'].lstrip('chr'),
+                        prefix = "{}_chr{}_{}-{}_by_chr{}_{}-{}".format(
+                            filename, all_regions[region[0]]['chromosome'].lstrip('chr'),
+                            heatmaps[(region[0],)][1][0, 0], heatmaps[(region[0],)][1][-1, 1],
+                            all_regions[region[1]]['chromosome'].lstrip('chr'),
                             heatmaps[(region[1],)][1][0, 0], heatmaps[(region[1],)][1][-1, 1])
-                        output = open("%s.%s" % (prefix, datatype), 'w')
+                        output = open("{}.{}".format(prefix, datatype), 'w')
                         temp = ['\t']
                         for label in labels[region[1]]:
                             temp.append(label)
@@ -1123,5 +1155,5 @@ def write_heatmap_dict(fivec, filename, binsize, includetrans=True, datatype='en
                             print >> output, '\t'.join(temp)
                 output.close()
     if not silent:
-        print >> sys.stderr, ("Creating binned heatmap...Done\n"),
+        print("Creating binned heatmap...Done", file=sys.stderr)
     return heatmaps

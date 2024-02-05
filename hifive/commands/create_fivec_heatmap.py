@@ -15,7 +15,7 @@ from ..plotting import plot_fivec_dict, plot_key
 
 def run(args):
     if not args.image is None and args.pdf and "pyx" not in sys.modules.keys():
-        print >> sys.stderr, ("-p/--pdf requires the package 'pyx'"),
+        print("-p/--pdf requires the package 'pyx'", file=sys.stderr)
         return 1
     if args.binsize > 0:
         args.arraytype = 'full'
@@ -29,7 +29,7 @@ def run(args):
         try:
             regions[i] = int(regions[i])
         except:
-            print sys.stderr, ("Not all arguments in -r/--regions could be converted to integers.")
+            print("Not all arguments in -r/--regions could be converted to integers.", file=sys.stderr)
             return 1
     fivec = FiveC(args.project, 'r', silent=args.silent)
     heatmaps = fivec.write_heatmap(args.output, binsize=args.binsize, includetrans=args.trans,

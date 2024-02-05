@@ -112,11 +112,14 @@ class Fragment(object):
                      * **chr_indices** (*ndarray*) - A numpy array with a length of the number of chromosomes in 'chromosomes' + 1. This array contains the first position in 'fragments' for the chromosome in the corresponding position in the 'chromosomes' array. The last position in the array contains the total number of fragments.
                      * **regions** (*ndarray*) - A numpy array of length equal to the number of regions a containing the fields 'index', 'chromosome', 'start_frag', 'stop_frag', 'start' and 'stop'. Except for 'chromosome' which is a string, all fields are of type int32.
         """
-        self.history += "Fragment.load_fragments(filename='%s', genome_name='%s', re_name='%s', regions=%s, minregionspacing=%i) - " % (filename, genome_name, re_name, str(regions), minregionspacing)
+        self.history += "Fragment.load_fragments(filename='{}', ".format(filename)
+        self.history += "genome_name='{}', re_name='{}', ".format(genome_name, re_name)
+        self.history += "regions={}, minregionspacing={}) - ".format(regions, minregionspacing)
         if not os.path.exists(filename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s. No data loaded.") % (filename),
-            self.history += "Error: '%s' not found\n" % filename
+                print("Could not find {}. No data loaded.".format(filename),
+                      file=sys.stderr)
+            self.history += "Error: '{}' not found\n".format(filename)
             return None
         chromosomes = []
         chr2int = {}
@@ -131,7 +134,7 @@ class Fragment(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[0]
+            chrom = temp[0].encode('utf8')
             start = int(temp[1])
             stop = int(temp[2])
             name = temp[3]
@@ -145,12 +148,12 @@ class Fragment(object):
             if chrom not in chr2int:
                 chr2int[chrom] = len(chromosomes)
                 chromosomes.append(chrom)
-            data.append([chr2int[chrom], start, stop, (start + stop) / 2, strand, name] + features)
+            data.append([chr2int[chrom], start, stop, (start + stop) // 2, strand, name] + features)
         input.close()
         data.sort()
         dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32),
                   ('mid', numpy.int32), ('strand', numpy.int32), ('region', numpy.int32),
-                  ('name', 'S32')]
+                  ('name', "S32")]
         for feature in feature_names:
             dtypes.append((feature, numpy.float32))
         fragments = numpy.empty(len(data), dtype=numpy.dtype(dtypes))
@@ -164,7 +167,8 @@ class Fragment(object):
             fragments['name'][i] = data[i][5]
             for j in range(len(feature_names)):
                 fragments[feature_names[j]][i] = data[i][6 + j]
-        chromosomes = numpy.array(chromosomes)
+        length = max([len(x) for x in chromosomes])
+        chromosomes = numpy.array(chromosomes, "S{}".format(length))
         # make note of chromosome positions in fend array
         chr_indices = numpy.zeros(chromosomes.shape[0] + 1, dtype=numpy.int32)
         chr_indices[1:] = numpy.bincount(fragments['chr'])

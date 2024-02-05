@@ -115,13 +115,13 @@ def run(args):
                 tempout = []
                 for j in range(temp.shape[1]):
                     tempout.append("%i" % temp[i, j])
-                print >> output, '\t'.join(tempout)
+                print('\t'.join(tempout), file=output)
         else:
             for i in range(temp.shape[0]):
                 tempout = []
                 for j in range(temp.shape[1]):
                     tempout.append("%0.6f" % temp[i, j])
-                print >> output, '\t'.join(tempout)
+                print('\t'.join(tempout), file=output)
     else:
         if args.chrom2 is None:
             diag = binned
@@ -130,29 +130,19 @@ def run(args):
                 for i in range(mapping.shape[0] - 1 + diag):
                     for j in range(i + 1 - diag, mapping.shape[0]):
                         if data[pos, 0] > 0.0 and data[pos, 1] > 0.0:
-                            print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
-                                                                           mapping[i, 1], args.chrom,
-                                                                           mapping[j, 0], mapping[j, 1],
-                                                                           numpy.log2(data[pos, 0] / data[pos, 1]))
+                            print("chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0], mapping[i, 1], args.chrom, mapping[j, 0], mapping[j, 1], numpy.log2(data[pos, 0] / data[pos, 1])), file=output)
                         pos += 1
             else:
                 for i in range(mapping.shape[0] - 1 + diag):
                     for pos in range(min(mapping.shape[0] - i - 1 + diag, data.shape[1])):
                         j = i + pos + 1 - diag
                         if data[i, pos, 0] > 0.0 and data[i, pos, 1] > 0.0:
-                            print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0],
-                                                                            mapping[i, 1], args.chrom,
-                                                                            mapping[j, 0], mapping[j, 1],
-                                                                            numpy.log2(data[i, pos, 0] /
-                                                                            data[i, pos, 1]))
+                            print("chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping[i, 0], mapping[i, 1], args.chrom, mapping[j, 0], mapping[j, 1], numpy.log2(data[i, pos, 0] / data[i, pos, 1])), file=output)
         else:
             for i in range(mapping1.shape[0]):
                 for j in range(mapping2.shape[0]):
                     if data[i, j, 0] > 0.0 and data[i, j, 1] > 0.0:
-                        print >> output, "chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom,
-                                                                        mapping1[i, 0], mapping1[i, 1],
-                                                                        args.chrom2, mapping2[j, 0], mapping2[j, 1],
-                                                                        numpy.log2(data[i, j, 0] / data[i, j, 1]))
+                        print("chr%s\t%i\t%i\tchr%s\t%i\t%i\t%f" % (args.chrom, mapping1[i, 0], mapping1[i, 1], args.chrom2, mapping2[j, 0], mapping2[j, 1], numpy.log2(data[i, j, 0] / data[i, j, 1])), file=output)
     output.close()
     if not args.image is None:
         width = max(5.0, (args.stop - args.start) / 1000000.)
@@ -205,14 +195,14 @@ def run(args):
             if args.ticks and args.binsize > 0:
                 if args.chrom2 is None:
                     c.stroke(path.line(0, 0, width, 0))
-                    xmin = (mapping[0, 0] + mapping[0, 1]) / 2
-                    xmax = (mapping[-1, 0] + mapping[-1, 1]) / 2
+                    xmin = (mapping[0, 0] + mapping[0, 1]) // 2
+                    xmax = (mapping[-1, 0] + mapping[-1, 1]) // 2
                     #order = int(floor(log10(xmax - xmin))) - 1
                     #step = int(floor((xmax - xmin) / (10.0 ** order))) * 10 ** order
-                    
+
                     order = int(floor(log10((xmax - xmin) / (width * 2.0))))
                     step = int(floor((xmax - xmin) / (width * 2.0) / (10.0 ** order))) * 10 ** order
-                    values = numpy.arange(((xmin - 1) / step + 1) * step, (xmax / step) * step + 1, step)
+                    values = numpy.arange(((xmin - 1) // step + 1) * step, (xmax // step) * step + 1, step)
                     ticks = (values - float(mapping[0, 0] + mapping[0, 1]) / 2) / (mapping[-1, 0] -
                                                                                    mapping[0, 0]) * width
                     for i in range(values.shape[0]):
@@ -227,11 +217,11 @@ def run(args):
                                                                               text.size(-2)])
                 else:
                     c.stroke(path.line(0, 0, width, 0))
-                    xmin = (mapping1[0, 0] + mapping1[0, 1]) / 2
-                    xmax = (mapping1[-1, 0] + mapping1[-1, 1]) / 2
+                    xmin = (mapping1[0, 0] + mapping1[0, 1]) // 2
+                    xmax = (mapping1[-1, 0] + mapping1[-1, 1]) // 2
                     order = int(floor(log10((xmax - xmin) / (width * 2.0))))
                     step = int(floor((xmax - xmin) / (width * 2.0) / (10.0 ** order))) * 10 ** order
-                    values = numpy.arange(((xmin - 1) / step + 1) * step, (xmax / step) * step + 1, step)
+                    values = numpy.arange(((xmin - 1) // step + 1) * step, (xmax // step) * step + 1, step)
                     ticks = (values - float(mapping1[0, 0] + mapping1[0, 1]) / 2) / (mapping1[-1, 0] -
                                                                                      mapping1[0, 0]) * width
                     for i in range(values.shape[0]):
@@ -239,11 +229,11 @@ def run(args):
                         c.text(ticks[i], -0.3, "%0.2e" % values[i],
                                [text.valign.middle, text.halign.left, text.size(-2), trafo.rotate(-90)])
                     c.stroke(path.line(0, 0, width, 0))
-                    xmin = (mapping2[0, 0] + mapping2[0, 1]) / 2
-                    xmax = (mapping2[-1, 0] + mapping2[-1, 1]) / 2
+                    xmin = (mapping2[0, 0] + mapping2[0, 1]) // 2
+                    xmax = (mapping2[-1, 0] + mapping2[-1, 1]) // 2
                     order = int(floor(log10((xmax - xmin) / (width * 2.0))))
                     step = int(floor((xmax - xmin) / (width * 2.0) / (10.0 ** order))) * 10 ** order
-                    values = numpy.arange(((xmin - 1) / step + 1) * step, (xmax / step) * step + 1, step)
+                    values = numpy.arange(((xmin - 1) // step + 1) * step, (xmax // step) * step + 1, step)
                     ticks = (values - float(mapping2[0, 0] + mapping2[0, 1]) / 2) / (mapping2[-1, 0] -
                                                                                      mapping2[0, 0]) * height
                     for i in range(values.shape[0]):

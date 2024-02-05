@@ -86,9 +86,13 @@ class HiCData(object):
                 continue
             elif key == 'stats':
                 stats = []
-                for name, count in self.stats.iteritems():
+                names = list(self.stats.keys())
+                names.sort()
+                for name in names:
+                    count = self.stats[name]
                     stats.append((name, count))
-                stats = numpy.array(stats, dtype=numpy.dtype([('name', 'S20'), ('count', numpy.int32)]))
+                length = max([len(x) for x in self.stats])
+                stats = numpy.array(stats, dtype=numpy.dtype([('name', 'S{}'.format(length)), ('count', numpy.int32)]))
                 datafile.create_dataset(name='stats', data=stats)
             elif self[key] is None:
                 continue
@@ -97,7 +101,8 @@ class HiCData(object):
             elif isinstance(self[key], list):
                 if isinstance(self[key][0], numpy.ndarray):
                     for i in range(len(self[key])):
-                        datafile.create_dataset("%s.%s" % (key, chroms[i]), data=self[key][i])
+                        datafile.create_dataset("{}.{}".format(key, chroms[i]),
+                                                data=self[key][i])
             elif not isinstance(self[key], dict):
                 datafile.attrs[key] = self[key]
 
@@ -132,7 +137,8 @@ class HiCData(object):
                                 fendfilename.lstrip('/').split('/')[parent_count:])
             if not os.path.exists(fendfilename):
                 if not self.silent:
-                    print >> sys.stderr, ("Could not find %s. No fends loaded.\n") % (fendfilename),
+                    print("Could not find {}. No fends loaded.".format(fendfilename),
+                          file=sys.stderr)
             else:
                 self.fends = h5py.File(fendfilename, 'r')
                 # create dictionary for converting chromosome names to indices
@@ -182,16 +188,20 @@ class HiCData(object):
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_data_from_raw(fendfilename='%s', filelist=%s, maxinsert=%i, skip_duplicate_filtering=%s) - " % (fendfilename, str(filelist), maxinsert, str(skip_duplicate_filtering))
+        self.history += "HiCData.load_data_from_raw(fendfilename=" +\
+            "'{}', filelist={}, maxinsert={}, ".format(fendfilename, filelist, maxinsert) +\
+            "skip_duplicate_filtering={}) - ".format(skip_duplicate_filtering)
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
-                print >> sys.stderr, \
-                ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
-            self.history += "Error: '%s' not found\n" % fendfilename
+                print("The fend file {} was not found. ".format(fendfilename) +
+                      "No data was loaded.", file=sys.stderr)
+            self.history += "Error: '{}' not found\n".format(fendfilename)
             return None
-        self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
-                                       os.path.dirname(self.file)), os.path.basename(fendfilename))
+        self.fendfilename = "{}/{}".format(
+            os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                            os.path.dirname(self.file)),
+            os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
         if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
@@ -214,8 +224,10 @@ class HiCData(object):
             filelist = [filelist]
         raw_filelist = []
         for filename in filelist:
-            raw_filelist.append("%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
-                                           os.path.dirname(self.file)), os.path.basename(filename)))
+            raw_filelist.append("{}/{}".format(
+                os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                                os.path.dirname(self.file)),
+                os.path.basename(filename)))
         self.raw_filelist = ",".join(raw_filelist)
         fend_pairs = []
         for i in range(len(chroms)):
@@ -231,16 +243,20 @@ class HiCData(object):
                     data[i].append({})
             if not os.path.exists(fname):
                 if not self.silent:
-                    print >> sys.stderr, ("The file %s was not found...skipped.\n") % (fname.split('/')[-1]),
-                self.history += "'%s' not found, " % fname
+                    print("The file {} was not found...skipped.".format(fname.split('/')[-1]),
+                          file=sys.stderr)
+                self.history += "'{}' not found, ".format(fname)
                 continue
             if not self.silent:
-                print >> sys.stderr, ("Loading data from %s...") % (fname.split('/')[-1]),
+                print("Loading data from {}...".format(fname.split('/')[-1]),
+                      end='', file=sys.stderr)
             a = 0
             input = open(fname, 'r', 1)
             new_reads = 0
             for line in input:
                 temp = line.strip('\n').split('\t')
+                temp[0] = temp[0].encode('utf8')
+                temp[3] = temp[3].encode('utf8')
                 if temp[0] not in self.chr2int or temp[3] not in self.chr2int:
                     self.stats['chr_not_in_fends'] += 1
                     continue
@@ -274,7 +290,8 @@ class HiCData(object):
                         for j in range(len(data[i])):
                             temp = numpy.zeros((len(data[i][j]), 3), dtype=numpy.int32)
                             k = 0
-                            for key, count in data[i][j].iteritems():
+                            for key in data[i][j]:
+                                count = data[i][j][key]
                                 temp[k, :] = (key[0], key[1], count)
                                 self.stats['pcr_duplicates'] += count - 1
                                 k += 1
@@ -285,7 +302,9 @@ class HiCData(object):
                     else:
                         self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
                     if not self.silent:
-                        print >> sys.stderr, ("\r%s\rLoading data from %s...") % (' '*50, fname.split('/')[-1]),
+                        print("\r{}\rLoading data from ".format(' '*50) +
+                              "{}...".format(fname.split('/')[-1]), end='',
+                              file=sys.stderr)
                     for i in range(len(data)):
                         for j in range(len(data[i])):
                             data[i][j] = {}
@@ -297,14 +316,15 @@ class HiCData(object):
                         if skip_duplicate_filtering:
                             temp = numpy.zeros((len(data[i][j]), 3), dtype=numpy.int32)
                             k = 0
-                            for key, count in data[i][j].iteritems():
+                            for key in data[i][j]:
+                                count = data[i][j][key]
                                 temp[k, :] = (key[0], key[1], count)
                                 self.stats['pcr_duplicates'] += count - 1
                                 k += 1
                             data[i][j] = temp
                             new_reads += numpy.sum(data[i][j][:, 2])
                         else:
-                            data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
+                            data[i][j] = numpy.array(list(data[i][j].keys()), dtype=numpy.int32)
                             new_reads += data[i][j].shape[0]
                 # map data to fends, filtering as needed
                 if new_reads > 0 and (a > 0 or not skip_duplicate_filtering):
@@ -314,7 +334,8 @@ class HiCData(object):
                         self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
             total_reads += new_reads
             if not self.silent:
-                print >> sys.stderr, ("\r%s\r%i validly-mapped reads pairs loaded.\n") % (' ' * 50, new_reads),
+                print("\r{}\r{} validly-mapped reads ".format(' '*50, new_reads) +
+                      "pairs loaded.", file=sys.stderr)
         if skip_duplicate_filtering:
             self.stats['total_reads'] = total_reads + self.stats['chr_not_in_fends']
         else:
@@ -327,12 +348,13 @@ class HiCData(object):
                 total_fend_pairs += len(fend_pairs[i][j])
         if total_fend_pairs == 0:
             if not self.silent:
-                print >> sys.stderr, ("No valid data was loaded.\n"),
+                print("No valid data was loaded.", file=sys.stderr)
             self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
-            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i valid fend pairs\n") %\
-                             (total_reads, total_fend_pairs),
+            print("{} total validly-mapped read pairs ".format(total_reads) +
+                  "loaded. {} valid fend pairs".format(total_fend_pairs),
+                  file=sys.stderr)
         # write fend pairs to h5dict
         if self.re and self.binned:
             self._parse_binned_fend_pairs(fend_pairs)
@@ -365,20 +387,26 @@ class HiCData(object):
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_data_from_bam(fendfilename='%s', filelist=%s, maxinsert=%i, skip_duplicate_filtering=%s) - " % (fendfilename, str(filelist), maxinsert, str(skip_duplicate_filtering))
+        self.history += "HiCData.load_data_from_bam(fendfilename=" +\
+            "'{}', filelist={}, maxinsert=".format(fendfilename, filelist) +\
+            "{} skip_duplicate_filtering={}) - ".format(maxinsert, str(skip_duplicate_filtering))
         if 'pysam' not in sys.modules.keys():
             if not self.silent:
-                print >> sys.stderr, ("The pysam module must be installed to use this function.")
+                print("The pysam module must be installed to use this function.",
+                      file=sys.stderr)
             self.history += 'Error: pysam module missing\n'
             return None
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
-                print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
-            self.history += "Error: '%s' not found\n" % fendfilename
+                print("The fend file {} was not found. ".format(fendfilename) +
+                      "No data was loaded.", file=sys.stderr)
+            self.history += "Error: '{}' not found\n".format(fendfilename)
             return None
-        self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
-                                       os.path.dirname(self.file)), os.path.basename(fendfilename))
+        self.fendfilename = "{}/{}".format(
+            os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                            os.path.dirname(self.file)),
+            os.path.basename(fendfilename))
         self.maxinsert = maxinsert
         self.fends = h5py.File(fendfilename, 'r')
         if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
@@ -401,10 +429,14 @@ class HiCData(object):
             filelist = [[filelist[0], filelist[1]]]
         bam_filelist = []
         for filenames in filelist:
-            bam_filelist.append("%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filenames[0])),
-                                           os.path.dirname(self.file)), os.path.basename(filenames[0])))
-            bam_filelist.append("%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filenames[1])),
-                                           os.path.dirname(self.file)), os.path.basename(filenames[1])))
+            bam_filelist.append("{}/{}".format(
+                os.path.relpath(os.path.dirname(os.path.abspath(filenames[0])),
+                                os.path.dirname(self.file)),
+                os.path.basename(filenames[0])))
+            bam_filelist.append("{}/{}".format(
+                os.path.relpath(os.path.dirname(os.path.abspath(filenames[1])),
+                                os.path.dirname(self.file)),
+                os.path.basename(filenames[1])))
         self.bam_filelist = ",".join(bam_filelist)
         total_reads = 0
         fend_pairs = []
@@ -417,26 +449,30 @@ class HiCData(object):
             present = True
             if not os.path.exists(filepair[0]):
                 if not self.silent:
-                    print >> sys.stderr, ("%s could not be located.") % (filepair[0]),
-                self.history += "'%s' not found, " % filepair[0]
+                    print("{} could not be located.".format(filepair[0]),
+                          file=sys.stderr)
+                self.history += "'{}' not found, ".format(filepair[0])
                 present = False
             if not os.path.exists(filepair[1]):
                 if not self.silent:
-                    print >> sys.stderr, ("%s could not be located.") % (filepair[1]),
-                self.history += "'%s' not found, " % filepair[1]
+                    print("{} could not be located.".format(filepair[1]),
+                          file=sys.stderr)
+                self.history += "'{}' not found, ".format(filepair[1])
                 present = False
             if not present:
                 if not self.silent:
-                    print >> sys.stderr, ("No data for one or both ends could be located. Skipping this run.\n")
+                    print("No data for one or both ends could be located. " +
+                          "Skipping this run.", file=sys.stderr)
                 continue
             unpaired = {}
             # load first half of paired ends
             if not self.silent:
-                print >> sys.stderr, ("Loading data from %s...") % (filepair[0].split('/')[-1]),
+                print("Loading data from {}...".format(filepair[0].split('/')[-1]),
+                      file=sys.stderr)
             input = pysam.Samfile(filepair[0], 'rb')
             idx2int = {}
             for i in range(len(input.header['SQ'])):
-                chrom = input.header['SQ'][i]['SN']
+                chrom = input.header['SQ'][i]['SN'].encode('utf8')
                 if chrom in self.chr2int:
                     idx2int[i] = self.chr2int[chrom]
             for read in input.fetch(until_eof=True):
@@ -454,10 +490,11 @@ class HiCData(object):
                 unpaired[read.qname] = (idx2int[read.tid], end)
             input.close()
             if not self.silent:
-                print >> sys.stderr, ("Done\n"),
+                print("Done", file=sys.stderr)
             # load second half of paired ends
             if not self.silent:
-                print >> sys.stderr, ("Loading data from %s...") % (filepair[1].split('/')[-1]),
+                print("Loading data from {}...".format(filepair[1].split('/')[-1]),
+                      file=sys.stderr)
             data = []
             for i in range(len(chroms)):
                 data.append([])
@@ -466,7 +503,7 @@ class HiCData(object):
             input = pysam.Samfile(filepair[1], 'rb')
             idx2int = {}
             for i in range(len(input.header['SQ'])):
-                chrom = input.header['SQ'][i]['SN']
+                chrom = input.header['SQ'][i]['SN'].encode('utf8')
                 if chrom in self.chr2int:
                     idx2int[i] = self.chr2int[chrom]
             a = 0
@@ -509,7 +546,8 @@ class HiCData(object):
                         for j in range(len(data[i])):
                             temp = numpy.zeros((len(data[i][j]),3), dtype=numpy.int32)
                             k = 0
-                            for key, count in data[i][j].iteritems():
+                            for key in data[i][j]:
+                                count = data[i][j][key]
                                 temp[k, :] = (key[0], key[1], count)
                                 self.stats['pcr_duplicates'] += count - 1
                                 k += 1
@@ -520,7 +558,9 @@ class HiCData(object):
                     else:
                         self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
                     if not self.silent:
-                        print >> sys.stderr, ("\r%s\rLoading data from %s...") % (' '*50, filepair[1].split('/')[-1]),
+                        print("\r{}\rLoading data from ".format(' '*50) +
+                              "{}...".format(filepair[1].split('/')[-1]),
+                              file=sys.stderr)
                     for i in range(len(data)):
                         for j in range(len(data[i])):
                             data[i][j] = {}
@@ -533,14 +573,16 @@ class HiCData(object):
                         if skip_duplicate_filtering:
                                 temp = numpy.zeros((len(data[i][j]),3), dtype=numpy.int32)
                                 k = 0
-                                for key, count in data[i][j].iteritems():
+                                for key in data[i][j]:
+                                    count = data[i][j][key]
                                     temp[k, :] = (key[0], key[1], count)
                                     self.stats['pcr_duplicates'] += count - 1
                                     k += 1
                                 data[i][j] = temp
                                 new_reads += numpy.sum(data[i][j][:, 2])
                         else:
-                            data[i][j] = numpy.array(data[i][j].keys(), dtype=numpy.int32)
+                            data[i][j] = numpy.array(list(data[i][j].keys()),
+                                                     dtype=numpy.int32)
                             new_reads += data[i][j].shape[0]
                 if new_reads > 0 and (a > 0 or not skip_duplicate_filtering):
                     if self.re:
@@ -548,7 +590,8 @@ class HiCData(object):
                     else:
                         self._find_bin_pairs(data, fend_pairs, skip_duplicate_filtering)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rRead %i validly-mapped read pairs.\n") % (' ' * 50, new_reads),
+                print("\r{}\rRead {} validly-mapped read pairs.".format(' ' * 50, new_reads),
+                      file=sys.stderr)
             total_reads += new_reads
             del data
         if skip_duplicate_filtering:
@@ -563,12 +606,12 @@ class HiCData(object):
                 total_fend_pairs += len(fend_pairs[i][j])
         if total_fend_pairs == 0:
             if not self.silent:
-                print >> sys.stderr, ("No valid data was loaded.\n"),
+                print("No valid data was loaded.", file=sys.stderr)
             self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
-            print >> sys.stderr, ("%i total validly-mapped read pairs loaded. %i valid fend pairs\n") %\
-                                 (total_reads, total_fend_pairs),
+            print("{} total validly-mapped read pairs loaded. ".format(total_reads) +
+                  "{} valid fend pairs".format(total_fend_pairs), file=sys.stderr)
         if self.re and self.binned:
             self._parse_binned_fend_pairs(fend_pairs)
         else:
@@ -597,15 +640,19 @@ class HiCData(object):
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_data_from_mat(fendfilename='%s', filename='%s') - " % (fendfilename, filename)
+        self.history += "HiCData.load_data_from_mat(fendfilename=" +\
+            "'{}', filename='{}') - ".format(fendfilename, filename)
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
-                print >> sys.stderr, ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
-            self.history += "Error: '%s' not found\n" % fendfilename
+                print("The fend file {} was not found. ".format(fendfilename) +
+                      "No data was loaded.", file=sys.stderr)
+            self.history += "Error: '%s' not found\n".format(fendfilename)
             return None
-        self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
-                                       os.path.dirname(self.file)), os.path.basename(fendfilename))
+        self.fendfilename = "{}/{}".format(
+            os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                            os.path.dirname(self.file)),
+            os.path.basename(fendfilename))
         self.fends = h5py.File(fendfilename, 'r')
         self.maxinsert = None
         if 'binned' in self.fends['/'].attrs and self.fends['/'].attrs['binned'] is not None:
@@ -630,13 +677,16 @@ class HiCData(object):
                 fend_pairs[i].append({})
         if not os.path.exists(filename):
             if not self.silent:
-                print >> sys.stderr, ("%s not found... no data loaded.\n") % (filename.split('/')[-1]),
-            self.history += "Error: '%s' not found\n" % fendfilename
+                print("{} not found... no data loaded.".format(filename.split('/')[-1]),
+                      file=sys.stderr)
+            self.history += "Error: '{}' not found\n".format(fendfilename)
             return None
         if not self.silent:
-            print >> sys.stderr, ("Loading data from mat file..."),
-        self.matfile = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
-                                  os.path.dirname(self.file)), os.path.basename(filename))
+            print("Loading data from mat file...", end='', file=sys.stderr)
+        self.matfile = "{}/{}".format(
+            os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                            os.path.dirname(self.file)),
+            os.path.basename(filename))
         input = open(filename, 'r')
         total_reads = 0
         for line in input:
@@ -667,11 +717,12 @@ class HiCData(object):
                 total_fend_pairs += len(fend_pairs[i][j])
         if total_fend_pairs == 0:
             if not self.silent:
-                print >> sys.stderr, ("No valid data was loaded.\n"),
+                print("No valid data was loaded.", file=sys.stderr)
             self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
-            print >> sys.stderr, ("%i valid fend pairs loaded.\n") % (total_fend_pairs),
+            print("{} valid fend pairs loaded.".format(total_fend_pairs),
+                  file=sys.stderr)
         # write fend pairs to h5dict
         if self.re and self.binned:
             self._parse_binned_fend_pairs(fend_pairs)
@@ -708,9 +759,11 @@ class HiCData(object):
             for j in range(i + 1): 
                 bin_pairs[i].append({})
         if not self.silent:
-            print >> sys.stderr, ("Loading data from mat file..."),
-        self.matfile = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
-                                  os.path.dirname(self.file)), os.path.basename(filename))
+            print("Loading data from mat file...", end='', file=sys.stderr)
+        self.matfile = "{}/{}".format(
+            os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+                            os.path.dirname(self.file)),
+            os.path.basename(filename))
         input = open(filename, 'r')
         total_reads = 0
         for line in input:
@@ -740,11 +793,12 @@ class HiCData(object):
                 total_bin_pairs += len(bin_pairs[i][j])
         if total_bin_pairs == 0:
             if not self.silent:
-                print >> sys.stderr, ("No valid data was loaded.\n"),
+                print("No valid data was loaded.", file=sys.stderr)
             self.history += "Error: no valid data loaded\n"
             return None
         if not self.silent:
-            print >> sys.stderr, ("%i valid bin pairs loaded.\n") % (total_bin_pairs),
+            print("{} valid bin pairs loaded.".format(total_bin_pairs),
+                  file=sys.stderr)
         # write fend pairs to h5dict
         self._parse_fend_pairs(bin_pairs)
         self.history += "Success\n"
@@ -773,13 +827,15 @@ class HiCData(object):
 
         When data is loaded the 'history' attribute is updated to include the history of the fend file that becomes associated with it.
         """
-        self.history += "HiCData.load_binned_data_from_matrices(fendfilename='%s', filename='%s', format='%s') - " % (fendfilename, filename, str(format))
+        self.history += "HiCData.load_binned_data_from_matrices(" +\
+            "fendfilename='%s', ".format(fendfilename) +\
+            "filename='%s', format='%s') - ".format(filename, str(format))
         # determine if fend file exists and if so, load it
         if not os.path.exists(fendfilename):
             if not self.silent:
-                print >> sys.stderr, \
-                ("The fend file %s was not found. No data was loaded.\n") % (fendfilename),
-            self.history += "Error: '%s' not found\n" % fendfilename
+                print("The fend file {} was not found. ".format(fendfilename) +
+                      "No data was loaded.", file=sys.stderr)
+            self.history += "Error: '{}' not found\n".format(fendfilename)
             return None
         if format is None:
             if filename.count('*'):
@@ -790,17 +846,20 @@ class HiCData(object):
                 format = 'npz'
         if format not in ['txt', 'hdf5', 'npz']:
             if not self.silent:
-                print >> sys.stderr, ("Could not determine file format. No data loaded.\n"),
+                print("Could not determine file format. No data loaded.",
+                      file=sys.stderr)
             self.history += "Error: File format not recognized.\n"
             return None
-        self.fendfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
-                                       os.path.dirname(self.file)), os.path.basename(fendfilename))
+        self.fendfilename = "{}/{}".format(
+            os.path.relpath(os.path.dirname(os.path.abspath(fendfilename)),
+                            os.path.dirname(self.file)),
+            os.path.basename(fendfilename))
         self.fends = h5py.File(fendfilename, 'r')
         if 'binned' not in self.fends['/'].attrs or self.fends['/'].attrs['binned'] is None:
             if not self.silent:
-                print >> sys.stderr, \
-                ("The fend file %s was not created for binned data. No data was loaded.\n") % (fendfilename),
-            self.history += "Error: '%s' not binned\n" % fendfilename
+                print("The fend file {} was not created for ".format(fendfilename) +
+                      "binned data. No data was loaded.", file=sys.stderr)
+            self.history += "Error: '{}' not binned\n".format(fendfilename)
             return None
         bins = self.fends['bins'][...]
         bin_indices = self.fends['bin_indices'][...]
@@ -879,7 +938,8 @@ class HiCData(object):
             self.trans_interaction_distribution = numpy.bincount(fend_profiles)
             trans_reads = numpy.sum(self.trans_data[:, 2])
         if not self.silent:
-            print >> sys.stderr, ("Done  %i cis reads, %i trans reads\n") % (cis_reads, trans_reads),
+            print("Done  {} cis reads, {} trans reads".format(cis_reads, trans_reads),
+                  file=sys.stderr)
         return None
 
     def _load_txt_matrices(self, data, filename, chroms, bins, bin_indices):
@@ -889,22 +949,23 @@ class HiCData(object):
         for chrom in chroms:
             for chrom2 in chroms:
                 if chrom == chrom2:
-                    fname = filename.replace('*', chrom)
+                    fname = filename.replace('*', chrom.decode('utf8'))
                     if not os.path.exists(fname):
-                        fname = filename.replace('*', 'chr%s' % chrom)
+                        fname = filename.replace('*', 'chr{}'.format(chrom.decode('utf8')))
                         if not os.path.exists(fname):
                             continue
                 else:
-                    fname = filename.replace('*', '%s_by_%s' % (chrom, chrom2))
+                    fname = filename.replace('*', '{}_by_{}'.format(chrom.decode('utf8'), chrom2.decode('utf8')))
                     if not os.path.exists(fname):
-                        fname = filename.replace('*', 'chr%s_by_chr%s' % (chrom, chrom2))
+                        fname = filename.replace('*', 'chr{}_by_chr{}'.format(chrom.decode('utf8'), chrom2.decode('utf8')))
                         if not os.path.exists(fname):
                             continue
                 col_labels = None
                 row_labels = []
                 tempdata = []
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rLoading %s...") % (' '*80, fname),
+                    print("\r{}\rLoading {}...".format(' '*80, fname), end='',
+                          file=sys.stderr)
                 for line in open(fname):
                     temp = line.rstrip('\n').rstrip('\t').split('\t')
                     try:
@@ -919,7 +980,7 @@ class HiCData(object):
                             temp = temp[1:]
                     tempdata.append(numpy.fromstring(' '.join(temp), sep=' ', dtype=numpy.int32))
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\r") % (' '*80),
+                    print("\r{}\r".format(' '*80), end='', file=sys.stderr)
                 tempdata = numpy.array(tempdata, dtype=numpy.int32)
                 chrint1 = self.chr2int[chrom]
                 mapping1 = numpy.zeros(tempdata.shape[0], dtype=numpy.int32) - 1
@@ -943,7 +1004,7 @@ class HiCData(object):
                 else:
                     for i in range(len(row_labels)):
                         temp = row_labels[i].split('|')[-1].split(':')[1].split('-')
-                        row_labels[i] = (int(temp[0]) + int(temp[1])) / 2
+                        row_labels[i] = (int(temp[0]) + int(temp[1])) // 2
                     row_labels = numpy.array(row_labels)
                     starts = numpy.searchsorted(bins['start'][bin_indices[chrint1]:bin_indices[chrint1 + 1]],
                                                 row_labels, side='right') - 1
@@ -955,7 +1016,7 @@ class HiCData(object):
                     if chrom != chrom2:
                         for i in range(len(col_labels)):
                             temp = col_labels[i].split('|')[-1].split(':')[1].split('-')
-                            col_labels[i] = (int(temp[0]) + int(temp[1])) / 2
+                            col_labels[i] = (int(temp[0]) + int(temp[1])) // 2
                         col_labels = numpy.array(col_labels)
                         starts = numpy.searchsorted(bins['start'][bin_indices[chrint2]:bin_indices[chrint2 + 1]],
                                                     col_labels, side='right') - 1
@@ -1017,19 +1078,21 @@ class HiCData(object):
                 if name not in infile:
                     continue
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rLoading %s...") % (' '*80, name),
-                if '%s.positions' % chrom in infile or 'chr%s.positions' % chrom in infile:
-                    if '%s.positions' % chrom in infile:
-                        pos1 = infile['%s.positions' % chrom][:]
+                    print("\r{}\rLoading {}...".format(' '*80, name), end='',
+                          file=sys.stderr)
+                if ('{}.positions'.format(chrom) in infile or
+                    'chr{}.positions'.format(chrom) in infile):
+                    if '{}.positions'.format(chrom) in infile:
+                        pos1 = infile['{}.positions'.format(chrom)][:]
                     else:
-                        pos1 = infile['chr%s.positions' % chrom][:]
-                    pos1 = (pos1[:, 0] + pos1[:, 1]) / 2
+                        pos1 = infile['chr{}.positions'.format(chrom)][:]
+                    pos1 = (pos1[:, 0] + pos1[:, 1]) // 2
                     if chrom != chrom2:
-                        if '%s.positions' % chrom2 in infile:
-                            pos2 = infile['%s.positions' % chrom2][:]
+                        if '{}.positions'.format(chrom2) in infile:
+                            pos2 = infile['{}.positions'.format(chrom2)][:]
                         else:
-                            pos2 = infile['chr%s.positions' % chrom2][:]
-                        pos2 = (pos2[:, 0] + pos2[:, 1]) / 2
+                            pos2 = infile['chr{}.positions'.format(chrom2)][:]
+                        pos2 = (pos2[:, 0] + pos2[:, 1]) // 2
                     else:
                         pos2 = pos1
                 else:
@@ -1038,16 +1101,16 @@ class HiCData(object):
                 if chrom == chrom2 and len(tempdata.shape) == 1:
                     if pos1 is not None:
                         N = pos1.shape[0]
-                        if tempdata.shape[0] == N * (N - 1) / 2:
+                        if tempdata.shape[0] == N * (N - 1) // 2:
                             diag = False
                         else:
                             diag = True
                     elif format == 'npz' or ('diagonal' in infile['/'].attrs and infile['/'].attrs['diagonal']):
                         diag = True
-                        N = (-0.5 + (0.25 + 2 * tempdata.shape[0]))
+                        N = int(-0.5 + (0.25 + 2 * tempdata.shape[0]))
                     else:
                         diag = False
-                        N = (0.5 + (0.25 + 2 * tempdata.shape[0]))
+                        N = int(0.5 + (0.25 + 2 * tempdata.shape[0]))
                     temp = numpy.zeros((N, N), dtype=numpy.int32)
                     temp[numpy.triu_indices(N, 1 - int(diag))] = tempdata
                     tempdata = temp
@@ -1105,7 +1168,7 @@ class HiCData(object):
                 data[chrint2][chrint1] = counts
         infile.close()
         if not self.silent:
-            print >> sys.stderr, ("\r%s\r") % (' '*80),
+            print("\r{}\r".format(' '*80), end='', file=sys.stderr)
         return cis_counts, trans_counts
 
     def _find_fend_pairs(self, data, fend_pairs, skip_duplicate_filtering=False):
@@ -1139,7 +1202,9 @@ class HiCData(object):
                 signs = numpy.minimum(0, numpy.sign(data[i][j]))
                 data[i][j] = numpy.abs(data[i][j])
                 if not self.silent:
-                    print >> sys.stderr, ("\rMapping fends for %s by %s") % (chroms[i].ljust(10), chroms[j].ljust(10)),
+                    print("\r{}\rMapping fends for ".format(" "*80) +
+                          "{} by {}".format(chroms[i].ljust(10), chroms[j].ljust(10)),
+                          end='', file=sys.stderr)
                 mapped_fends[:, 0] = numpy.searchsorted(self.cuts[j], data[i][j][:, 0])
                 mapped_fends[:, 1] = numpy.searchsorted(self.cuts[i], data[i][j][:, 1])
                 # make sure coordinates are within first and last cutsites
@@ -1187,7 +1252,8 @@ class HiCData(object):
                 # convert from fragments to fends
                 mapped_fends[valid, :2] = mapped_fends[valid, :2] * 2 - 1 + signs[valid, :2]
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rCounting fend pairs...") % (' ' * 50),
+                    print("\r{}\rCounting fend pairs...".format(' ' * 50), end='',
+                          file=sys.stderr)
                 for k in valid:
                     key = (mapped_fends[k, 0], mapped_fends[k, 1])
                     if key not in fend_pairs[i][j]:
@@ -1201,7 +1267,7 @@ class HiCData(object):
                         else:
                             fend_pairs[i][j][key] += 1
         if not self.silent and not skip_duplicate_filtering:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         return None
 
     def _find_bin_pairs(self, data, bin_pairs, skip_duplicate_filtering=False):
@@ -1222,7 +1288,9 @@ class HiCData(object):
                 signs = numpy.minimum(0, numpy.sign(data[i][j]))
                 data[i][j] = numpy.abs(data[i][j])
                 if not self.silent:
-                    print >> sys.stderr, ("\rMapping bins for %s by %s") % (chroms[i].ljust(10), chroms[j].ljust(10)),
+                    print("\r{}\rMapping bins for ".format(' '*80) +
+                          "{} by {}".format(chroms[i].ljust(10), chroms[j].ljust(10)),
+                          end='', file=sys.stderr)
                 starts = numpy.searchsorted(bins['start'][bin_indices[j]:bin_indices[j + 1]],
                                             data[i][j][:, 0], side='right') - 1
                 stops = numpy.searchsorted(bins['stop'][bin_indices[j]:bin_indices[j + 1]], data[i][j][:, 0], side='right')
@@ -1251,7 +1319,8 @@ class HiCData(object):
                     valid = valid[valid1]
                 # convert to bin paired
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rCounting bin pairs...") % (' ' * 50),
+                    print("\r{}\rCounting bin pairs...".format(' ' * 50), end='',
+                          file=sys.stderr)
                 for k in valid:
                     key = (mapped_bins[k, 0], mapped_bins[k, 1])
                     if key not in bin_pairs[i][j]:
@@ -1265,7 +1334,7 @@ class HiCData(object):
                         else:
                             bin_pairs[i][j][key] += 1
         if not self.silent and not skip_duplicate_filtering:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         return None
 
     def _clean_fend_pairs(self, fend_pairs):
@@ -1324,7 +1393,7 @@ class HiCData(object):
     def _parse_fend_pairs(self, fend_pairs):
         """Separate fend pairs into cis and trans interactions index."""
         if not self.silent:
-            print >> sys.stderr, ("Parsing fend pairs..."),
+            print("Parsing fend pairs...", end='', file=sys.stderr)
         if self.binned and not self.re:
             chr_indices = self.fends['bin_indices'][...]
         else:
@@ -1342,7 +1411,8 @@ class HiCData(object):
             if len(fend_pairs[i][i]) == 0:
                 continue
             chr_start = pos
-            for key, count in fend_pairs[i][i].iteritems():
+            for key in fend_pairs[i][i]:
+                count = fend_pairs[i][i][key]
                 self.cis_data[pos, :2] = key
                 self.cis_data[pos, 2] = count
                 pos += 1
@@ -1369,7 +1439,8 @@ class HiCData(object):
                 if len(fend_pairs[j][i]) == 0:
                     continue
                 chr2_start = pos
-                for key, count in fend_pairs[j][i].iteritems():
+                for key in fend_pairs[j][i]:
+                    count = fend_pairs[j][i][key]
                     self.trans_data[pos, :2] = key
                     self.trans_data[pos, 2] = count
                     pos += 1
@@ -1412,13 +1483,14 @@ class HiCData(object):
             self.trans_interaction_distribution = numpy.bincount(fend_profiles)
             trans_reads = numpy.sum(self.trans_data[:, 2])
         if not self.silent:
-            print >> sys.stderr, ("Done  %i cis reads, %i trans reads\n") % (cis_reads, trans_reads),
+            print("Done  {} cis reads, {} trans reads".format(cis_reads, trans_reads),
+                  end='', file=sys.stderr)
         return None
 
     def _parse_binned_fend_pairs(self, fend_pairs):
         """Separate fend pairs into cis and trans interactions index."""
         if not self.silent:
-            print >> sys.stderr, ("Parsing fend pairs..."),
+            print("Parsing fend pairs...", end='', file=sys.stderr)
         chr_indices = self.fends['chr_indices'][...]
         # determine number of cis pairs
         cis_count = 0
@@ -1433,13 +1505,14 @@ class HiCData(object):
         indices = []
         for i in range(len(fend_pairs)):
             mapping = (self.fends['fends']['mid'][chr_indices[i]:chr_indices[i + 1]] -
-                       bins['start'][bin_indices[i]]) / binsize
+                       bins['start'][bin_indices[i]]) // binsize
             n = bin_indices[i + 1] - bin_indices[i]
-            data = numpy.zeros(n * (n + 1) / 2, dtype=numpy.int32)
-            for key, count in fend_pairs[i][i].iteritems():
+            data = numpy.zeros(n * (n + 1) // 2, dtype=numpy.int32)
+            for key in fend_pairs[i][i]:
+                count = fend_pairs[i][i][key]
                 bin1 = mapping[key[0]]
                 bin2 = mapping[key[1]]
-                index = bin1 * (n - 1) - (bin1 * (bin1 - 1) / 2) + bin2
+                index = bin1 * (n - 1) - (bin1 * (bin1 - 1) // 2) + bin2
                 data[index] += count
             indices.append(numpy.where(data > 0)[0])
             cis_count += indices[-1].shape[0]
@@ -1473,14 +1546,15 @@ class HiCData(object):
             indices.append([])
         for i in range(len(fend_pairs)):
             mapping1 = (self.fends['fends']['mid'][chr_indices[i]:chr_indices[i + 1]] -
-                        bins['start'][bin_indices[i]]) / binsize
+                        bins['start'][bin_indices[i]]) // binsize
             n = bin_indices[i + 1] - bin_indices[i]
             for j in range(i + 1, len(fend_pairs)):
                 mapping2 = (self.fends['fends']['mid'][chr_indices[j]:chr_indices[j + 1]] -
-                            bins['start'][bin_indices[j]]) / binsize
+                            bins['start'][bin_indices[j]]) // binsize
                 m = bin_indices[j + 1] - bin_indices[j]
                 data = numpy.zeros((n, m), dtype=numpy.int32)
-                for key, count in fend_pairs[j][i].iteritems():
+                for key in fend_pairs[j][i]:
+                    count = fend_pairs[j][i][key]
                     bin1 = mapping1[key[0]]
                     bin2 = mapping2[key[1]]
                     data[bin1, bin2] += count
@@ -1533,7 +1607,8 @@ class HiCData(object):
             self.trans_interaction_distribution = numpy.bincount(fend_profiles)
             trans_reads = numpy.sum(self.trans_data[:, 2])
         if not self.silent:
-            print >> sys.stderr, ("Done  %i cis reads, %i trans reads\n") % (cis_reads, trans_reads),
+            print("Done  {} cis reads, {} trans reads".format(cis_reads, trans_reads),
+                  file=sys.stderr)
         return None
 
     def export_to_mat(self, outfilename):
@@ -1545,17 +1620,19 @@ class HiCData(object):
         :returns: None
         """
         if not self.silent:
-            print >> sys.stderr, ("Writing data to mat file..."),
+            print("Writing data to mat file...", end='', file=sys.stderr)
         output = open(outfilename, 'w')
         if not self.silent:
-            print >> output, "fend1\tfend2\tcount"
+            print("fend1\tfend2\tcount", file=output)
         for i in range(self.cis_indices.shape[0] - 1):
             for j in range(self.cis_indices[i], self.cis_indices[i + 1]):
                 # One is added to indices so numbering starts from one.
-                print >> output, "%i\t%i\t%i" % (i + 1, self.cis_data[j, 1] + 1, self.cis_data[j, 2])
+                print("{}\t{}\t{}".format(i, self.cis_data[j, 1],
+                                          self.cis_data[j, 2]), file=output)
             for j in range(self.trans_indices[i], self.trans_indices[i + 1]):
-                print >> output, "%i\t%i\t%i" % (i + 1, self.trans_data[j, 1] + 1, self.trans_data[j, 2])
+                print("{}\t{}\t{}".format(i, self.trans_data[j, 1],
+                                          self.trans_data[j, 2]), file=output)
         output.close()
         if not self.silent:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         return None

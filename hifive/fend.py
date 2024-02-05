@@ -121,11 +121,12 @@ class Fend(object):
              * **genome_name** (*str.*) - A string (or None if not passed as argument) of the genome from which the fends originated.
              * **re_name** (*str.*) - A string (or None if not passed as argument) of the restriction enzyme used to produce the fends.
         """
-        self.history += "Fend.load_fends(filename='%s', genome_name='%s', re_name='%s', format='%s') - " % (filename, genome_name, re_name, format)
+        self.history += "Fend.load_fends(filename='{}', genome_name='{}', re_name='{}', format='{}') - ".format(
+            filename, genome_name, re_name, format)
         if not os.path.exists(filename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
-            self.history += "Error: '%s' no located\n" % filename
+                print("Could not find {}. No data loaded.".format(filename), file=sys.stderr)
+            self.history += "Error: '{}' no located\n".format(filename)
             return None
         # if no genome name given, determine from filename
         if genome_name is None:
@@ -139,7 +140,7 @@ class Fend(object):
             fends, chromosomes = self._load_from_fend(filename)
         else:
             if not self.silent:
-                print >> sys.stderr, ("Unrecognized format.")
+                print("Unrecognized format.", file=sys.stderr)
             self.history += "Error: Unrecognized fend format\n"
             return None
         # make note of chromosome positions in fend array
@@ -151,20 +152,20 @@ class Fend(object):
             bin_indices = numpy.zeros(chr_indices.shape[0], dtype=numpy.int32)
             starts = numpy.zeros(chr_indices.shape[0] - 1, dtype=numpy.int32)
             for i in range(bin_indices.shape[0] - 1):
-                starts[i] = (fends['mid'][chr_indices[i]] / self.binned) * self.binned
-                stop = ((fends['mid'][chr_indices[i + 1] - 1] - 1) / self.binned + 1) * self.binned
-                n = (stop - starts[i]) / self.binned
+                starts[i] = (fends['mid'][chr_indices[i]] // self.binned) * self.binned
+                stop = ((fends['mid'][chr_indices[i + 1] - 1] - 1) // self.binned + 1) * self.binned
+                n = (stop - starts[i]) // self.binned
                 bin_indices[i + 1] = bin_indices[i] + n
             bins = numpy.zeros(bin_indices[-1], dtype=fends.dtype.descr + [('num_fends', numpy.int32)])
             for i in range(bin_indices.shape[0] - 1):
-                indices = (fends['mid'][chr_indices[i]:chr_indices[i + 1]] - starts[i]) / self.binned
+                indices = (fends['mid'][chr_indices[i]:chr_indices[i + 1]] - starts[i]) // self.binned
                 n = bin_indices[i + 1] - bin_indices[i]
                 bins['chr'][bin_indices[i]:bin_indices[i + 1]] = i
                 bins['start'][bin_indices[i]:bin_indices[i + 1]] = starts[i] + numpy.arange(n) * self.binned
                 bins['stop'][bin_indices[i]:bin_indices[i + 1]] = (bins['start'][bin_indices[i]:bin_indices[i + 1]] +
                                                                    self.binned)
                 bins['mid'][bin_indices[i]:bin_indices[i + 1]] = (bins['start'][bin_indices[i]:bin_indices[i + 1]] +
-                                                                   self.binned / 2)
+                                                                   self.binned // 2)
                 bins['num_fends'][bin_indices[i]:bin_indices[i + 1]] = numpy.bincount(indices, minlength=n)
                 for trait, dtype in fends.dtype.descr:
                     if trait in ['chr', 'start', 'stop', 'mid']:
@@ -207,15 +208,15 @@ class Fend(object):
              * **bin_indices** (*ndarray*) - A numpy array with a length of the number of chromosomes in 'chromosomes' + 1. This array contains the first position in 'bins' for the chromosome in the corresponding position in the 'chromosomes' array. The last position in the array contains the total number of bins.
              * **genome_name** (*str.*) - A string (or None if not passed as argument) of the genome from which the fends originated.
         """
-        self.history += "Fend.load_bins(filename='%s', genome_name='%s', format='%s') - " % (filename, genome_name, format)
+        self.history += "Fend.load_bins(filename='{}', genome_name='{}', format='{}') - ".format(filename, genome_name, format)
         if not os.path.exists(filename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
-            self.history += "Error: '%s' no located\n" % filename
+                print("Could not find {}. No data loaded.".format(filename), file=sys.stderr)
+            self.history += "Error: '{}' no located\n".format(filename)
             return None
         if self.binned is None:
             if not self.silent:
-                print >> sys.stderr, ("This function is only compatible with the 'binned' fend type. No data loaded.\n") % (filename),
+                print("This function is only compatible with the 'binned' fend type. No data loaded.\n", file=sys.stderr)
             self.history += "Error: fend object not of 'binned' type\n"
             return None
         # if no genome name given, determine from filename
@@ -227,7 +228,7 @@ class Fend(object):
             bins, chromosomes = self._load_binned_from_length(filename)
         else:
             if not self.silent:
-                print >> sys.stderr, ("Unrecognized format.")
+                print("Unrecognized format.", file=sys.stderr)
             self.history += "Error: Unrecognized fend format\n"
             return None
         # make note of chromosome positions in fend array
@@ -263,7 +264,7 @@ class Fend(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[chromosome_index]
+            chrom = temp[chromosome_index].encode('utf8')
             fend = int(temp[fend_index]) - 1
             if chrom not in chr2int:
                 chr2int[chrom] = len(chromosomes)
@@ -274,10 +275,10 @@ class Fend(object):
             length = int(temp[length_index])
             if fend % 2 == 0:
                 start = int(temp[coordinate_index])
-                stop = start + length / 2
+                stop = start + length // 2
             else:
                 stop = int(temp[coordinate_index]) + 1
-                start = stop - length + length / 2
+                start = stop - length + length // 2
             data[fend] = [chr2int[chrom], start, stop] + features
         input.close()
         dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32), ('mid', numpy.int32)]
@@ -288,10 +289,11 @@ class Fend(object):
             fends['chr'][i] = data[i][0]
             fends['start'][i] = data[i][1]
             fends['stop'][i] = data[i][2]
-            fends['mid'][i] = (data[i][1] + data[i][2]) / 2
+            fends['mid'][i] = (data[i][1] + data[i][2]) // 2
             for j in range(3, 3 + len(feature_names)):
                 fends[feature_names[j - 3]][i] = data[i][j]
-        chromosomes = numpy.array(chromosomes)
+        length = max([len(x) for x in chromosomes])
+        chromosomes = numpy.array(chromosomes, dtype="S{}".format(length))
         return [fends, chromosomes]
 
     def _load_from_bed(self, fname):
@@ -308,7 +310,7 @@ class Fend(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[0]
+            chrom = temp[0].encode('utf8')
             if chrom not in data:
                 data[chrom] = []
             stop = int(temp[2])
@@ -319,9 +321,10 @@ class Fend(object):
             data[chrom].append(tuple([start, stop] + features))
             sizes.append(stop - start)
         input.close()
-        chromosomes = data.keys()
+        chromosomes = list(data.keys())
         chromosomes.sort()
-        chromosomes = numpy.array(chromosomes)
+        length = max([len(x) for x in chromosomes])
+        chromosomes = numpy.array(chromosomes, dtype="S{}".format(length))
         sizes = numpy.array(sizes)
         dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32), ('mid', numpy.int32)]
         dtypes2 = [('start', numpy.int32), ('stop', numpy.int32)]
@@ -337,8 +340,8 @@ class Fend(object):
             pos = 0
             for i, chrom in enumerate(chromosomes):
                 data_len = (data[chrom].shape[0] - 1) * 2
-                cuts = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
-                mids = (cuts[:-1] + cuts[1:]) / 2
+                cuts = (data[chrom]['start'][:] + data[chrom]['stop'][:]) // 2
+                mids = (cuts[:-1] + cuts[1:]) // 2
                 fends['chr'][pos:(pos + data_len)] = i
                 fends['start'][pos:(pos + data_len):2] = cuts[:-1]
                 fends['stop'][pos:(pos + data_len):2] = mids
@@ -353,7 +356,7 @@ class Fend(object):
             pos = 0
             for i, chrom in enumerate(chromosomes):
                 data_len = data[chrom].shape[0] * 2
-                mids = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
+                mids = (data[chrom]['start'][:] + data[chrom]['stop'][:]) // 2
                 fends['chr'][pos:(pos + data_len)] = i
                 fends['start'][pos:(pos + data_len):2] = data[chrom]['start'][:]
                 fends['start'][(pos + 1):(pos + data_len):2] = mids
@@ -363,7 +366,7 @@ class Fend(object):
                     fends[feature_names[j]][pos:(pos + data_len):2] = data[chrom]["%s_1" % feature_names[j]]
                     fends[feature_names[j]][(pos + 1):(pos + data_len):2] = data[chrom]["%s_2" % feature_names[j]]
                 pos += data_len
-        fends['mid'][:] = (fends['start'][:] + fends['stop'][:]) / 2
+        fends['mid'][:] = (fends['start'][:] + fends['stop'][:]) // 2
         return [fends, chromosomes]
 
     def _load_binned_from_bed(self, fname):
@@ -379,7 +382,7 @@ class Fend(object):
                 for i in range(6, len(temp)):
                     feature_names.append(temp[i])
                 continue
-            chrom = temp[0]
+            chrom = temp[0].encode('utf8')
             if chrom not in data:
                 data[chrom] = []
             stop = int(temp[2])
@@ -388,9 +391,10 @@ class Fend(object):
                 features.append(float(temp[i]))
             data[chrom].append(tuple([start, stop] + features))
         input.close()
-        chromosomes = data.keys()
+        chromosomes = list(data.keys())
         chromosomes.sort()
-        chromosomes = numpy.array(chromosomes)
+        length = max([len(x) for x in chromosomes])
+        chromosomes = numpy.array(chromosomes, dtype="S{}".format(length))
         dtypes = [('chr', numpy.int32), ('start', numpy.int32), ('stop', numpy.int32), ('mid', numpy.int32)]
         dtypes2 = [('start', numpy.int32), ('stop', numpy.int32)]
         for i in range(len(feature_names)):
@@ -408,7 +412,7 @@ class Fend(object):
             bins['chr'][pos:(pos + data_len)] = i
             bins['start'][pos:(pos + data_len)] = data[chrom]['start'][:]
             bins['stop'][pos:(pos + data_len)] = data[chrom]['stop'][:]
-            bins['mid'][pos:(pos + data_len)] = (data[chrom]['start'][:] + data[chrom]['stop'][:]) / 2
+            bins['mid'][pos:(pos + data_len)] = (data[chrom]['start'][:] + data[chrom]['stop'][:]) // 2
             for j in range(len(feature_names)):
                 bins[feature_names[j]][pos:(pos + data_len)] = data[chrom][feature_names[j]][:]
             pos += data_len
@@ -420,14 +424,15 @@ class Fend(object):
         input = open(fname, 'r')
         for line in input:
             temp = line.strip('\n').split('\t')
-            chrom = temp[0]
+            chrom = temp[0].encode('utf8')
             chromosomes.append(chrom)
             data[chrom] = int(temp[1])
         input.close()
-        chromosomes = numpy.array(chromosomes)
+        length = max([len(x) for x in chromosomes])
+        chromosomes = numpy.array(chromosomes, dtype="S{}".format(length))
         chr_indices = numpy.zeros(chromosomes.shape[0] + 1, dtype=numpy.int32)
         for i, chrom in enumerate(chromosomes):
-            chr_indices[i + 1] = chr_indices[i] + (data[chrom] - 1) / self.binned + 1
+            chr_indices[i + 1] = chr_indices[i] + (data[chrom] - 1) // self.binned + 1
         bins = numpy.zeros(chr_indices[-1], dtype=numpy.dtype([('chr', numpy.int32), ('start', numpy.int32),
                                                   ('stop', numpy.int32), ('mid', numpy.int32)]))
         for i in range(chromosomes.shape[0]):
@@ -436,7 +441,7 @@ class Fend(object):
             bins['stop'][chr_indices[i]:chr_indices[i + 1]] = (numpy.arange(1, chr_indices[i + 1] -
                                                                             chr_indices[i] + 1) * self.binned)
             bins['chr'][chr_indices[i]:chr_indices[i + 1]] = i
-        bins['mid'][:] = (bins['start'] + bins['stop']) / 2
+        bins['mid'][:] = (bins['start'] + bins['stop']) // 2
         return [bins, chromosomes]
 
 
@@ -453,14 +458,14 @@ class Fend(object):
         :returns: None
         """
         infile = h5py.File(filename, 'r')
-        self['%s_window' % name] = window
+        self['{}_window'.format(name)] = window
         if self.binned is not None:
             scores = numpy.zeros(self.bins.shape[0], dtype=numpy.float64)
             bins = self.bins
             bin_indices = self.bin_indices
             for i, chrom in enumerate(self.chromosomes):
-                if "%s.%s" % (chrom, name) in infile:
-                    track = infile["%s.%s" % (chrom, name)][...]
+                if "{}.{}".format(chrom, name) in infile:
+                    track = infile["{}.{}".format(chrom, name)][...]
                 else:
                     continue
                 for j in range(bin_indices[i], bin_indices[i + 1]):
@@ -479,7 +484,7 @@ class Fend(object):
             bin_indices = self.chr_indices
             for i, chrom in enumerate(self.chromosomes):
                 if "%s.%s" % (chrom, name) in infile:
-                    track = infile["%s.%s" % (chrom, name)][...]
+                    track = infile["{}.{}".format(chrom, name)][...]
                 else:
                     continue
                 for j in range(bin_indices[i], bin_indices[i + 1]):
@@ -492,7 +497,9 @@ class Fend(object):
                     scores[j] = numpy.sum(track[start:stop]) / float(stop - start)
         if numpy.sum(numpy.abs(scores)) == 0.0:
             if self.verbose > 0:
-                print >> sys.stderr, ("No valid data appears to have been loaded. Not adding feature.\nIt is possible that the feature name doesn't match the key values in the file.\n"),
+                print("No valid data appears to have been loaded. Not adding feature.\n" +
+                      "It is possible that the feature name doesn't match the key values in the file.",
+                      file=sys.stderr)
             return None
         dtypes = bins.dtype.descr
         dtypes.append((name, numpy.float64))

@@ -23,7 +23,7 @@ def run(args):
         if args.quasar2 is not None:
             q2 = Quasar(args.quasar2, 'a', silent=args.silent)
     except:
-        print >> sys.stderr, ("Quasar file(s) are not of the correct filetype.\n"),
+        print("Quasar file(s) are not of the correct filetype.", file=sys.stderr)
         return None
     if args.hic is None:
         if rank == 0:
@@ -41,9 +41,9 @@ def run(args):
                                 "corr.%s.%iC.%iR" % (chrom, cov, res) not in q1.storage)):
                                 missing = True
                 if missing:
-                    print >> sys.stderr, ("Quasar file appears incomplete. Rerun with HiC project argument.\n"),
+                    print("Quasar file appears incomplete. Rerun with HiC project argument.", file=sys.stderr)
             except:
-                print >> sys.stderr, ("Quasar file appears incomplete. Rerun with HiC project argument.\n"),
+                print("Quasar file appears incomplete. Rerun with HiC project argument.", file=sys.stderr)
                 missing = True
         else:
             missing = False
@@ -68,9 +68,9 @@ def run(args):
                                 "corr.%s.%iC.%iR" % (chrom, cov, res) not in q2.storage)):
                                 missing = True
                 if missing:
-                    print >> sys.stderr, ("Second Quasar file appears incomplete. Rerun with HiC project argument.\n"),
+                    print("Second Quasar file appears incomplete. Rerun with HiC project argument.", file=sys.stderr)
             except:
-                print >> sys.stderr, ("Second Quasar file appears incomplete. Rerun with HiC project argument.\n"),
+                print("Second Quasar file appears incomplete. Rerun with HiC project argument.", file=sys.stderr)
                 missing = True
         else:
             missing = False
@@ -81,7 +81,7 @@ def run(args):
 
     if args.hic2 is not None and args.quasar2 is None:
         if rank == 0:
-            print >> sys.stderr, ("Specify a second Quasar file or don't specify a second HiC file.\n"),
+            print("Specify a second Quasar file or don't specify a second HiC file.", file=sys.stderr)
         return None
     try:
         args.coverages = args.coverages.split(',')
@@ -89,7 +89,7 @@ def run(args):
             args.coverages[i] = int(args.coverages[i])
     except:
         if rank == 0:
-            print >> sys.stderr, ("The coverages argument is not properly formattted. It should be a comma-separated list of integers.\n"),
+            print("The coverages argument is not properly formattted. It should be a comma-separated list of integers.", file=sys.stderr)
         return None
     try:
         args.resolutions = args.resolutions.split(',')
@@ -97,7 +97,7 @@ def run(args):
             args.resolutions[i] = int(args.resolutions[i])
     except:
         if rank == 0:
-            print >> sys.stderr, ("The resolutions argument is not properly formattted. It should be a comma-separated list of integers.\n"),
+            print("The resolutions argument is not properly formattted. It should be a comma-separated list of integers.", file=sys.stderr)
         return None
     if args.chroms is None:
         args.chroms = []
@@ -108,7 +108,7 @@ def run(args):
             hic1 = HiC(args.hic)
         except:
             if rank == 0:
-                print >> sys.stderr, ("HiC file appears incomplete. Rerun with HiC project argument.\n"),
+                print("HiC file appears incomplete. Rerun with HiC project argument.", file=sys.stderr)
             return None
         q1.find_transformation(hic1, chroms=args.chroms, resolutions=args.resolutions,
                          coverages=args.coverages, seed=args.seed)
@@ -121,7 +121,7 @@ def run(args):
                 hic2 = HiC(args.hic2)
             except:
                 if rank == 0:
-                    print >> sys.stderr, ("Second HiC file appears incomplete. Rerun with HiC project argument.\n"),
+                    print("Second HiC file appears incomplete. Rerun with HiC project argument.", file=sys.stderr)
                 return None
             q2.find_transformation(hic2, chroms=args.chroms, resolutions=args.resolutions,
                              coverages=args.coverages, seed=args.seed)

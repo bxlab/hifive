@@ -15,19 +15,19 @@ def run(args):
             if 'fendfilename' in infile['/'].attrs:
                 secondary_fname = infile['/'].attrs['fendfilename']
             else:
-                print >> sys.stderr, ('Unable to find fend filename in data file. The fend file link will not be updated.\n'),
+                print('Unable to find fend filename in data file. The fend file link will not be updated.', file=sys.stderr)
                 secondary_fname = None
         elif args.type == '5c-data':
             if 'fragfilename' in infile['/'].attrs:
                 secondary_fname = infile['/'].attrs['fragfilename']
             else:
-                print >> sys.stderr, ('Unable to find fragment filename in data file. The fragment file link will not be updated.\n'),
+                print('Unable to find fragment filename in data file. The fragment file link will not be updated.', file=sys.stderr)
                 secondary_fname = None
     else:
         secondary_fname = None
-    print 'source: %s' % source_fname
-    print 'target: %s' % target_fname
-    print 'secondary:', secondary_fname
+    print('source: %s' % source_fname, file=sys.stderr)
+    print('target: %s' % target_fname, file=sys.stderr)
+    print('secondary: %s' % secondary_fname, file=sys.stderr)
     if secondary_fname is not None:
         if secondary_fname[:2] == './':
             secondary_fname = secondary_fname[2:]
@@ -38,8 +38,8 @@ def run(args):
                                   os.path.dirname(source_fname)), os.path.basename(secondary_fname))
     target_fname = "%s/%s" % (os.path.relpath(os.path.dirname(target_fname),
                               os.path.dirname(source_fname)), os.path.basename(target_fname))
-    print 'target: %s' % target_fname
-    print 'secondary:', secondary_fname
+    print('target: %s' % target_fname, file=sys.stderr)
+    print('secondary: %s' % secondary_fname, file=sys.stderr)
     outfile = h5py.File(source_fname, 'a')
     if args.type == 'fends':
         outfile['/'].attrs['fendfilename'] = target_fname

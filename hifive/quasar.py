@@ -20,7 +20,7 @@ try:
 except:
     pass
 
-import libraries._quasar as _quasar
+from .libraries import _quasar
 
 
 class Quasar(object):
@@ -31,7 +31,7 @@ class Quasar(object):
       This class is also available as hifive.Quasar
 
     When initialized, this class creates an h5dict in which to store all data associated with this object.
-    
+
     :param filename: The file name of the h5dict to store the QuASAR-transformed data in.
     :type filename: str.
     :param mode: The mode to open the h5dict with. This should be 'w' for creating or overwriting an h5dict with name given in filename.
@@ -252,21 +252,21 @@ class Quasar(object):
             new_mids = {}
             new_indices = numpy.zeros(len(chroms) + 1, dtype=numpy.int64)
             for i, chrom in enumerate(chroms):
-                start = (starts[i] / resolutions[0]) * resolutions[0]
-                stop = ((mids[chrom][-1] - 1) / resolutions[0] + 1) * resolutions[0]
-                N = (stop - start) / resolutions[0]
-                mapping = (mids[chrom] - start) / resolutions[0]
+                start = (starts[i] // resolutions[0]) * resolutions[0]
+                stop = ((mids[chrom][-1] - 1) // resolutions[0] + 1) * resolutions[0]
+                N = (stop - start) // resolutions[0]
+                mapping = (mids[chrom] - start) // resolutions[0]
                 raw[indices[i]:indices[i + 1], 0] = mapping[raw[indices[i]:indices[i + 1], 0]]
                 raw[indices[i]:indices[i + 1], 1] = mapping[raw[indices[i]:indices[i + 1], 1]]
                 new_index = numpy.unique(raw[indices[i]:indices[i + 1], 0] * N + raw[indices[i]:indices[i + 1], 1])
                 index = numpy.searchsorted(new_index, raw[indices[i]:indices[i + 1], 0] * N +
                                                       raw[indices[i]:indices[i + 1], 1])
                 remapped[chrom] = numpy.zeros((new_index.shape[0], 3), dtype=numpy.int64)
-                remapped[chrom][:, 0] = new_index / N
+                remapped[chrom][:, 0] = new_index // N
                 remapped[chrom][:, 1] = new_index % N
                 remapped[chrom][:, 2] = numpy.bincount(index, weights=raw[indices[i]:indices[i + 1], 2])
                 new_indices[i + 1] = new_index.shape[0] + new_indices[i]
-                new_mids[chrom] = (start + resolutions[0] / 2 + numpy.arange(N) *
+                new_mids[chrom] = (start + resolutions[0] // 2 + numpy.arange(N) *
                                    resolutions[0]).astype(numpy.int32)
             indices = new_indices.astype(numpy.int64)
             mids = new_mids
@@ -279,7 +279,7 @@ class Quasar(object):
         for c, cov in enumerate(coverages):
             if self.rank == 0:
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rDownsampling to %i coverage") % (' ' * 120, cov),
+                    print("\r%s\rDownsampling to %i coverage" % (' ' * 120, cov), end='', file=sys.stdout)
                 raw, indices = self._downsample(raw, indices, cov, RNG)
 
             # cycle through resolutions
@@ -297,18 +297,15 @@ class Quasar(object):
                                 skip = self.comm.bcast(True, root=0)
                             continue
                         if not self.silent:
-                            print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i Chrom %s - Normalizing counts") % (
-                                ' ' * 120, cov, res, chrom),
+                            print("\r%s\rCoverage %i Resolution %i Chrom %s - Normalizing counts" % ( ' ' * 120, cov, res, chrom), end='', file=sys.stdout)
                         norm, dist, valid_rows = self._normalize(chrom, raw[indices[h]:indices[h + 1]], mids[chrom], res)
                         if not self.silent:
-                            print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i - Correlating chrom %s") % (
-                                ' ' * 120, cov, res, chrom),
+                            print("\r%s\rCoverage %i Resolution %i - Correlating chrom %s" % ( ' ' * 120, cov, res, chrom), end='', file=sys.stdout)
                         corrs = self._find_correlations(norm, valid_rows)
-                        
+
                         # write resulting matrices to hdf5 file
                         if not self.silent:
-                            print >> sys.stderr, ("\r%s\rCoverage %i Resolution %i Chrom %s - Writing results") % (
-                                ' ' * 120, cov, res, chrom),
+                            print("\r%s\rCoverage %i Resolution %i Chrom %s - Writing results" % ( ' ' * 120, cov, res, chrom), end='', file=sys.stdout)
                         if corrs is None:
                             self.storage.attrs['%s.invalid' % (key)] = True
                         else:
@@ -321,7 +318,7 @@ class Quasar(object):
                             continue
                         self._find_correlations()
         if self.rank == 0 and not self.silent:
-            print >> sys.stderr, ("\r%s\r") % (' ' * 120),
+            print("\r%s\r" % (' ' * 120), end='', file=sys.stdout)
         return None
 
     def find_quality_scores(self, chroms=[]):
@@ -445,10 +442,10 @@ class Quasar(object):
                         start1 = starts1[i]
                         start2 = starts2[i]
                         if start2 > start1:
-                            start1 = (start2 - start1) / res
+                            start1 = (start2 - start1) // res
                             start2 = 0
                         elif start2 > start1:
-                            start2 = (start1 - start2) / res
+                            start2 = (start1 - start2) // res
                             start1 = 0
                         else:
                             start1 = 0
@@ -520,8 +517,7 @@ class Quasar(object):
             return None
         if qscores is None and rscores is None:
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rNo scores found. Calculate quality and/or replicate scores first.\n") % (
-                    ' ' * 80),
+                print("\r%s\rNo scores found. Calculate quality and/or replicate scores first." % ( ' ' * 80), file=sys.stdout)
             return None
         format = filename.split('.')[-1]
         if format not in ['pdf', 'txt']:
@@ -532,7 +528,7 @@ class Quasar(object):
             if 'pyx' in sys.modules.keys():
                 self._print_pdf_report(filename, qscores, rscores, scores_only)
             elif not self.silent:
-                print >> sys.stderr, ("\r%s\rThe pyx package is needed for writing PDFs.\n") % (' ' * 80),
+                print("\r%s\rThe pyx package is needed for writing PDFs." % (' ' * 80), file=sys.stdout)
         else:
             self._print_html_report(filename, qscores, rscores, scores_only)
         return None
@@ -549,7 +545,8 @@ class Quasar(object):
                     self.comm.Recv(data[key], source=source, tag=7)
                 key = self.comm.recv(source=source, tag=5)
         elif self.rank == source:
-            for key, value in data.iteritems():
+            for key in data:
+                value = data[key]
                 self.comm.send(key, dest=dest, tag=5)
                 if value is None:
                     self.comm.send([None, None], dest=dest, tag=6)
@@ -594,11 +591,11 @@ class Quasar(object):
         if adjust_size > 0:
             if remove:
                 where = numpy.where(keep)[0]
-                for i in where[reads.keys()]:
+                for i in where[list(reads.keys())]:
                     keep[i] = False
             else:
                 where = numpy.where(numpy.logical_not(keep))[0]
-                for i in where[reads.keys()]:
+                for i in where[list(reads.keys())]:
                     keep[i] = True
 
         # adjust read counts in data
@@ -617,13 +614,13 @@ class Quasar(object):
         # downbin if necessary
         curr_binsize = mids[1] - mids[0]
         if curr_binsize != binsize:
-            mapping = mids / binsize
+            mapping = mids // binsize
             mapping -= mapping[0]
             N = mapping[-1] + 1
             indices = mapping[raw[:, 0]] * N + mapping[raw[:, 1]]
             uindices = numpy.unique(indices)
             data = numpy.zeros((uindices.shape[0], 3), dtype=numpy.int64)
-            data[:, 0] = uindices / N
+            data[:, 0] = uindices // N
             data[:, 1] = uindices % N
             data[:, 2] = numpy.bincount(numpy.searchsorted(uindices, indices), weights=raw[:, 2])
         else:
@@ -721,16 +718,16 @@ class Quasar(object):
             coverages = numpy.unique(qscores['coverage'])
             if numpy.where(coverages == 0)[0].shape[0] > 0:
                 zero_cov = self.storage.attrs['total_reads']
-            print >> output, 'Quality Score Results\n'
+            print('Quality Score Results\n', file=output)
             temp = ['Resolution', 'Coverage'] + list(chromosomes)
-            print >> output, '\t'.join(temp)
+            print('\t'.join(temp), file=output)
             for i, res in enumerate(resolutions):
                 if res < 1000:
                     label = "%i bp" % res
                 elif res < 1000000:
-                    label = "%i Kb" % (res / 1000)
+                    label = "%i Kb" % (res // 1000)
                 else:
-                    label = "%i Mb" % (res / 1000000)
+                    label = "%i Mb" % (res // 1000000)
                 for j, cov in enumerate(coverages):
                     if cov == 0:
                         temp = [label, self._num2str(zero_cov)]
@@ -739,8 +736,8 @@ class Quasar(object):
                     for k, chrom in enumerate(chromosomes):
                         where = numpy.where((qscores['chromosome'] == chrom) & (qscores['resolution'] == res) & (qscores['coverage'] == cov))[0][0]
                         temp.append("%0.6f" % qscores['score'][where])
-                    print >> output, '\t'.join(temp)
-            print >> output, '\n'
+                    print('\t'.join(temp), file=output)
+            print('\n', file=output)
 
             # if there are sufficient data points, calculate estimated maximum
             if coverages.shape[0] > 3 and not scores_only:
@@ -749,7 +746,7 @@ class Quasar(object):
                     return L / (1 + numpy.exp(-k * (x - x0)))
 
                 Xs = numpy.log10(coverages)
-                print >> output, "Estimated quality-coverage curves (Maximum Quality / (1 + e^(-Scale * (x - Inflection)))"
+                print("Estimated quality-coverage curves (Maximum Quality / (1 + e^(-Scale * (x - Inflection)))", file=output)
                 for i, res in enumerate(resolutions):
                     where = numpy.where((qscores['chromosome'] == 'All') & (qscores['resolution'] == res))[0]
                     Ys = qscores['score'][where]
@@ -757,17 +754,17 @@ class Quasar(object):
                     if res < 1000:
                         label = "%i bp" % res
                     elif res < 1000000:
-                        label = "%i Kb" % (res / 1000)
+                        label = "%i Kb" % (res // 1000)
                     else:
-                        label = "%i Mb" % (res / 1000000)
+                        label = "%i Mb" % (res // 1000000)
                     try:
                         params = curve_fit(f, Xs, Ys, p0=(Xs[-1], 0.5, Ys[-1] * 2), maxfev=(5000*Xs.shape[0]),
                              bounds=((-numpy.inf, -numpy.inf, 0), (numpy.inf, numpy.inf, 2)))[0]
                         Y1s = f(Xs, *params)
-                        print >> output, "Resolution: %s, Maximum Quality: %f, Scale: %f, Inflection: %f, Mean error: %e" % (label, params[2], params[1], params[0], numpy.mean((Ys - Y1s) ** 2.0))
+                        print("Resolution: %s, Maximum Quality: %f, Scale: %f, Inflection: %f, Mean error: %e" % (label, params[2], params[1], params[0], numpy.mean((Ys - Y1s) ** 2.0)), file=output)
                     except:
-                        print >> output, "Resolution: %s, curve could not be estimated" % label
-                print >> output, '\n'
+                        print("Resolution: %s, curve could not be estimated" % (label), file=output)
+                print('\n', file=output)
 
             # if there are multiple coverages, estimate maximum usable resolution
             if resolutions.shape[0] > 1 and not scores_only:
@@ -779,49 +776,47 @@ class Quasar(object):
                 while pos < Xs.shape[0] - 1 and self.strict_qcutoff > Ys[pos + 1]:
                     pos += 1
                 if self.strict_qcutoff < Ys[0]:
-                    print >> output, "Strict quality maximum resolution is above the resolutions tested."
+                    print("Strict quality maximum resolution is above the resolutions tested.", file=output)
                 elif self.strict_qcutoff > numpy.amax(Ys):
-                    print >> output, "Strict quality maximum resolution is below the resolutions tested."
+                    print("Strict quality maximum resolution is below the resolutions tested.", file=output)
                 else:
                     A = (Ys[pos + 1] - Ys[pos]) / (Xs[pos + 1] - Xs[pos])
                     B = Ys[pos] - Xs[pos] * A
-                    print >> output, "Strict quality maximum resolution: %s bp" % self._num2str(
-                        int(round(10.0 ** ((self.strict_qcutoff - B) / A))))
+                    print("Strict quality maximum resolution: %s bp" % (self._num2str( int(round(10.0 ** ((self.strict_qcutoff - B) / A))))), file=output)
                 pos = 0
                 while pos < Xs.shape[0] - 1 and self.loose_qcutoff > Ys[pos + 1]:
                     pos += 1
                 if self.loose_qcutoff < Ys[0]:
-                    print >> output, "Loose quality maximum resolution is above the resolutions tested."
+                    print("Loose quality maximum resolution is above the resolutions tested.", file=output)
                 elif self.loose_qcutoff > numpy.amax(Ys):
-                    print >> output, "Loose quality maximum resolution is below the resolutions tested."
+                    print("Loose quality maximum resolution is below the resolutions tested.", file=output)
                 else:
                     A = (Ys[pos + 1] - Ys[pos]) / (Xs[pos + 1] - Xs[pos])
                     B = Ys[pos] - Xs[pos] * A
-                    print >> output, "Loose quality maximum resolution: %s bp" % self._num2str(
-                        int(round(10.0 ** ((self.loose_qcutoff - B) / A))))
-                print >> output, '\n'
+                    print("Loose quality maximum resolution: %s bp" % (self._num2str( int(round(10.0 ** ((self.loose_qcutoff - B) / A))))), file=output)
+                print('\n', file=output)
 
         if rscores is not None:
             chromosomes = numpy.r_[numpy.array(['All']), numpy.unique(rscores['chromosome'][numpy.where(rscores['chromosome'] != 'All')])]
             resolutions = numpy.unique(rscores['resolution'])
             coverages = numpy.unique(rscores['coverage'])
-            print >> output, 'Replicate Score Results\n'
+            print('Replicate Score Results\n', file=output)
             temp = ['Resolution', 'Coverage'] + list(chromosomes)
-            print >> output, '\t'.join(temp)
+            print('\t'.join(temp), file=output)
             for i, res in enumerate(resolutions):
                 if res < 1000:
                     label = "%i bp" % res
                 elif res < 1000000:
-                    label = "%i Kb" % (res / 1000)
+                    label = "%i Kb" % (res // 1000)
                 else:
-                    label = "%i Mb" % (res / 1000000)
+                    label = "%i Mb" % (res // 1000000)
                 for j, cov in enumerate(coverages):
                     temp = [label, self._num2str(cov)]
                     for k, chrom in enumerate(chromosomes):
                         where = numpy.where((rscores['chromosome'] == chrom) & (rscores['resolution'] == res) & (rscores['coverage'] == cov))[0][0]
                         temp.append("%0.6f" % rscores['score'][where])
-                    print >> output, '\t'.join(temp)
-            print >> output, '\n'
+                    print('\t'.join(temp), file=output)
+            print('\n', file=output)
 
             # if there are multiple coverages, estimate maximum usable resolution
             if resolutions.shape[0] > 1 and not scores_only:
@@ -833,27 +828,25 @@ class Quasar(object):
                 while pos < Xs.shape[0] - 1 and self.strict_rcutoff > Ys[pos + 1]:
                     pos += 1
                 if self.strict_rcutoff < Ys[0]:
-                    print >> output, "Strict replicate maximum resolution is above the resolutions tested."
+                    print("Strict replicate maximum resolution is above the resolutions tested.", file=output)
                 elif self.strict_rcutoff > numpy.amax(Ys):
-                    print >> output, "Strict replicate maximum resolution is below the resolutions tested."
+                    print("Strict replicate maximum resolution is below the resolutions tested.", file=output)
                 else:
                     A = (Ys[pos + 1] - Ys[pos]) / (Xs[pos + 1] - Xs[pos])
                     B = Ys[pos] - Xs[pos] * A
-                    print >> output, "Strict replicate maximum resolution: %s bp" % self._num2str(
-                        int(round(10.0 ** ((self.strict_rcutoff - B) / A))))
+                    print("Strict replicate maximum resolution: %s bp" % (self._num2str( int(round(10.0 ** ((self.strict_rcutoff - B) / A))))), file=output)
                 pos = 0
                 while pos < Xs.shape[0] - 1 and self.loose_rcutoff > Ys[pos + 1]:
                     pos += 1
                 if self.loose_rcutoff < Ys[0]:
-                    print >> output, "Loose replicate maximum resolution is above the resolutions tested."
+                    print("Loose replicate maximum resolution is above the resolutions tested.", file=output)
                 elif self.loose_rcutoff > numpy.amax(Ys):
-                    print >> output, "Loose replicate maximum resolution is below the resolutions tested."
+                    print("Loose replicate maximum resolution is below the resolutions tested.", file=output)
                 else:
                     A = (Ys[pos + 1] - Ys[pos]) / (Xs[pos + 1] - Xs[pos])
                     B = Ys[pos] - Xs[pos] * A
-                    print >> output, "Loose replicate maximum resolution: %s bp" % self._num2str(
-                        int(round(10.0 ** ((self.loose_rcutoff - B) / A))))
-                print >> output, '\n'
+                    print("Loose replicate maximum resolution: %s bp" % (self._num2str( int(round(10.0 ** ((self.loose_rcutoff - B) / A))))), file=output)
+                print('\n', file=output)
         output.close()
         return None
 
@@ -885,9 +878,9 @@ class Quasar(object):
                 if res < 1000:
                     label = "%i bp" % res
                 elif res < 1000000:
-                    label = "%i Kb" % (res / 1000)
+                    label = "%i Kb" % (res // 1000)
                 else:
-                    label = "%i Mb" % (res / 1000000)
+                    label = "%i Mb" % (res // 1000000)
                 c.text(hoffset - 0.1, H + 0.05, label, [text.halign.right, text.valign.bottom, text.size(-2)])
                 for j, cov in enumerate(coverages):
                     where = numpy.where((qscores['chromosome'] == 'All') & (qscores['resolution'] == res) & (qscores['coverage'] == cov))[0][0]
@@ -917,9 +910,9 @@ class Quasar(object):
                     if res < 1000:
                         label = "%i bp" % res
                     elif res < 1000000:
-                        label = "%i Kb" % (res / 1000)
+                        label = "%i Kb" % (res // 1000)
                     else:
-                        label = "%i Mb" % (res / 1000000)
+                        label = "%i Mb" % (res // 1000000)
                     try:
                         params = curve_fit(f, lXs, Ys, p0=(lXs[-1], 0.5, Ys[-1] * 2), maxfev=(5000*Xs.shape[0]),
                              bounds=((-numpy.inf, -numpy.inf, 0), (numpy.inf, numpy.inf, 2)))[0]
@@ -1022,9 +1015,9 @@ class Quasar(object):
                 if res < 1000:
                     label = "%i bp" % res
                 elif res < 1000000:
-                    label = "%i Kb" % (res / 1000)
+                    label = "%i Kb" % (res // 1000)
                 else:
-                    label = "%i Mb" % (res / 1000000)
+                    label = "%i Mb" % (res // 1000000)
                 c.text(hoffset - 0.1, H + 0.05, label, [text.halign.right, text.valign.bottom, text.size(-2)])
                 for j, cov in enumerate(coverages):
                     where = numpy.where((rscores['chromosome'] == 'All') & (rscores['resolution'] == res) & (rscores['coverage'] == cov))[0][0]
@@ -1042,9 +1035,9 @@ class Quasar(object):
                     if res < 1000:
                         label = "%i bp" % res
                     elif res < 1000000:
-                        label = "%i Kb" % (res / 1000)
+                        label = "%i Kb" % (res // 1000)
                     else:
-                        label = "%i Mb" % (res / 1000000)
+                        label = "%i Mb" % (res // 1000000)
                     where = numpy.where((rscores['chromosome'] == 'All') & (rscores['resolution'] == res))[0]
                     Ys = rscores['score'][where]
                     Ys = Ys[numpy.argsort(rscores['coverage'][where])]
@@ -1156,9 +1149,9 @@ class Quasar(object):
             for x in Xs:
                 X = (numpy.log2(x) - minX) / spanX * pwidth + hoffset
                 if x < 1000000:
-                    label = '%iK' % (x / 1000)
+                    label = '%iK' % (x // 1000)
                 else:
-                    label = '%iM' % (x / 1000000)
+                    label = '%iM' % (x // 1000000)
                 c.stroke(path.line(X, voffset, X, voffset - 0.05))
                 c.text(X, voffset - 0.1, label, [text.halign.center, text.valign.top, text.size(-2)])
                 if X > hoffset and X < width:

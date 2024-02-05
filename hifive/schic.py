@@ -84,7 +84,7 @@ class scHiC(object):
         # ensure data h5dict exists
         if not os.path.exists(filename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename),
+                print("Could not find %s. No data loaded." % (filename), file=sys.stderr)
             self.history += "Error: '%s' not found\n" % filename
             return None
         self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
@@ -102,7 +102,7 @@ class scHiC(object):
         # ensure fend h5dict exists
         if not os.path.exists(fendfilename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s.\n") % (fendfilename),
+                print("Could not find %s." % (fendfilename), file=sys.stderr)
             self.history += "Error: '%s' not found\n" % fendfilename
             return None
         self.fends = h5py.File(fendfilename, 'r')
@@ -180,7 +180,7 @@ class scHiC(object):
         """
         # set parameters to init state
         self.history = ''
-        # load data hdf5 dict 
+        # load data hdf5 dict
         datafile = h5py.File(self.file, 'r')
         for key in datafile.keys():
             self[key] = numpy.copy(datafile[key])
@@ -196,7 +196,7 @@ class scHiC(object):
                                 datafilename.lstrip('/').split('/')[parent_count:])
             if not os.path.exists(datafilename):
                 if not self.silent:
-                    print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (datafilename),
+                    print("Could not find %s. No data loaded." % (datafilename), file=sys.stderr)
             else:
                 self.data = h5py.File(datafilename, 'r')
         # ensure fend h5dict exists
@@ -209,7 +209,7 @@ class scHiC(object):
                                 fendfilename.lstrip('/').split('/')[parent_count:])
             if not os.path.exists(fendfilename):
                 if not self.silent:
-                    print >> sys.stderr, ("Could not find %s. No fends loaded.\n") % (fendfilename),
+                    print("Could not find %s. No fends loaded." % (fendfilename), file=sys.stderr)
             else:
                 self.fends = h5py.File(fendfilename, 'r')
         # create dictionary for converting chromosome names to indices
@@ -225,7 +225,7 @@ class scHiC(object):
             for i in invalid_fends:
                 self.filter[i] = 0
 
-        # remove small fragments 
+        # remove small fragments
         fends = self.fends['fends'][...]
         sizes = fends['stop'] - fends['start']
         prev_filt = numpy.sum(self.filter)
@@ -278,8 +278,7 @@ class scHiC(object):
                     self.filter[i] = 0
 
         if not self.silent:
-            print >> sys.stderr, ("Filtering fends: %i of %i kept\n") % (
-                numpy.sum(self.filter), self.filter.shape[0]),
+            print("Filtering fends: %i of %i kept" % (numpy.sum(self.filter), self.filter.shape[0]), file=sys.stderr)
 
         # filter by connectivity graph
         self.cis_filter[numpy.where((self.filter[cis_data[:, 0]] == 0) | (self.filter[cis_data[:, 1]] == 0))] = 0
@@ -296,7 +295,7 @@ class scHiC(object):
         cindices = cis_data[:, 0] * N + cis_data[:, 1]
         tindices = trans_data[:, 0] * N + trans_data[:, 1]
         connections = numpy.unique(numpy.r_[cindices, tindices])
-        connections0 = connections / N
+        connections0 = connections // N
         connections1 = connections % N
         counts = numpy.bincount(numpy.searchsorted(connections, cindices), weights=(self.cis_filter * cis_data[:, 2]), minlength=connections.shape[0])
         counts += numpy.bincount(numpy.searchsorted(connections, tindices), weights=(self.trans_filter * trans_data[:, 2]), minlength=connections.shape[0])
@@ -330,8 +329,7 @@ class scHiC(object):
                 where = numpy.where((trans_data[:, 0] == connections0[i]) & (trans_data[:, 1] == connections1[i]))[0]
                 self.trans_filter[where] = 0
         if not self.silent:
-            print >> sys.stderr, ("Filtering interactions: %i of %i cis kept, %i of %i trans kept\n") % (
-                numpy.sum(self.cis_filter), self.cis_filter.shape[0], numpy.sum(self.trans_filter), self.trans_filter.shape[0]),
+            print("Filtering interactions: %i of %i cis kept, %i of %i trans kept" % (numpy.sum(self.cis_filter), self.cis_filter.shape[0], numpy.sum(self.trans_filter), self.trans_filter.shape[0]), file=sys.stderr)
         return None
 
     def run_simulation(self, resolution=1000000, tmpdir='./', seed=2001):
@@ -345,7 +343,7 @@ class scHiC(object):
         trans_data[numpy.where((self.filter[trans_data[:, 0]] == 0) | (self.filter[trans_data[:, 1]] == 0))[0], 2] = 0
         trans_data[numpy.where(numpy.logical_not(self.trans_filter))[0], 2] = 0
         chr_indices = self.fends['chr_indices'][...]
-        mapping = fends['mid'] / resolution
+        mapping = fends['mid'] // resolution
         N = 0
         bin_indices = numpy.zeros(chr_indices.shape[0], dtype=numpy.int32)
         for i in range(chr_indices.shape[0] - 1):
@@ -359,7 +357,7 @@ class scHiC(object):
         cindices = cis_data[:, 0] * N + cis_data[:, 1]
         tindices = trans_data[:, 0] * N + trans_data[:, 1]
         connections = numpy.unique(numpy.r_[cindices, tindices])
-        connections0 = connections / N
+        connections0 = connections // N
         connections1 = connections % N
         counts = numpy.bincount(numpy.searchsorted(connections, cindices), weights=cis_data[:, 2], minlength=connections.shape[0])
         counts += numpy.bincount(numpy.searchsorted(connections, tindices), weights=trans_data[:, 2], minlength=connections.shape[0])
@@ -370,7 +368,7 @@ class scHiC(object):
 
         # determine if we need to specifically include non-interacting contraints (no interactions within 250 Kb)
         constraints = numpy.zeros((N, N), dtype=numpy.int32)
-        width = int(round(500000. / resolution) - 1) / 2 
+        width = int(round(500000. / resolution) - 1) / 2
         if width >= 1:
             indices = numpy.triu_indices(N, 1)
             constraints[indices] = -1
@@ -388,7 +386,7 @@ class scHiC(object):
                 numpy.sum(constraints[bin_indices[i]:bin_indices[i + 1], bin_indices[i + 1]:] == 2) == 0):
                 filt[i] = False
                 filt1[bin_indices[i]:bin_indices[i + 1]] = False
-                print "%i removed" % i
+                print("%i removed" % i, file=sys.stderr)
                 M -= bin_indices[i + 1] - bin_indices[i]
 
 
@@ -424,9 +422,9 @@ class scHiC(object):
 
         # write PBD
         output = open('%s/out.pdb' % tmpdir, 'w')
-        print >> output, "HEADER"
-        print >> output, "TITLE  Chromatin"
-        print >> output, "MODEL %s" % ("1".rjust(4))
+        print("HEADER", file=output)
+        print("TITLE  Chromatin", file=output)
+        print("MODEL %s" % ("1".rjust(4)), file=output)
         for i in range(bin_indices.shape[0] - 1):
             if not filt[i]:
                 continue
@@ -437,7 +435,7 @@ class scHiC(object):
                     mol = "DBE"
                 else:
                     mol = "DBM"
-                print >> output, "%s%s %s%s%s %s%s%s   %s%s%s%s%s          %s%s%s" % (
+                print("%s%s %s%s%s %s%s%s   %s%s%s%s%s          %s%s%s" % (
                     "ATOM".ljust(6),                       # [ 1 - 4 ] Entry type
                     str(j + 1).rjust(5),                   # [ 7 - 11] Atom serial number
                     str("ZZ").ljust(4),                    # [13 - 16] Atom name
@@ -453,23 +451,24 @@ class scHiC(object):
                     str("1.0").rjust(6),                   # [61 - 66] Temperature factor
                     str(" ").ljust(4),                     # [73 - 76] Segment identifier
                     str("ZZ").rjust(2),                    # [77 - 78] Element symbol
-                    str(" ").rjust(2))                     # [79 - 80] Charge on atom
-        print >> output, "ENDMDL"
+                    str(" ").rjust(2)),                    # [79 - 80] Charge on atom
+                    file=output)
+        print("ENDMDL", file=output)
         for i in range(bin_indices.shape[0] - 1):
             if not filt[i]:
                 continue
-            print >> output, "CONECT%s%s" % (str(bin_indices[i] + 1).rjust(5), str(bin_indices[i] + 2).rjust(5))
+            print("CONECT%s%s" % (str(bin_indices[i] + 1).rjust(5), str(bin_indices[i] + 2).rjust(5)), file=output)
             for j in range(bin_indices[i] + 1, bin_indices[i + 1] - 1):
-                print >> output, "CONECT%s%s%s" % (str(j + 1).rjust(5), str(j).rjust(5), str(j + 2).rjust(5))
-            print >> output, "CONECT%s%s" % (str(bin_indices[i + 1]).rjust(5), str(bin_indices[i + 1] - 1).rjust(5))
-        print >> output, "END"
+                print("CONECT%s%s%s" % (str(j + 1).rjust(5), str(j).rjust(5), str(j + 2).rjust(5)), file=output)
+            print("CONECT%s%s" % (str(bin_indices[i + 1]).rjust(5), str(bin_indices[i + 1] - 1).rjust(5)), file=output)
+        print("END", file=output)
         output.close()
 
         # write GRO
         output = open('%s/out.gro' % tmpdir, 'w')
         vel = None#RNG.uniform(-0.1, 0.1, coords.shape)
-        print >> output, "Chromatin"
-        print >> output, "%i" % M
+        print("Chromatin", file=output)
+        print("%i" % (M), file=output)
         for i in range(bin_indices.shape[0] - 1):
             if not filt[i]:
                 continue
@@ -481,37 +480,39 @@ class scHiC(object):
                 else:
                     mol = "DBM"
                 if vel is not None:
-                    print >> output, "%s%s%s%s%s%s%s%s%s%s" % (
+                    print("%s%s%s%s%s%s%s%s%s%s" % (
                         str(j - bin_indices[i]).rjust(5),     # [ 1 - 5 ] Residue sequence number
                         str(mol).ljust(5),                    # [ 6 - 10] Residue name
                         "ZZ".rjust(5),                        # [11 - 15] Atom name
                         str(j + 1).rjust(5),                  # [16 - 20] Atom serial number
-                        ("%0.3f" % coords[j, 0]).rjust(8),    # [21 - 28] Orthoginal X coordinate (in angstroms)
+                        ("%0.3f" % coords[j, 0]).rjust(8),    # [21 - 28] Orthoginal X coordinate(in angstroms)
                         ("%0.3f" % coords[j, 1]).rjust(8),    # [29 - 36] Orthoginal Y coordinate (in angstroms)
                         ("%0.3f" % coords[j, 2]).rjust(8),    # [37 - 44] Orthoginal Z coordinate (in angstroms)
                         ("%0.4f" % vel[j, 0]).rjust(8),       # [45 - 52] Velocity of X
                         ("%0.4f" % vel[j, 1]).rjust(8),       # [53 - 60] Velocity of Y
-                        ("%0.4f" % vel[j, 2]).rjust(8))       # [61 - 68] Velocity of Z
+                        ("%0.4f" % vel[j, 2]).rjust(8)),      # [61 - 68] Velocity of Z
+                        file=output)
                 else:
-                    print >> output, "%s%s%s%s%s%s%s" % (
+                    print("%s%s%s%s%s%s%s" % (
                         str(j - bin_indices[i]).rjust(5),     # [ 1 - 5 ] Residue sequence number
                         str(mol).ljust(5),                    # [ 6 - 10] Residue name
                         "ZZ".rjust(5),                        # [11 - 15] Atom name
                         str(j + 1).rjust(5),                  # [16 - 20] Atom serial number
                         ("%0.3f" % coords[j, 0]).rjust(8),    # [21 - 28] Orthoginal X coordinate (in angstroms)
                         ("%0.3f" % coords[j, 1]).rjust(8),    # [29 - 36] Orthoginal Y coordinate (in angstroms)
-                        ("%0.3f" % coords[j, 2]).rjust(8))    # [37 - 44] Orthoginal Z coordinate (in angstroms)
-        print >> output, "%s%s%s" % (("%0.5f" % size).rjust(10), ("%0.5f" % size).rjust(10), ("%0.5f" % size).rjust(10))
+                        ("%0.3f" % coords[j, 2]).rjust(8)),   # [37 - 44] Orthoginal Z coordinate (in angstroms)
+                        file=output)
+        print("%s%s%s" % (("%0.5f" % size).rjust(10), ("%0.5f" % size).rjust(10), ("%0.5f" % size).rjust(10)), file=output)
         output.close()
 
         # write TOP
         output = open('%s/out.top' % tmpdir, 'w')
-        print >> output, '#include "charmm27.ff/forcefield.itp"'
-        print >> output, ""
-        print >> output, "[ moleculetype ]"
-        print >> output, "Chromatin  0"
-        print >> output, ""
-        print >> output, "[ atoms ]"
+        print('#include "charmm27.ff/forcefield.itp"', file=output)
+        print("", file=output)
+        print("[ moleculetype ]", file=output)
+        print("Chromatin  0", file=output)
+        print("", file=output)
+        print("[ atoms ]", file=output)
         for i in range(bin_indices.shape[0] - 1):
             if not filt[i]:
                 continue
@@ -522,11 +523,11 @@ class scHiC(object):
                     mol = "DBE"
                 else:
                     mol = "DBM"
-                print >> output, "%i  ZZ  %i  %s  ZZ  1  0.0 1.0" % (j + 1, j - bin_indices[i], mol)
-        print >> output, ""
+                print("%i  ZZ  %i  %s  ZZ  1  0.0 1.0" % (j + 1, j - bin_indices[i], mol), file=output)
+        print("", file=output)
         params = numpy.array([[6, 10000, 10000, 1.0 / 25.0], [0, 150.0, 180.0, 1.0], [18.0, 120.0, 150.0, 1.0]])
         params /= scale
-        print >> output, "[ distance_restraints ]"
+        print("[ distance_restraints ]", file=output)
         pos = 1
         for i in range(N - 1):
             if not filt1[i]:
@@ -554,23 +555,23 @@ class scHiC(object):
                         d_up1 = target * 1.2
                         d_up2 = d_up1 + 30.0 / scale
                         f = params[bond, 3]
-                print >> output, "%i  %i  %i  %i  %i  %0.2f  %0.2f  %0.2f  %0.2f" % (
-                    i + 1,  # First atom
-                    j + 1,  # Second atom
+                print("%i  %i  %i  %i  %i  %0.2f  %0.2f  %0.2f  %0.2f" % (
+                    i + 1,  # First atom j + 1,  # Second atom
                     1,      # type
                     pos,    # index
                     1,      # type'
                     d_low,  # lower distance bound
                     d_up1,  # upper distance bound 1
                     d_up2,  # upper distance bound 2
-                    f)     # restraint scale factor
+                    f),     # restraint scale factor
+                    file=output)
                 pos += 1
-        print >> output, ""
-        print >> output, "[ system ]"
-        print >> output, "DNA as beads"
-        print >> output, ""
-        print >> output, "[ molecules ]"
-        print >> output, "Chromatin  1"
+        print("", file=output)
+        print("[ system ]", file=output)
+        print("DNA as beads", file=output)
+        print("", file=output)
+        print("[ molecules ]", file=output)
+        print("Chromatin  1", file=output)
         output.close()
 
         # write MDP
@@ -587,17 +588,17 @@ class scHiC(object):
                 time_str += ["%i" % t, "%i" % (t + msteps[i] - 1)]
                 t += msteps[i]
         output = open('%s/out.mdp' % tmpdir, 'w')
-        print >> output, "%s = %s" % ("integrator".ljust(24), "steep")
-        print >> output, "%s = %i" % ("nsteps".ljust(24), 5000)
-        print >> output, "%s = %s" % ("comm-mode".ljust(24), "Linear")
-        print >> output, "%s = %s" % ("annealing".ljust(24), "single")
-        print >> output, "%s = %i" % ("annealing-npoints".ljust(24), len(temp_str))
-        print >> output, "%s = %s" % ("annealing-time".ljust(24), ' '.join(time_str))
-        print >> output, "%s = %s" % ("annealing-temp".ljust(24), ' '.join(temp_str))
-        print >> output, "%s = %s" % ("constraints".ljust(24), "none")
-        print >> output, "%s = %s" % ("cutoff-scheme".ljust(24), "Verlet")
-        print >> output, "%s = %s" % ("disre".ljust(24), "simple")
-        print >> output, "%s = %i" % ("nstdisreout".ljust(24), 0)
+        print("%s = %s" % ("integrator".ljust(24), "steep"), file=output)
+        print("%s = %i" % ("nsteps".ljust(24), 5000), file=output)
+        print("%s = %s" % ("comm-mode".ljust(24), "Linear"), file=output)
+        print("%s = %s" % ("annealing".ljust(24), "single"), file=output)
+        print("%s = %i" % ("annealing-npoints".ljust(24), len(temp_str)), file=output)
+        print("%s = %s" % ("annealing-time".ljust(24), ' '.join(time_str)), file=output)
+        print("%s = %s" % ("annealing-temp".ljust(24), ' '.join(temp_str)), file=output)
+        print("%s = %s" % ("constraints".ljust(24), "none"), file=output)
+        print("%s = %s" % ("cutoff-scheme".ljust(24), "Verlet"), file=output)
+        print("%s = %s" % ("disre".ljust(24), "simple"), file=output)
+        print("%s = %i" % ("nstdisreout".ljust(24), 0), file=output)
         output.close()
 
 

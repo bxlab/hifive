@@ -11,10 +11,10 @@ from scipy.stats import linregress
 import h5py
 from scipy.optimize import fmin_l_bfgs_b as bfgs
 
-import libraries._fivec_binning as _binning
-import libraries._fivec_optimize as _optimize
-import fivec_binning
-import plotting
+from .libraries import _fivec_binning as _binning
+from .libraries import _fivec_optimize as _optimize
+from . import fivec_binning
+from . import plotting
 
 
 class FiveC(object):
@@ -95,15 +95,17 @@ class FiveC(object):
 
         When a FiveCData object is associated with the project file, the 'history' attribute is updated with the history of the FiveCData object.
         """
-        self.history += "FiveC.load_data(filename='%s') - " % filename
+        self.history += "FiveC.load_data(filename='{}') - ".format(filename)
         # ensure data h5dict exists
         if not os.path.exists(filename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (filename.split('/')[-1]),
-            self.history += "Error: '%s' not found\n" % filename
+                print("Could not find {}. No data loaded.".format(filename.split('/')[-1]),
+                      file=sys.stderr)
+            self.history += "Error: '{}' not found\n".format(filename)
             return None
-        self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(filename)),
-                                       os.path.dirname(self.file)), os.path.basename(filename))
+        self.datafilename = "{}/{}".format(
+            os.path.relpath(os.path.dirname(os.path.abspath(filename)),
+            os.path.dirname(self.file)), os.path.basename(filename))
         self.data = h5py.File(filename, 'r')
         self.history = self.data['/'].attrs['history'] + self.history
         fragfilename = self.data['/'].attrs['fragfilename']
@@ -112,13 +114,14 @@ class FiveC(object):
         parent_count = fragfilename.count('../')
         fragfilename = '/'.join(os.path.abspath(filename).split('/')[:-(1 + parent_count)] +
                                 fragfilename.lstrip('/').split('/')[parent_count:])
-        self.fragfilename = "%s/%s" % (os.path.relpath(os.path.dirname(fragfilename),
-                                       os.path.dirname(self.file)), os.path.basename(fragfilename))
+        self.fragfilename = "{}/{}".format(os.path.relpath(os.path.dirname(fragfilename),
+                                                           os.path.dirname(self.file)),
+                                           os.path.basename(fragfilename))
         # ensure fend h5dict exists
         if not os.path.exists(fragfilename):
             if not self.silent:
-                print >> sys.stderr, ("Could not find %s.\n") % (fragfilename),
-            self.history += "Error: '%s' not found\n" % fragfilename
+                print("Could not find {}.".format(fragfilename), file=sys.stderr)
+            self.history += "Error: '{}' not found\n".format(fragfilename)
             return None
         self.frags = h5py.File(fragfilename, 'r')
         # create dictionary for converting chromosome names to indices
@@ -148,8 +151,9 @@ class FiveC(object):
                 parent_count = datafilename.count('../')
                 datafilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
                                         datafilename.lstrip('/').split('/')[parent_count:])
-                self.datafilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(datafilename)),
-                                               os.path.dirname(self.file)), os.path.basename(datafilename))
+                self.datafilename = "{}/{}".format(os.path.relpath(os.path.dirname(os.path.abspath(datafilename)),
+                                                                   os.path.dirname(self.file)),
+                                                   os.path.basename(datafilename))
             if 'fragfilename' in self.__dict__:
                 fragfilename = self.fragfilename
                 if fragfilename[:2] == './':
@@ -157,8 +161,9 @@ class FiveC(object):
                 parent_count = fragfilename.count('../')
                 fragfilename = '/'.join(original_file.split('/')[:-(1 + parent_count)] +
                                         fragfilename.lstrip('/').split('/')[parent_count:])
-                self.fragfilename = "%s/%s" % (os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
-                                               os.path.dirname(self.file)), os.path.basename(fragfilename))
+                self.fragfilename = "{}/{}".format(os.path.relpath(os.path.dirname(os.path.abspath(fragfilename)),
+                                                                   os.path.dirname(self.file)),
+                                                   os.path.basename(fragfilename))
         else:
             out_fname = self.file
         datafile = h5py.File(out_fname, 'w')
@@ -168,7 +173,10 @@ class FiveC(object):
             elif self[key] is None:
                 continue
             elif isinstance(self[key], numpy.ndarray):
-                datafile.create_dataset(key, data=self[key])
+                if str(self[key].dtype).startswith('<U'):
+                    datafile.create_dataset(key, data=self[key].astype("O"))
+                else:
+                    datafile.create_dataset(key, data=self[key])
             elif not isinstance(self[key], dict):
                 datafile.attrs[key] = self[key]
         datafile.close()
@@ -199,6 +207,11 @@ class FiveC(object):
         datafile = h5py.File(self.file, 'r')
         for key in datafile.keys():
             self[key] = numpy.copy(datafile[key])
+            if self[key].dtype == numpy.dtype('O'):
+                length = 0
+                for item in self[key]:
+                    length = max(length, len(item))
+                self[key] = self[key].astype("<U{}".format(length))
         for key in datafile['/'].attrs.keys():
             self[key] = datafile['/'].attrs[key]
         # ensure data h5dict exists
@@ -211,7 +224,8 @@ class FiveC(object):
                                 datafilename.lstrip('/').split('/')[parent_count:])
             if not os.path.exists(datafilename):
                 if not self.silent:
-                    print >> sys.stderr, ("Could not find %s. No data loaded.\n") % (datafilename),
+                    print("Could not find {}. No data loaded.\n".format(datafilename),
+                          file=sys.stderr)
             else:
                 self.data = h5py.File(datafilename, 'r')
         # ensure fragment h5dict exists
@@ -224,7 +238,8 @@ class FiveC(object):
                                 fragfilename.lstrip('/').split('/')[parent_count:])
             if not os.path.exists(fragfilename):
                 if not self.silent:
-                    print >> sys.stderr, ("Could not find %s. No fragments loaded.\n") % (fragfilename),
+                    print("Could not find {}. No fragments loaded.".format(fragfilename),
+                          file=sys.stderr)
             else:
                 self.frags = h5py.File(fragfilename, 'r')
         # create dictionary for converting chromosome names to indices
@@ -248,9 +263,10 @@ class FiveC(object):
         :type maxdistance: int.
         :returns: None
         """
-        self.history += "FiveC.filter_fragments(mininteractions=%i, mindistance=%s, maxdistance=%s) - " % (mininteractions, str(mindistance), str(maxdistance))
+        self.history += "FiveC.filter_fragments(mininteractions={}, mindistance={}, maxdistance={}) - ".format(
+            mininteractions, mindistance, maxdistance)
         if not self.silent:
-            print >> sys.stderr, ("Filtering fragments..."),
+            print("Filtering fragments...", end='', file=sys.stderr)
         original_count = numpy.sum(self.filter)
         previous_valid = original_count + 1
         current_valid = original_count
@@ -274,7 +290,8 @@ class FiveC(object):
             data = data[valid, :]
             current_valid = numpy.sum(self.filter)
         if not self.silent:
-            print >> sys.stderr, ("Removed %i of %i fragments\n") % (original_count - current_valid, original_count),
+            print("Removed {} of {} fragments".format(original_count - current_valid,
+                                                      original_count), file=sys.stderr)
         self.history += "Success\n"
         return None
 
@@ -290,7 +307,7 @@ class FiveC(object):
         """
         self.history += "FiveC.find_distance_parameters() - "
         if not self.silent:
-            print >> sys.stderr, ("Finding distance parameters..."),
+            print("Finding distance parameters...", end='', file=sys.stderr)
         # copy needed arrays
         data = self.data['cis_data'][...]
         mids = self.frags['fragments']['mid'][...]
@@ -308,7 +325,7 @@ class FiveC(object):
             self.region_means = numpy.zeros(self.frags['regions'].shape[0], dtype=numpy.float32) + temp[1]
         self.sigma = float(numpy.std(counts - temp[1] + self.gamma * log_distances))
         if not self.silent:
-            print >> sys.stderr, ("Done\n"),
+            print("Done", file=sys.stderr)
         self.history += "Success\n"
         return None
 
@@ -341,10 +358,15 @@ class FiveC(object):
 
         The 'normalization' attribute is updated to 'probability' or 'binning-probability', depending on if the 'precorrect' option is selected. In addition, the 'region_means' attribute is updated such that the mean correction (sum of all valid regional correction value pairs) is adjusted to zero and the corresponding region mean is adjusted the same amount but the opposite sign. 
         """
-        self.history += "FiveC.find_probability_fragment_corrections(mindistance=%s, maxdistance=%s, max_iterations=%i, minchange=%f, learningstep=%f, precalculate=%s, regions=%s, precorrect=%s) - " % (str(mindistance), str(maxdistance), max_iterations, minchange, learningstep, precalculate, str(regions), precorrect)
+        self.history += "FiveC.find_probability_fragment_corrections(mindistance={}, ".format(mindistance)
+        self.history += "maxdistance={}, max_iterations={}, ".format(maxdistance, max_iterations)
+        self.history += "minchange={}, learningstep={}, ".format(minchange, learningstep)
+        self.history += "precalculate={}, regions={}, ".format(precalculate, regions)
+        self.history += "precorrect={}) - ".format(precorrect)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
-                print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
+                print("Precorrection can only be used in project has previously " +
+                      "run 'find_binning_fragment_corrections'.", file=sys.stderr)
             self.history += "Error: 'find_binning_fragment_corrections()' not run yet\n"
             return None
         if self.corrections is None:
@@ -362,7 +384,8 @@ class FiveC(object):
                 filt[self.frags['regions']['start_frag'][i]:self.frags['regions']['stop_frag'][i]] = 0
         # copy and calculate needed arrays
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rCopying needed data...") % (' ' * 80),
+            print("\r{}\rCopying needed data...".format(' ' * 80), end='',
+                  file=sys.stderr)
         data = self.data['cis_data'][...]
         distances = self.frags['fragments']['mid'][data[:, 1]] - self.frags['fragments']['mid'][data[:, 0]]
         if maxdistance == 0 or maxdistance is None:
@@ -391,7 +414,8 @@ class FiveC(object):
             self.corrections = ((count_sums / numpy.maximum(1, interactions)) * 0.5).astype(numpy.float32)
         if precorrect:
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rFinding binning corrections...") % (' ' * 80),
+                print("\r{}\rFinding binning corrections...".format(' ' * 80),
+                      end='', file=sys.stderr)
             _optimize.find_binning_correction_adjustment(distance_signal,
                                                             data,
                                                             self.binning_corrections,
@@ -400,7 +424,8 @@ class FiveC(object):
                                                             self.binning_frag_indices)
         # cycle through learning phases
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
+            print("\r{}\rLearning corrections...".format(' ' * 80), end='',
+                  file=sys.stderr)
         iteration = 0
         cont = True
         change = numpy.inf
@@ -456,9 +481,10 @@ class FiveC(object):
                         best_score = cost
                         best_t = t
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s iteration:%i cost:%f change:%f armijo: %f %s") %\
-                                         ('Learning corrections...', iteration, previous_cost,
-                                          change, armijo, ' ' * 20),
+                    print("\r{}\rLearning corrections... iteration:".format(' ' * 80) +
+                          "{} cost:{} change:{} armijo: {}".format(
+                          iteration, previous_cost, change, armijo),
+                          end='', file=sys.stderr)
                 t *= learningstep
                 j += 1
                 if j == 20:
@@ -480,14 +506,16 @@ class FiveC(object):
             self.corrections = new_corrections
             change = numpy.amax(numpy.abs(gradients[valid] / new_corrections[valid]))
             if not self.silent:
-                print >> sys.stderr, ("\r%s iteration:%i cost:%f change:%f %s") %\
-                                     ('Learning corrections...', iteration, cost, change, ' ' * 40),
+                print("\r{}\rLearning corrections... iteration:".format(' ' * 80) +
+                      "cost:{} change:{}".format(iteration, cost, change),
+                      end='', file=sys.stderr)
             iteration += 1
             if iteration >= max_iterations or change <= minchange:
                 cont = False
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning corrections... Initial Cost: %f  Final Cost: %f  Done\n") %\
-                                 (' ' * 80, start_cost, cost),
+            print("\r{}\rLearning corrections... Initial Cost: ".format(' ' * 80) +
+                  "{} Final Cost: {} Done".format(start_cost, cost),
+                  file=sys.stderr)
         # Calculate region means
         if self.region_means is None:
             self.region_means = numpy.zeros(self.frags['regions'].shape[0], dtype=numpy.float32)
@@ -544,17 +572,24 @@ class FiveC(object):
 
         The 'normalization' attribute is updated to 'express' or 'binning-express', depending on if the 'precorrect' option is selected. In addition, if the 'remove_distance' option is selected, the 'region_means' attribute is updated such that the mean correction (sum of all valid regional correction value pairs) is adjusted to zero and the corresponding region mean is adjusted the same amount but the opposite sign. 
         """
-        self.history += "FiveC.find_express_fragment_corrections(mindistance=%s, maxdistance=%s, iterations=%i, remove_distance=%s, usereads='%s', regions=%s, precorrect=%s, logged=%s, kr=%s) - " % (str(mindistance), str(maxdistance), iterations, remove_distance, usereads, str(regions), precorrect, logged, kr)
+        self.history += "FiveC.find_express_fragment_corrections(mindistance="
+        self.history += "{}, maxdistance={}, iterations={}, ".format(
+            mindistance, maxdistance, iterations)
+        self.history += "remove_distance={}, usereads='{}', regions={}".format(
+            remove_distance, usereads, regions)
+        self.history += "precorrect={}, logged={}, kr={}) - ".format(
+            precorrect, logged, kr)
         if precorrect and self.binning_corrections is None:
             if not self.silent:
-                print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_binning_fragment_corrections'.\n"),
+                print("Precorrection can only be used in project has previously " +
+                      "run 'find_binning_fragment_corrections'.", file=sys.stderr)
             self.history += "Error: 'find_binning_fragment_corrections()' not run yet\n"
             return None
         # make sure usereads has a valid value
         if usereads not in ['cis', 'trans', 'all']:
             if not self.silent:
-                print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
-            self.history += "Error: '%s' not a valid value for 'usereads'\n" % usereads
+                print("'usereads' does not have a valid value.", file=sys.stderr)
+            self.history += "Error: '{}' not a valid value for 'usereads'\n".format(usereads)
             return None
         # if regions not given, set to all regions
         if regions == None or len(regions) == 0:
@@ -571,7 +606,7 @@ class FiveC(object):
             if i not in regions:
                 filt[self.frags['regions']['start_frag'][i]:self.frags['regions']['stop_frag'][i]] = 0
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rCopying needed data...") % (' ' * 80),
+            print("\r{}\rCopying needed data...".format(' ' * 80), end='', file=sys.stderr)
         # copy and calculate needed arrays
         data = None
         trans_data = None
@@ -607,7 +642,8 @@ class FiveC(object):
                 trans_signal = numpy.zeros(trans_data.shape[0], dtype=numpy.float32) + self.trans_mean
         if precorrect:
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rFinding binning corrections...") % (' ' * 80),
+                print("\r{}\rFinding binning corrections...".format(' ' * 80),
+                      end='', file=sys.stderr)
             if usereads in ['cis', 'all']:
                 if distance_signal is None:
                     distance_signal = numpy.zeros(data.shape[0], dtype=numpy.float32)
@@ -661,8 +697,9 @@ class FiveC(object):
                                                      trans_counts,
                                                      corrections)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLearning corrections... iteration:%i  cost:%f ") % (' ' * 80, iteration,
-                                                                                                 cost),
+                print("\r{}\rLearning corrections... iteration:".format(' '*80) +
+                      "{}  cost:{} ".format(iteration, cost), end='',
+                      file=sys.stderr)
         where = numpy.where(filt)[0]
         self.corrections[where] = corrections[where]
         # Calculate region means
@@ -685,7 +722,8 @@ class FiveC(object):
             if remove_distance:
                 self.region_means[i] += region_mean
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning corrections... Final Cost: %f  Done\n") % (' ' * 80, cost),
+            print("\r{}\rLearning corrections... Final Cost: ".format(' ' * 80) +
+                  "{}  Done".format(cost), file=sys.stderr)
         if precorrect:
             self.normalization = 'binning-express'
         else:
@@ -717,7 +755,8 @@ class FiveC(object):
                 regfilt = filt[startfrag:stopfrag]
             # create needed arrays
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLoading needed data...") % (' ' * 80),
+                print("\r{}\rLoading needed data...".format(' ' * 80), end='',
+                      file=sys.stderr)
             mids = self.frags['fragments']['mid'][startfrag:stopfrag]
             strands = self.frags['fragments']['strand'][startfrag:stopfrag]
             if usereads in ['cis', 'all']:
@@ -750,7 +789,8 @@ class FiveC(object):
             mids = mids[rev_mapping]
             strands = strands[rev_mapping]
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rChecking for fragment interaction count...") % (' ' * 80),
+                print("\r{}\rChecking for fragment interaction count...".format(' ' * 80),
+                      end='', file=sys.stderr)
             # precalculate interaction distance means for all included interactions
             if not data is None:
                 counts = data[:, 2].astype(numpy.float64)
@@ -764,7 +804,8 @@ class FiveC(object):
             distance_means = None
             if remove_distance:
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rPrecalculating distances...") % (' ' * 80),
+                    print("\r{}\rPrecalculating distances...".format(' ' * 80),
+                          end='', file=sys.stderr)
                 if usereads != 'cis':
                     trans_mean = numpy.sum(trans_counts).astype(numpy.float64)
                     ffrags = numpy.where(strands == 0)[0]
@@ -796,7 +837,8 @@ class FiveC(object):
                                          self.region_means[region])
             if precorrect:
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rFinding binning corrections...") % (' ' * 80),
+                    print("\r{}\rFinding binning corrections...".format(' ' * 80),
+                          end='', file=sys.stderr)
                 if not data is None:
                     if distance_means is None:
                         distance_means = numpy.ones(data.shape[0], dtype=numpy.float32)
@@ -820,7 +862,8 @@ class FiveC(object):
             if not trans_means is None:
                 trans_counts /= numpy.exp(trans_means)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rFinding fend corrections...") % (' ' * 80),
+                print("\r{}\rFinding fend corrections...".format(' ' * 80),
+                      end='', file=sys.stderr)
             # add psuedo-count diagonal
             if data is None:
                 data = numpy.zeros((rev_mapping.shape[0], 2), dtype=numpy.int32)
@@ -906,9 +949,11 @@ class FiveC(object):
                     eta = max(eta, g * eta_o ** 2.0)
                 eta = max(min(eta, etamax), stop_tol / res_norm)
                 if not self.silent:
-                    print >> sys.stderr, ("\r%s\rIteration %i Residual: %e") % (" " * 80, i, rout),
+                    print("\r{}\rIteration {} Residual: {}".format(" " * 80, i, rout),
+                          end='', file=sys.stderr)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rFinding fragment corrections... Region: %s Done\n") % (' ' * 80, str(region)),
+                print("\r{}\rFinding fragment corrections... ".format(" " * 80) +
+                      "Region: {} Done".format(region), end='', file=sys.stderr)
             self.corrections[rev_mapping + startfrag] = numpy.log(1.0 / corrections)
         # calculate chromosome mean
         if self.region_means is None:
@@ -930,7 +975,8 @@ class FiveC(object):
             if remove_distance:
                 self.region_means[i] += region_mean
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rCompleted learning express corrections.\n") % (' ' * 80),
+            print("\r{}\rCompleted learning express corrections.".format(' ' * 80),
+                  file=sys.stderr)
         if precorrect:
             self.normalization = 'binning-express'
         else:
@@ -976,34 +1022,48 @@ class FiveC(object):
         
         The 'normalization' attribute is updated to 'binning', 'probability-binning', or 'express-binning', depending on if the 'precorrect' option is selected and which normalization has been previously run.
         """
-        self.history += "FiveC.find_binning_fragment_corrections(mindistance=%s, maxdistance=%s, num_bins=%s, model=%s, learning_threshold=%f, max_iterations=%i, usereads='%s', regions=%s) - " % (str(mindistance), str(maxdistance), str(num_bins), str(model), learning_threshold, max_iterations, usereads, str(regions))
+        self.history += "FiveC.find_binning_fragment_corrections(mindistance="
+        self.history += "{}, maxdistance={}, ".format(mindistance, maxdistance)
+        self.history += "num_bins={}, model={}, ".format(num_bins, model)
+        self.history += "learning_threshold={}, ".format(learning_threshold)
+        self.history += "max_iterations={}, usereads='{}', ".format(max_iterations, usereads)
+        self.history += "regions={}) - ".format(regions)
         for parameter in model:
             if not parameter in ['len'] and parameter not in self.frags['fragments'].dtype.names:
                 if not self.silent:
-                    print >> sys.stderr, ("Fragment feature %s not found in fragment object. Try removing it from model or creating a new fragment object with feature data.\n") % (parameter),
-                self.history += "Error: model parameter '%s' not found in fragment data\n" % parameter
+                    print("Fragment feature {} not found in ".format(parameter) +
+                          "fragment object. Try removing it from model or creating " +
+                          "a new fragment object with feature data.", file=sys.stderr)
+                self.history += "Error: model parameter '{}' ".format(parameter)
+                self.history += "not found in fragment data\n"
                 return None
         for parameter in parameters:
             if parameter not in ['even', 'fixed', 'even-const', 'fixed-const']:
                 if not self.silent:
-                    print >> sys.stderr, ("Fragment feature type %s is not valid.") % (parameter),
-                self.history += "Error: model feature type '%s' not valid\n" % parameter
+                    print("Fragment feature type {} is not valid.".format(parameter),
+                          file=sys.stderr)
+                self.history += "Error: model feature type '{}' not valid\n".format(parameter)
                 return None
         if len(model) != len(num_bins):
             if not self.silent:
-                print >> sys.stderr, ("The number of items in the 'model' parameter must be the same as the number in the 'num_bins' parameter.\n"),
+                print("The number of items in the 'model' parameter must be " +
+                      "the same as the number in the 'num_bins' parameter.",
+                      file=sys.stderr)
             self.history += "Error: mismatch between lengths of 'num_bins' and 'model'\n"
             return None
         # make sure usereads has a valid value
         if usereads not in ['cis', 'trans', 'all']:
             if not self.silent:
-                print >> sys.stderr, ("'usereads' does not have a valid value.\n"),
-            self.history += "Error: '%s' not a valid value for 'usereads'\n" % usereads
+                print("'usereads' does not have a valid value.", file=sys.stderr),
+            self.history += "Error: '{}' not a valid value for 'usereads'\n".format(usereads)
             return None
         if precorrect and self.corrections is None:
             if not self.silent:
-                print >> sys.stderr, ("Precorrection can only be used in project has previously run 'find_probability_fragment_corrections' or 'find_express_fragment_corrections'.\n"),
-            self.history += "Error: 'find_binning_fragment_corrections()' or 'find_binning_fragment_corrections()' not run yet\n"
+                print("Precorrection can only be used in project has " +
+                      "previously run 'find_probability_fragment_corrections' " +
+                      "or 'find_express_fragment_corrections'.", file=sys.stderr)
+            self.history += "Error: 'find_binning_fragment_corrections()' or "
+            self.history +="'find_binning_fragment_corrections()' not run yet\n"
             return None
         # if regions not given, set to all regions
         if regions == None or len(regions) == 0:
@@ -1014,11 +1074,13 @@ class FiveC(object):
             if i not in regions:
                 filt[self.frags['regions']['start_frag'][i]:self.frags['regions']['stop_frag'][i]] = 0
         if maxdistance == 0 or maxdistance is None:
+            maxdistance = 0
             for i in range(self.frags['regions'].shape[0]):
                 maxdistance = max(maxdistance, self.frags['regions']['stop'][i] -
                                                self.frags['regions']['start'][i]) + 1
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rPartitioning features into bins...") % (' ' * 80),
+            print("\r{}\rPartitioning features into bins...".format(' ' * 80),
+                  end="", file=sys.stderr)
         num_bins = numpy.array(num_bins, dtype=numpy.int32)
         total_bins = 1
         all_bins = numpy.zeros(0, dtype=numpy.float32)
@@ -1043,11 +1105,11 @@ class FiveC(object):
                                         numpy.amax(values), num_bins[i] + 1)[1:])).astype(numpy.float32)
             all_bins[-1] = numpy.inf
             bin_indices[i + 1] = all_bins.shape[0]
-            all_corrections = numpy.hstack((all_corrections, numpy.zeros(num_bins[i] * (num_bins[i] + 1) / 2,
+            all_corrections = numpy.hstack((all_corrections, numpy.zeros(num_bins[i] * (num_bins[i] + 1) // 2,
                                            dtype=numpy.float64)))
             correction_indices[i + 1] = all_corrections.shape[0]
             bin_divs[i] = total_bins
-            total_bins *= num_bins[i] * (num_bins[i] + 1) / 2
+            total_bins *= num_bins[i] * (num_bins[i] + 1) // 2
             all_indices[:, i] = numpy.searchsorted(all_bins[bin_indices[i]:bin_indices[i + 1]],
                                                    values).astype(numpy.int32)
         self.binning_frag_indices = all_indices
@@ -1058,7 +1120,8 @@ class FiveC(object):
         bin_counts = numpy.zeros(total_bins, dtype=numpy.int64)
         bin_sums = numpy.zeros((total_bins, 2), dtype=numpy.float64)
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rFinding bin counts...") % (' ' * 80),
+            print("\r{}\rFinding bin counts...".format(' ' * 80), end='',
+                  file=sys.stderr)
         # Find number of observations in each bin
         data = None
         trans_data = None
@@ -1097,11 +1160,12 @@ class FiveC(object):
                                       trans_mean)
         # Find seed values
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rFinding seed values...") % (' ' * 80),
+            print("\r{}\rFinding seed values...".format(' ' * 80), end='',
+                  file=sys.stderr)
         all_indices = numpy.zeros((bin_counts.shape[0], len(model)), dtype=numpy.int32)
         n = numpy.sum(bin_counts)
         for i in range(correction_indices.shape[0] - 1):
-            all_indices[:, i] = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) / bin_divs[i]) %
+            all_indices[:, i] = ((numpy.arange(bin_counts.shape[0], dtype=numpy.int32) // bin_divs[i]) %
                                  (correction_indices[i + 1] - correction_indices[i]))
             temp0 = numpy.bincount(all_indices[:, i], weights=bin_sums[:, 0], minlength=num_bins[i])
             temp1 = numpy.bincount(all_indices[:, i], weights=bin_counts, minlength=num_bins[i])
@@ -1145,7 +1209,8 @@ class FiveC(object):
         sigma = sigma2 ** 0.5
         ll = find_ll(bin_counts, bin_sums, cor_sums, n, sigma, sigma2)
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:00  ll:%f") % (' ' * 80, ll),
+            print("\r{}\rLearning binning corrections... ".format(' ' * 80) +
+                  "iteration:00  ll:{}".format(ll), end='', file=sys.stderr)
         iteration = 0
         delta = numpy.inf
         pgtol = 1e-8
@@ -1157,7 +1222,7 @@ class FiveC(object):
                 if parameters[h].count('const') > 0:
                     continue
                 num_cor = correction_indices[h + 1] - correction_indices[h]
-                bins = bin_counts.shape[0] / num_cor
+                bins = bin_counts.shape[0] // num_cor
                 temp_cor_sums = numpy.zeros(bins, dtype=numpy.float64)
                 for i in range(num_cor):
                     where = numpy.where(all_indices[:, h] == i)[0]
@@ -1176,8 +1241,9 @@ class FiveC(object):
             sigma = sigma2 ** 0.5
             new_ll = find_ll(bin_counts, bin_sums, cor_sums, n, sigma, sigma2)
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLearning binning corrections... iteration:%02i  ll:%f\n") % (' ' * 80,
-                                      iteration, new_ll),
+                print("\r{}\rLearning binning corrections... ".format(' ' * 80) +
+                      "iteration:{:02d}  ll:{}".format(iteration, new_ll),
+                      end='', file=sys.stderr)
             delta = ll - new_ll
             if delta < 0.0:
                 delta = numpy.inf
@@ -1187,7 +1253,8 @@ class FiveC(object):
         self.model_parameters = numpy.array(model)
         self.binning_correction_indices = correction_indices
         if not self.silent:
-            print >> sys.stderr, ("\r%s\rLearning binning corrections... Final ll:%f\n") % (' ' * 80, ll),
+            print("\r{}\rLearning binning corrections... ".format(' ' * 80) +
+                  "Final ll:{}".format(ll), file=sys.stderr)
         if precorrect:
             if self.normalization == 'probability':
                 self.normalization = 'probability-binning'
@@ -1208,7 +1275,8 @@ class FiveC(object):
         """
         self.history += "FiveC.find_trans_mean() - "
         if not self.silent:
-            print >> sys.stderr, ("Finding mean signal across trans interactions..."),
+            print("Finding mean signal across trans interactions...", end='',
+                  file=sys.stderr)
         possible = 0
         for i in range(self.frags['regions'].shape[0] - 1):
             valid1 = numpy.sum(self.filter[self.frags['regions']['start_frag'][i]:
@@ -1221,7 +1289,7 @@ class FiveC(object):
         actual = numpy.sum(self.filter[trans_data[:, 0]] * self.filter[trans_data[:, 1]] * trans_data[:, 2])
         self.trans_mean = actual / float(possible)
         if not self.silent:
-            print >> sys.stderr, ('Done\n'),
+            print('Done', file=sys.stderr),
         self.history += "Success\n"
         return None
 
@@ -1273,12 +1341,14 @@ class FiveC(object):
         # check that all values are acceptable
         if datatype not in ['raw', 'fragment', 'distance', 'enrichment', 'expected']:
             if not self.silent:
-                print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+                print("Datatype given is not recognized. No data returned",
+                      file=sys.stderr)
             return None
         if ((binsize != 0 and arraytype not in ['full', 'upper']) or
             (arraytype not in ['full', 'compact', 'upper'])):
             if not self.silent:
-                print >> sys.stderr, ("Unrecognized or inappropriate array type. No data returned.\n"),
+                print("Unrecognized or inappropriate array type. No data returned.",
+                      file=sys.stderr)
             return None
         # determine if data is to be dynamically binned
         if not dynamically_binned:
@@ -1315,10 +1385,9 @@ class FiveC(object):
             else:
                 binned = data
             if arraytype == 'upper':
-                img = plotting.plot_upper_array(binned, silent=self.silent, **kwargs)
+                plotting.plot_upper_array(image_file, binned, silent=self.silent, **kwargs)
             else:
-                img = plotting.plot_full_array(binned, silent=self.silent, **kwargs)
-            img.save(image_file, format='png')
+                plotting.plot_full_array(image_file, binned, silent=self.silent, **kwargs)
         return data
 
     def trans_heatmap(self, region1, region2, binsize=1000000, binbounds1=None, start1=None, stop1=None,
@@ -1382,11 +1451,13 @@ class FiveC(object):
         # check that all values are acceptable
         if datatype not in ['raw', 'fragment', 'distance', 'enrichment', 'expected']:
             if not self.silent:
-                print >> sys.stderr, ("Datatype given is not recognized. No data returned\n"),
+                print("Datatype given is not recognized. No data returned",
+                      file=sys.stderr)
             return None
         if arraytype not in ['compact', 'full'] or (dynamically_binned and arraytype == 'compact'):
             if not self.silent:
-                print >> sys.stderr, ("Unrecognized or inappropriate array type. No data returned.\n"),
+                print("Unrecognized or inappropriate array type. No data returned.",
+                      file=sys.stderr)
             return None
         # determine if data is to be dynamically binned
         if not dynamically_binned:
@@ -1432,8 +1503,7 @@ class FiveC(object):
                 binned = data[0]
             else:
                 binned = data
-            img = plotting.plot_full_array(binned, silent=self.silent, **kwargs)
-            img.save(image_file, format='png')
+            plotting.plot_full_array(image_file, binned, silent=self.silent, **kwargs)
         return data
 
     def write_heatmap(self, filename, binsize, includetrans=True, datatype='enrichment', arraytype='full',
@@ -1480,10 +1550,16 @@ class FiveC(object):
                      * **N_by_M.expected** (*ndarray*) - A series of numpy arrays of type float32, one for each region pair N and M if trans data are included, containing the expected counts for valid fend combinations. The chromosome name order specifies which axis corresponds to which region. If data are in the 'compact' format, both region index orders will be present.
         """
         history = self.history
-        history += "FiveC.write_heatmap(filename='%s', binsize=%i, includetrans=%s, datatype='%s', arraytype='%s', regions=%s, dynamically_binned=%s, minobservations=%i, searchdistance=%i, expansion_binsize=%i, removefailed=%s, format=%s)" % (filename, binsize, includetrans, datatype, arraytype, str(regions), dynamically_binned, minobservations, searchdistance, expansion_binsize, removefailed, format)
+        history += "FiveC.write_heatmap(filename='{}', ".format(filename)
+        history += "binsize={}, includetrans={}, ".format(binsize, includetrans)
+        history += "datatype='{}', arraytype='{}', ".format(datatype, arraytype)
+        history += "regions={}, dynamically_binned={}, ".format(regions, dynamically_binned)
+        history += "minobservations={}, searchdistance={}, ".format(minobservations, searchdistance)
+        history += "expansion_binsize={}, removefailed={}, ".format(expansion_binsize, removefailed)
+        history += "format={})".format(format)
         if format not in ['hdf5', 'txt', 'npz']:
             if not self.silent:
-                print >> sys.stderr, ("Unrecognized output format. No data written.\n"),
+                print("Unrecognized output format. No data written.", file=sys.stderr)
             return None
         if (regions is None or
                 (isinstance(regions, list) and
